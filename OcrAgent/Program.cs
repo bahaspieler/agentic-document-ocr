@@ -1,2 +1,9 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿namespace OcrAgent;
+internal class Program
+{
+    static async Task Main(string[] args)
+    {
+        Console.WriteLine("OcrAgent");
+        Console.WriteLine("Type 'exit' to quit.");
+    }
+}
