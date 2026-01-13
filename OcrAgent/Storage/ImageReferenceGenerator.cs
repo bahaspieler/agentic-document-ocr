@@ -17,3 +17,16 @@ public static class ImageReferenceGenerator
 
         return new string(chars);
     }
+    public static string Normalize(string reference)
+    {
+        reference = reference.Trim();
+        if (reference.Length == 0) throw new ArgumentException("Reference is empty.");
+
+        foreach (char c in reference)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+                throw new ArgumentException($"Invalid character in reference: '{c}'");
+        }
+        return reference;
+    }
+}
