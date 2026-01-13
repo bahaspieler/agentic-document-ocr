@@ -40,8 +40,8 @@ public sealed class Test1
     [TestMethod]
     public void SaveBytes_CreatesImageAndMetadata_AndCanBeLoaded()
     {
-        // Arrange: create fake "image bytes" (doesn't need to be a real PNG for this storage test)
-        var bytes = new byte[] { 1, 2, 3, 4, 5 };
+        // Arrange: fake "image bytes" (doesn't need to be real PNG for storage test)
+        var bytes = new byte[] { 1, 2, 3, 4, 5,6,7 };
         var meta = new Dictionary<string, string>
         {
             ["testKey"] = "testValue"
@@ -53,7 +53,7 @@ public sealed class Test1
         // Assert: exists
         Assert.IsTrue(_store.Exists(reference), "Saved reference should exist.");
 
-        // Assert: image path is correct and file exists
+        // Assert: image file exists and bytes match
         var imagePath = _store.GetImagePath(reference);
         Assert.IsTrue(File.Exists(imagePath), "Image file should exist on disk.");
         CollectionAssert.AreEqual(bytes, File.ReadAllBytes(imagePath), "Saved bytes should match.");
@@ -72,15 +72,16 @@ public sealed class Test1
     {
         // Arrange: create a temporary input file
         var inputPath = Path.Combine(_tempRoot, "input.jpg");
-        var inputBytes = new byte[] { 10, 20, 30, 40 };
+        var inputBytes = new byte[] { 10, 20, 30, 40 ,50};
         File.WriteAllBytes(inputPath, inputBytes);
 
         // Act
         var reference = _store.SaveFromFile(inputPath);
 
-        // Assert
+        // Assert: exists
         Assert.IsTrue(_store.Exists(reference));
 
+        // Stored bytes should match
         var storedPath = _store.GetImagePath(reference);
         Assert.IsTrue(File.Exists(storedPath));
 
@@ -97,32 +98,43 @@ public sealed class Test1
     public void SaveBytes_WithSameDesiredReference_Throws()
     {
         // Arrange
-        var bytes = new byte[] { 7, 7, 7 };
+        var bytes = new byte[] { 7, 7, 7 ,7};
         var desired = "MY_REF_001";
 
-        // Act
-        var ref1 = _store.SaveBytes(bytes, "png", desiredReference: desired);
+        // First save should work
+        _store.SaveBytes(bytes, "png", desiredReference: desired);
 
-        // Assert: second save with same reference should throw
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        // Second save with same reference should throw
+        try
         {
             _store.SaveBytes(bytes, "png", desiredReference: desired);
-        });
+            Assert.Fail("Expected InvalidOperationException, but no exception was thrown.");
+        }
+        catch (InvalidOperationException)
+        {
+            // ✅ expected
+        }
     }
 
     [TestMethod]
     public void GetImagePath_ForMissingReference_ThrowsFileNotFound()
     {
-        Assert.ThrowsException<FileNotFoundException>(() =>
+        try
         {
             _store.GetImagePath("does-not-exist");
-        });
+            Assert.Fail("Expected FileNotFoundException, but no exception was thrown.");
+        }
+        catch (FileNotFoundException)
+        {
+            // ✅ expected
+        }
     }
 
     [TestMethod]
     public void GetMetadata_ForMissingReference_ReturnsEmptyDictionary()
     {
         var meta = _store.GetMetadata("does-not-exist");
+
         Assert.IsNotNull(meta);
         Assert.AreEqual(0, meta.Count);
     }
