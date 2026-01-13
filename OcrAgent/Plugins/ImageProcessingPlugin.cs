@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins;
 
@@ -26,8 +27,22 @@ public sealed class ImageProcessingPlugin
         [Description("The reference number of the image, which should be zoomed in.")] string imageReference,
         [Description("The first zoom in in percent.")] int startZoom,
         [Description("The The last zoom in in percent")] int endZoom,
-        [Description("The delta zoom, which defines zoomin step.")] int zoomStep) 
-        => Task.FromResult(string.Empty);
+        [Description("The delta zoom, which defines zoomin step.")] int zoomStep)
+    {
+        if (zoomStep <= 0) throw new ArgumentException("zoomStep must be > 0");
+        if (endZoom < startZoom) throw new ArgumentException("endZoom must be >= startZoom");
+        
+        const int maxOutputs = 20;          // cap
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        int w = src.Width;
+        int h = src.Height;
+        return Task.FromResult(string.Empty);
+    }
 
     private string MakeUniqueRef(string baseRef)
     {
