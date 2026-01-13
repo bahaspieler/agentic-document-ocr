@@ -35,3 +35,30 @@ public sealed class AgentRunner
             }
         }
     }
+    public static AIAgent CreateAgent(IEnumerable<AITool> tools)
+    {
+        string apiKey = GetEnvOrThrow("OPENAI_API_KEY");
+        string deployment = Environment.GetEnvironmentVariable("OPENAI_CHATCOMPLETION_DEPLOYMENT") ?? "gpt-3.5-turbo";
+
+        var client = new OpenAIClient(new ApiKeyCredential(apiKey));
+        var chatClient = client.GetChatClient(deployment);
+
+        return chatClient.CreateAIAgent(
+            instructions:
+                "You help preprocess images for OCR.\n" +
+                "If the user provides a local file path, call RegisterImage(filePath, desiredReference) to store it.\n" +
+                "If the user requests zooming, call ZoomInImage(imageReference, startZoom, endZoom, zoomStep).\n" +
+                "Always return the generated reference IDs to the user.\n" +
+                "If required parameters are missing, ask a short follow-up question.",
+            name: "OCR Preprocessing Agent",
+            tools: tools.ToArray()
+        );
+    }
+    private static string GetEnvOrThrow(string key)
+    {
+        var value = Environment.GetEnvironmentVariable(key);
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Missing {key} environment variable.");
+        return value;
+    }
+}
