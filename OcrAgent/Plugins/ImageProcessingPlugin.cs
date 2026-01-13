@@ -41,7 +41,46 @@ public sealed class ImageProcessingPlugin
 
         int w = src.Width;
         int h = src.Height;
-        return Task.FromResult(string.Empty);
+        var results = new List<string>();
+
+        for (int z = startZoom; z <= endZoom; z += zoomStep)
+        {
+            if (results.Count >= maxOutputs) break;
+
+            // zoom factor: 10%
+            double factor = 1.0 + (z / 100.0);
+            double cropRatio = 1.0 / factor;
+
+            int cropW = Math.Max(1, (int)(w * cropRatio));
+            int cropH = Math.Max(1, (int)(h * cropRatio));
+
+            int x = (w - cropW) / 2;
+            int y = (h - cropH) / 2;
+
+            var roi = new Rect(x, y, cropW, cropH);
+
+            using var cropped = new Mat(src, roi);
+            using var resized = new Mat();
+            Cv2.Resize(cropped, resized, new Size(w, h), 0, 0, InterpolationFlags.Linear);
+
+            // encode to PNG bytes
+            Cv2.ImEncode(".png", resized, out var pngBytes);
+
+            var meta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "zoom_in",
+                ["zoomPercent"] = z.ToString()
+            };
+            
+            var baseRef = $"{imageReference}_zoomIn_{z:D3}";
+            var desiredRef = MakeUniqueRef(baseRef);
+
+            var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+            results.Add(newRef);
+        }
+
+        return Task.FromResult(string.Join(",", results));
     }
 
     private string MakeUniqueRef(string baseRef)
