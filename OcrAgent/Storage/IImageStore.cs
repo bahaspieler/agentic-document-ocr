@@ -5,3 +5,6 @@ public interface IImageStore
     bool Exists(string reference);
     string SaveFromFile(string filePath, string? desiredReference = null);
     string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null, string? desiredReference = null);
+    string GetImagePath(string reference);
+    IDictionary<string, string> GetMetadata(string reference);
+}
