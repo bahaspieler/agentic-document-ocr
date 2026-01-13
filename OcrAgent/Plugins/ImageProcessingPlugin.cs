@@ -17,7 +17,9 @@ public sealed class ImageProcessingPlugin
     public string RegisterImage(
         [Description("Local file path of the image to register.")] string filePath,
         [Description("Optional reference ID to use (e.g., 123ABC). If empty, a new reference is generated.")] string? desiredReference = null) 
-        => string.Empty;
+    {
+        return _store.SaveFromFile(filePath, desiredReference);
+    }
 
     [Description("Performs zooming in of the given image. It returns the comma-separated list of references of generated images.")]
     public Task<string> ZoomInImage(
@@ -27,7 +29,19 @@ public sealed class ImageProcessingPlugin
         [Description("The delta zoom, which defines zoomin step.")] int zoomStep) 
         => Task.FromResult(string.Empty);
 
-    private string MakeUniqueRef(string baseRef) => string.Empty;
+    private string MakeUniqueRef(string baseRef)
+    {
+        var candidate = baseRef;
+        int i = 2;
+
+        while (_store.Exists(candidate))
+        {
+            candidate = $"{baseRef}_{i:D2}";
+            i++;
+        }
+
+        return candidate;
+    }
 
     public IEnumerable<AITool> AsAITools()
     {
