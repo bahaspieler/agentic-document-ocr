@@ -8,12 +8,6 @@ namespace OcrAgent.Plugins;
 internal static class PluginHelpers
 {
     /// <summary>
-    /// Maximum number of outputs to generate for any operation.
-    /// This limits resource usage and keeps output manageable.
-    /// </summary>
-    public const int MaxOutputs = 20;
-}
-    /// <summary>
     /// Generates a unique reference ID by appending a number suffix if the base reference already exists.
     /// </summary>
     /// <param name="store">The image store to check for existing references.</param>
@@ -21,6 +15,34 @@ internal static class PluginHelpers
     /// <returns>A unique reference ID for the store.</returns>
     public static string MakeUniqueRef(IImageStore store, string baseRef)
     {
-        // TODO: implement unique reference generation
-        return baseRef;
+        var candidate = baseRef;
+        int i = 2;
+
+        while (store.Exists(candidate))
+        {
+            candidate = $"{baseRef}_{i:D2}";
+            i++;
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Maximum number of outputs to generate for any operation.
+    /// This limits resource usage and keeps output manageable.
+    /// </summary>
+    public const int MaxOutputs = 20;
+}
+    public static string MakeUniqueRef(IImageStore store, string baseRef)
+    {
+        var candidate = baseRef;
+        int i = 2;
+
+        while (store.Exists(candidate))
+        {
+            candidate = $"{baseRef}_{i:D2}";
+            i++;
+        }
+
+        return candidate;
     }
