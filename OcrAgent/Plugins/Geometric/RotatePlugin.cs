@@ -63,6 +63,19 @@ public sealed class RotatePlugin : IImageProcessingTool
             // Encode to PNG bytes
             Cv2.ImEncode(".png", rotated, out var pngBytes);
 
+            var meta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "rotate",
+                ["angleDegrees"] = normalizedAngle.ToString()
+            };
+
+            var baseRef = $"{imageReference}_rotate_{normalizedAngle:D3}";
+            var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+            var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+            results.Add(newRef);
+
         }
         // Return new IDs
         return Task.FromResult(string.Empty);
