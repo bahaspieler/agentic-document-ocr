@@ -3,7 +3,6 @@ using OcrAgent.Plugins;
 using OcrAgent.Storage;
 
 namespace OcrAgent;
-
 internal class Program
 {
     static async Task Main(string[] args)
@@ -16,9 +15,9 @@ internal class Program
                           ?? Path.Combine(Environment.CurrentDirectory, "Storage");
 
         var store = new LocalFileImageStore(storageRoot);
-        var plugin = new ImageProcessingPlugin(store);
+        var aggregator = new PluginAggregator(store);
 
-        var agent = AgentRunner.CreateAgent(plugin.AsAITools());
+        var agent = AgentRunner.CreateAgent(aggregator.GetAllTools());
         var samples = new AgentRunner(agent);
 
         await samples.RunConversationLoopAsync();
