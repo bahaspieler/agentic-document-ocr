@@ -33,16 +33,3 @@ internal static class PluginHelpers
     /// </summary>
     public const int MaxOutputs = 20;
 }
-    public static string MakeUniqueRef(IImageStore store, string baseRef)
-    {
-        var candidate = baseRef;
-        int i = 2;
-
-        while (store.Exists(candidate))
-        {
-            candidate = $"{baseRef}_{i:D2}";
-            i++;
-        }
-
-        return candidate;
-    }
