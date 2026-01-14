@@ -4,6 +4,10 @@ using OcrAgent.Storage;
 
 namespace OcrAgent.Plugins;
 
+/// <summary>
+/// Aggregates all image processing plugins and exposes tools to the AI agent.
+/// Works as a registry for all preprocessing tools.
+/// </summary>
 public sealed class PluginAggregator
 {
     private readonly IImageStore _store;
@@ -12,13 +16,48 @@ public sealed class PluginAggregator
     public PluginAggregator(IImageStore store)
     {
         _store = store;
+        _plugins = new List<IImageProcessingTool>();
+        
+        // Register all plugins here
+        // Geometric plugins
+        RegisterPlugin(new Geometric.ZoomInPlugin(store));
     }
-    
+
+    /// <summary>
+    /// Registers an image into the storage system and returns its reference ID.
+    /// This tool is exposed directly by the aggregator.
+    /// </summary>
     [Description("Registers an image into the storage system and returns its reference ID. The image is provided as a local file path.")]
     public string RegisterImage(
         [Description("Local file path of the image to register.")] string filePath,
         [Description("Optional reference ID to use (e.g., 123ABC). If empty, a new reference is generated.")] string? desiredReference = null)
     {
         return _store.SaveFromFile(filePath, desiredReference);
+    }
+
+    /// <summary>
+    /// Returns all AI tools from all registered plugins and also the RegisterImage plugin.
+    /// </summary>
+    public IEnumerable<AITool> GetAllTools()
+    {
+        // Yield the RegisterImage plugin
+        yield return AIFunctionFactory.Create(this.RegisterImage);
+        
+        // yield all plugins from registered plugins
+        foreach (var plugin in _plugins)
+        {
+            foreach (var tool in plugin.GetAITools())
+            {
+                yield return tool;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers a plugin with the aggregator.
+    /// </summary>
+    internal void RegisterPlugin(IImageProcessingTool plugin)
+    {
+        _plugins.Add(plugin);
     }
 }
