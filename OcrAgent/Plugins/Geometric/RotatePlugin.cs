@@ -57,6 +57,12 @@ public sealed class RotatePlugin : IImageProcessingTool
             rotationMatrix.Set(0, 2, rotationMatrix.At<double>(0, 2) + (newW / 2.0) - center.X);
             rotationMatrix.Set(1, 2, rotationMatrix.At<double>(1, 2) + (newH / 2.0) - center.Y);
 
+            using var rotated = new Mat();
+            Cv2.WarpAffine(src, rotated, rotationMatrix, new Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.White);
+
+            // Encode to PNG bytes
+            Cv2.ImEncode(".png", rotated, out var pngBytes);
+
         }
         // Return new IDs
         return Task.FromResult(string.Empty);
