@@ -35,6 +35,29 @@ public sealed class RotatePlugin : IImageProcessingTool
         var center = new Point2f(w / 2.0f, h / 2.0f);
         var results = new List<string>();
 
+        for (int angle = startAngle; angle <= endAngle; angle += angleStep)
+        {
+            if (results.Count >= PluginHelpers.MaxOutputs) break;
+
+            // Normalize angle to 0-360 range
+            int normalizedAngle = angle % 360;
+            if (normalizedAngle < 0) normalizedAngle += 360;
+
+            // Get rotation matrix
+            using var rotationMatrix = Cv2.GetRotationMatrix2D(center, normalizedAngle, 1.0);
+
+            // Calculate new bounding box to avoid cropping
+            double cos = Math.Abs(rotationMatrix.At<double>(0, 0));
+            double sin = Math.Abs(rotationMatrix.At<double>(0, 1));
+
+            int newW = (int)(h * sin + w * cos);
+            int newH = (int)(h * cos + w * sin);
+
+            // Adjust translation
+            rotationMatrix.Set(0, 2, rotationMatrix.At<double>(0, 2) + (newW / 2.0) - center.X);
+            rotationMatrix.Set(1, 2, rotationMatrix.At<double>(1, 2) + (newH / 2.0) - center.Y);
+
+        }
         // Return new IDs
         return Task.FromResult(string.Empty);
     }
