@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Geometric;
 
@@ -20,15 +21,19 @@ public sealed class RotatePlugin : IImageProcessingTool
         [Description("The ending angle in degrees (0-360).")] int endAngle,
         [Description("The angle step in degrees.")] int angleStep)
     {
-        // TODO: inputs validation (step > 0 and start <= end)
+        if (angleStep <= 0) throw new ArgumentException("angleStep must be > 0");
+        if (endAngle < startAngle) throw new ArgumentException("endAngle must be >= startAngle");
 
-        // TODO: Get the original image using imageReference
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
 
-        // TODO: Start a loop to create each rotation variant:
-        //   - Calculate rotation for the current angle.
-        //   - Adjust the canvas size to handle corners.
-        //   - Save the new image.
-        //   - New reference IDs.
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        int w = src.Width;
+        int h = src.Height;
+        var center = new Point2f(w / 2.0f, h / 2.0f);
+        var results = new List<string>();
 
         // Return new IDs
         return Task.FromResult(string.Empty);
