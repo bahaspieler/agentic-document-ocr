@@ -48,6 +48,7 @@ public sealed class AgentRunner
                 "You help preprocess images for OCR.\n" +
                 "If the user provides a local file path, call RegisterImage(filePath, desiredReference) to store it.\n" +
                 "If the user requests zooming, call ZoomInImage(imageReference, startZoom, endZoom, zoomStep).\n" +
+                "If the user requests rotating, call RotateImage(imageReference, startAngle, endAngle, angleStep).\n" +
                 "Always return the generated reference IDs to the user.\n" +
                 "If required parameters are missing, ask a short follow-up question.",
             name: "OCR Preprocessing Agent",

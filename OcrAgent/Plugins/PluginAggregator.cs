@@ -21,6 +21,7 @@ public sealed class PluginAggregator
         // Register all plugins here
         // Geometric plugins
         RegisterPlugin(new Geometric.ZoomInPlugin(store));
+        RegisterPlugin(new Geometric.RotatePlugin(store));
     }
 
     /// <summary>

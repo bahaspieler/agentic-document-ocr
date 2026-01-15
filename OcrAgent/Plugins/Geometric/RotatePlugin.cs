@@ -69,16 +69,15 @@ public sealed class RotatePlugin : IImageProcessingTool
                 ["op"] = "rotate",
                 ["angleDegrees"] = normalizedAngle.ToString()
             };
-
+            
             var baseRef = $"{imageReference}_rotate_{normalizedAngle:D3}";
             var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
 
             var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
             results.Add(newRef);
-
         }
-        // Return new IDs
-        return Task.FromResult(string.Empty);
+
+        return Task.FromResult(string.Join(",", results));
     }
 
     public IEnumerable<AITool> GetAITools()
