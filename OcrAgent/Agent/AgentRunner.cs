@@ -38,7 +38,7 @@ public sealed class AgentRunner
     public static AIAgent CreateAgent(IEnumerable<AITool> tools)
     {
         string apiKey = GetEnvOrThrow("OPENAI_API_KEY");
-        string deployment = Environment.GetEnvironmentVariable("OPENAI_CHATCOMPLETION_DEPLOYMENT") ?? "gpt-3.5-turbo";
+        string deployment = Environment.GetEnvironmentVariable("OPENAI_CHATCOMPLETION_DEPLOYMENT") ?? "gpt-4o-mini";
 
         var client = new OpenAIClient(new ApiKeyCredential(apiKey));
         var chatClient = client.GetChatClient(deployment);
