@@ -20,7 +20,16 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         [Description("The ending brightness adjustment (-100 to +100).")] int endBrightness,
         [Description("The brightness adjustment step.")] int step)
     {
-        // Validation
+        if (step <= 0) throw new ArgumentException("step must be > 0");
+        if (endBrightness < startBrightness) throw new ArgumentException("endBrightness must be >= startBrightness");
+        if (startBrightness < -100 || startBrightness > 100) throw new ArgumentException("startBrightness must be in range -100 to 100");
+        if (endBrightness < -100 || endBrightness > 100) throw new ArgumentException("endBrightness must be in range -100 to 100");
+        
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");// Validation
 
         // Data Loading
         
