@@ -17,6 +17,8 @@ public sealed class ContrastPlugin : IImageProcessingTool
     public Task<string> EnhanceContrast(
         [Description("The reference number of the image to enhance.")] string imageReference)
     {
+        // Validation
+        
         // Data Loading
         
         // Image Processing
