@@ -29,15 +29,37 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
         
         if (src.Empty())
-            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");// Validation
-
-        // Data Loading
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
         
-        // Image Processing
-        
-        // Save image with proper reference
+        // var results = new List<string>();
 
-        // Return the reference
+        for (int brightness = startBrightness; brightness <= endBrightness; brightness += step)
+        {
+            if (results.Count >= PluginHelpers.MaxOutputs) break;
+
+            using var adjusted = new Mat();
+            
+            // Alpha=1.0 for fixed contrast, beta adds brightness
+            double beta = brightness * 2.55; // Scale -100 / 100 to 0-255
+            src.ConvertTo(adjusted, MatType.CV_8UC3, 1.0, beta);
+
+            // Encode to PNG
+            Cv2.ImEncode(".png", adjusted, out var pngBytes);
+
+            var meta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "brightness",
+                ["adjustment"] = brightness.ToString()
+            };
+            
+            var baseRef = $"{imageReference}_brightness_{(brightness >= 0 ? "p" : "m")}{Math.Abs(brightness):D3}";
+            var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+            var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+            results.Add(newRef);
+        }
+        
         return Task.FromResult(string.Empty);
     }
 
