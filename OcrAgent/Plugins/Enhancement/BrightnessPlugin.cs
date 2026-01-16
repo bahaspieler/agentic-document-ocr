@@ -13,9 +13,12 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         _store = store;
     }
 
-    [Description("Adjusts the brightness of the given image.")]
+    [Description("Adjusts the brightness of the given image. It returns the comma-separated list of references of generated images.")]
     public Task<string> AdjustBrightness(
-        [Description("The reference number of the image to adjust.")] string imageReference)
+        [Description("The reference number of the image to adjust.")] string imageReference,
+        [Description("The starting brightness adjustment (-100 to +100).")] int startBrightness,
+        [Description("The ending brightness adjustment (-100 to +100).")] int endBrightness,
+        [Description("The brightness adjustment step.")] int step)
     {
         // Validation
 
