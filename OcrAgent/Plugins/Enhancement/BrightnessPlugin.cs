@@ -1,9 +1,14 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Plugin for adjusting image brightness.
+/// Generates multiple brightness variants based on adjustment ranges.
+/// </summary>
 public sealed class BrightnessPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -30,8 +35,8 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
-        
-        // var results = new List<string>();
+
+        var results = new List<string>();
 
         for (int brightness = startBrightness; brightness <= endBrightness; brightness += step)
         {
@@ -59,8 +64,8 @@ public sealed class BrightnessPlugin : IImageProcessingTool
             var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
             results.Add(newRef);
         }
-        
-        return Task.FromResult(string.Empty);
+
+        return Task.FromResult(string.Join(",", results));
     }
 
     public IEnumerable<AITool> GetAITools()
