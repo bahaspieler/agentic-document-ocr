@@ -1,9 +1,14 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Plugin for enhancing image contrast using several methods.
+/// Supports auto-contrast, histogram equalization, and CLAHE (Contrast Limited Adaptive Histogram Equalization).
+/// </summary>
 public sealed class ContrastPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -13,9 +18,10 @@ public sealed class ContrastPlugin : IImageProcessingTool
         _store = store;
     }
 
-    [Description("Enhances the contrast.")]
+    [Description("Enhances the contrast of the given image using the specified method. Returns the reference of the generated image.")]
     public Task<string> EnhanceContrast(
         [Description("The reference number of the image to enhance.")] string imageReference)
+        [Description("The contrast enhancement method: 'auto' (normalize to 0-255), 'histogram' (histogram equalization), or 'clahe' (adaptive).")] string method = "auto")
     {
         // Validation
         
