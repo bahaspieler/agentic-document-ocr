@@ -23,12 +23,14 @@ public sealed class ContrastPlugin : IImageProcessingTool
         [Description("The reference number of the image to enhance.")] string imageReference,
         [Description("The contrast enhancement method: 'auto' (normalize to 0-255), 'histogram' (histogram equalization), or 'clahe' (adaptive).")] string method = "auto")
     {
-        // Validation
-        
+        method = method.ToLowerInvariant();
+        if (method != "auto" && method != "histogram" && method != "clahe")
+            throw new ArgumentException("method must be 'auto', 'histogram', or 'clahe'");
+
         // Data Loading
-        
+
         // Image Processing
-        
+
         // Save image with proper reference
 
         // Return the reference
