@@ -20,7 +20,7 @@ public sealed class ContrastPlugin : IImageProcessingTool
 
     [Description("Enhances the contrast of the given image using the specified method. Returns the reference of the generated image.")]
     public Task<string> EnhanceContrast(
-        [Description("The reference number of the image to enhance.")] string imageReference)
+        [Description("The reference number of the image to enhance.")] string imageReference,
         [Description("The contrast enhancement method: 'auto' (normalize to 0-255), 'histogram' (histogram equalization), or 'clahe' (adaptive).")] string method = "auto")
     {
         // Validation
