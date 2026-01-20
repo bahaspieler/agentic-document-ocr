@@ -27,11 +27,13 @@ public sealed class ContrastPlugin : IImageProcessingTool
         if (method != "auto" && method != "histogram" && method != "clahe")
             throw new ArgumentException("method must be 'auto', 'histogram', or 'clahe'");
 
-        // Data Loading
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
 
-        // Image Processing
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Save image with proper reference
+        using var enhanced = new Mat();
 
         // Return the reference
 
