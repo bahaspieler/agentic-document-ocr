@@ -88,6 +88,77 @@ public sealed class DeskewPlugin : IImageProcessingTool
         return angles[angles.Count / 2];
     }
     
+    private double DetectSkewProjection(Mat src, double maxAngle)
+    {
+        // grayscale and binarize
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var binary = new Mat();
+        Cv2.Threshold(gray, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+        double bestAngle = 0.0;
+        double maxVariance = 0.0;
+
+        // test angles in range of (-)maxAngle to (+)maxAngle
+        
+        return bestAngle;
+    }
+    
+    private Mat RotateImage(Mat src, double angle, bool preserveSize)
+    {
+        int w = src.Width;
+        int h = src.Height;
+        var center = new Point2f(w / 2.0f, h / 2.0f);
+
+        // rotation matrix
+        using var rotationMatrix = Cv2.GetRotationMatrix2D(center, angle, 1.0);
+
+        Size outputSize;
+        if (preserveSize)
+        {
+            outputSize = new Size(w, h);
+        }
+        else
+        {
+            // new bounding box for rotated image
+            double radians = angle * Math.PI / 180.0;
+            double cos = Math.Abs(Math.Cos(radians));
+            double sin = Math.Abs(Math.Sin(radians));
+
+            int newW = (int)(h * sin + w * cos);
+            int newH = (int)(h * cos + w * sin);
+            
+            rotationMatrix.Set(0, 2, rotationMatrix.At<double>(0, 2) + (newW / 2.0) - center.X);
+            rotationMatrix.Set(1, 2, rotationMatrix.At<double>(1, 2) + (newH / 2.0) - center.Y);
+
+            outputSize = new Size(newW, newH);
+        }
+
+        var rotated = new Mat();
+        Cv2.WarpAffine(src, rotated, rotationMatrix, outputSize, InterpolationFlags.Linear, BorderTypes.Constant, Scalar.White);
+        return rotated;
+    }
+    
+    private double CalculateProjectionVariance(Mat binary)
+    {
+        // horizontal projection histogram
+        var projections = new List<int>();
+        for (int row = 0; row < binary.Rows; row++)
+        {
+            int sum = 0;
+            for (int col = 0; col < binary.Cols; col++)
+            {
+                sum += binary.At<byte>(row, col);
+            }
+            projections.Add(sum);
+        }
+
+        // variance of projection (higher variance = better alignment)
+        double mean = projections.Average();
+        double variance = projections.Select(p => Math.Pow(p - mean, 2)).Average();
+        return variance;
+    }
 
     public IEnumerable<AITool> GetAITools()
     {
