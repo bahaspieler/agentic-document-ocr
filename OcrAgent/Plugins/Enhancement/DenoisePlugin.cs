@@ -42,8 +42,22 @@ public sealed class DenoisePlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Still not wired to methods yet (next commit)
-        using var denoised = src.Clone();
+        using var denoised = new Mat();
+
+        switch (method)
+        {
+            case "median":
+                ApplyMedianBlur(src, denoised, strength);
+                break;
+
+            case "bilateral":
+                ApplyBilateralFilter(src, denoised, strength);
+                break;
+
+            case "nlm":
+                ApplyNonLocalMeans(src, denoised, strength);
+                break;
+        }
 
         Cv2.ImEncode(".png", denoised, out var pngBytes);
 
