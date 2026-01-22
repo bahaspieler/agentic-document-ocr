@@ -101,7 +101,21 @@ public sealed class DeskewPlugin : IImageProcessingTool
         double maxVariance = 0.0;
 
         // test angles in range of (-)maxAngle to (+)maxAngle
-        
+        int steps = (int)(maxAngle * 2); // 1 degree steps
+        for (int i = -(int)maxAngle; i <= (int)maxAngle; i++)
+        {
+            double angle = i;
+            using var rotated = RotateImage(binary, angle, false);
+
+            // horizontal projection (sum of pixels in each row)
+            double variance = CalculateProjectionVariance(rotated);
+
+            if (variance > maxVariance)
+            {
+                maxVariance = variance;
+                bestAngle = angle;
+            }
+        }
         return bestAngle;
     }
     
