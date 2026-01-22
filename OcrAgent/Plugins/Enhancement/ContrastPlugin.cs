@@ -39,6 +39,10 @@ public sealed class ContrastPlugin : IImageProcessingTool
             case "auto":
                 ApplyAutoContrast(src, enhanced);
                 break;
+
+            case "histogram":
+                ApplyHistogramEqualization(src, enhanced);
+                break;
         }
         // Return the reference
 
@@ -57,6 +61,25 @@ public sealed class ContrastPlugin : IImageProcessingTool
         double beta = -minVal * alpha;
 
         src.ConvertTo(dst, MatType.CV_8UC3, alpha, beta);
+    }
+
+
+    private void ApplyHistogramEqualization(Mat src, Mat dst)
+    {
+        using var ycrcb = new Mat();
+        Cv2.CvtColor(src, ycrcb, ColorConversionCodes.BGR2YCrCb);
+
+        var channels = Cv2.Split(ycrcb);
+
+        Cv2.EqualizeHist(channels[0], channels[0]);
+
+        using var merged = new Mat();
+        Cv2.Merge(channels, merged);
+
+        Cv2.CvtColor(merged, dst, ColorConversionCodes.YCrCb2BGR);
+
+        foreach (var ch in channels)
+            ch.Dispose();
     }
 
     public IEnumerable<AITool> GetAITools()
