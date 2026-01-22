@@ -38,9 +38,49 @@ public sealed class DeskewPlugin : IImageProcessingTool
 
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
-
         
-        return Task.FromResult(string.Empty);
+        // Detect skew angle
+        double detectedAngle = method == "hough"
+            ? DetectSkewHoughLines(src, maxAngle)
+            : DetectSkewProjection(src, maxAngle);
+
+        bool correctionApplied = false;
+        Mat deskewed;
+
+        // Only correct if angle is significant
+        if (Math.Abs(detectedAngle) >= MinimumSkewThreshold)
+        {
+            deskewed = RotateImage(src, detectedAngle, preserveSize);
+            correctionApplied = true;
+        }
+        else
+        {
+            deskewed = src.Clone();
+        }
+
+        // Encode to PNG bytes
+        Cv2.ImEncode(".png", deskewed, out var pngBytes);
+        deskewed.Dispose();
+
+        var confidence = CalculateConfidence(detectedAngle, maxAngle);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "deskew",
+            ["detectedAngle"] = detectedAngle.ToString("F2"),
+            ["correctionApplied"] = correctionApplied.ToString(),
+            ["confidence"] = confidence.ToString("F2"),
+            ["method"] = method,
+            ["preserveSize"] = preserveSize.ToString(),
+            ["suitableFor"] = "all"
+        };
+
+        var baseRef = $"{imageReference}_deskew";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
     private double DetectSkewHoughLines(Mat src, double maxAngle)
@@ -172,6 +212,13 @@ public sealed class DeskewPlugin : IImageProcessingTool
         double mean = projections.Average();
         double variance = projections.Select(p => Math.Pow(p - mean, 2)).Average();
         return variance;
+    }
+    
+    private double CalculateConfidence(double angle, double maxAngle)
+    {
+        // Confidence decreases towards the max angle
+        double normalized = Math.Abs(angle) / maxAngle;
+        return Math.Max(0.0, 1.0 - normalized);
     }
 
     public IEnumerable<AITool> GetAITools()
