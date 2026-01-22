@@ -34,10 +34,29 @@ public sealed class ContrastPlugin : IImageProcessingTool
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
         using var enhanced = new Mat();
-
+        switch (method)
+        {
+            case "auto":
+                ApplyAutoContrast(src, enhanced);
+                break;
+        }
         // Return the reference
 
         return Task.FromResult(string.Empty);
+    }
+
+
+    private void ApplyAutoContrast(Mat src, Mat dst)
+    {
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        Cv2.MinMaxLoc(gray, out double minVal, out double maxVal);
+
+        double alpha = 255.0 / (maxVal - minVal);
+        double beta = -minVal * alpha;
+
+        src.ConvertTo(dst, MatType.CV_8UC3, alpha, beta);
     }
 
     public IEnumerable<AITool> GetAITools()
