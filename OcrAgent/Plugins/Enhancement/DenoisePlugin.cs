@@ -42,7 +42,7 @@ public sealed class DenoisePlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        // For now: no denoise yet, just clone the image (real denoise comes later)
+        // Still not wired to methods yet (next commit)
         using var denoised = src.Clone();
 
         Cv2.ImEncode(".png", denoised, out var pngBytes);
@@ -60,6 +60,61 @@ public sealed class DenoisePlugin : IImageProcessingTool
 
         var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
+    }
+
+    private void ApplyMedianBlur(Mat src, Mat dst, string strength)
+    {
+        int ksize = strength switch
+        {
+            "low" => 3,
+            "medium" => 5,
+            "high" => 7,
+            _ => 5
+        };
+
+        Cv2.MedianBlur(src, dst, ksize);
+    }
+
+    private void ApplyBilateralFilter(Mat src, Mat dst, string strength)
+    {
+        int d = strength switch
+        {
+            "low" => 5,
+            "medium" => 9,
+            "high" => 15,
+            _ => 9
+        };
+
+        double sigmaColor = strength switch
+        {
+            "low" => 50,
+            "medium" => 75,
+            "high" => 100,
+            _ => 75
+        };
+
+        double sigmaSpace = strength switch
+        {
+            "low" => 50,
+            "medium" => 75,
+            "high" => 100,
+            _ => 75
+        };
+
+        Cv2.BilateralFilter(src, dst, d, sigmaColor, sigmaSpace);
+    }
+
+    private void ApplyNonLocalMeans(Mat src, Mat dst, string strength)
+    {
+        float h = strength switch
+        {
+            "low" => 3.0f,
+            "medium" => 7.0f,
+            "high" => 10.0f,
+            _ => 7.0f
+        };
+
+        Cv2.FastNlMeansDenoisingColored(src, dst, h, h, 7, 21);
     }
 
     public IEnumerable<AITool> GetAITools()
