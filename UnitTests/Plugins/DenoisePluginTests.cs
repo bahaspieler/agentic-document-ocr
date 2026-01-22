@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
@@ -34,13 +35,39 @@ public sealed class DenoisePlugin : IImageProcessingTool
         if (strength != "low" && strength != "medium" && strength != "high")
             throw new ArgumentException("strength must be 'low', 'medium', or 'high'");
 
-        // Placeholder: real image processing and saving will be added in the next commits
-        return Task.FromResult(imageReference);
+        // 1) Load image from store
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        // 2) Placeholder output (real denoising comes in commit 3)
+        using var denoised = src.Clone();
+
+        // 3) Encode as PNG
+        Cv2.ImEncode(".png", denoised, out var pngBytes);
+
+        // 4) Metadata for traceability
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "denoise",
+            ["method"] = method,
+            ["strength"] = strength
+        };
+
+        // 5) Create a unique reference and save
+        var baseRef = $"{imageReference}_denoise_{method}_{strength}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
+    // Expose this method as an AI tool
     public IEnumerable<AITool> GetAITools()
     {
-        // We'll expose the tool in a later commit
-        yield break;
+        yield return AIFunctionFactory.Create(this.DenoiseImage);
     }
 }
