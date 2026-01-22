@@ -1,9 +1,13 @@
+using System.Collections.Generic;
 using Microsoft.Extensions.AI;
-using System.ComponentModel;
 using OcrAgent.Storage;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Plugin for removing noise from images using various denoising methods.
+/// Supports median blur, bilateral filtering, and Non-Local Means denoising.
+/// </summary>
 public sealed class DenoisePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -13,25 +17,9 @@ public sealed class DenoisePlugin : IImageProcessingTool
         _store = store;
     }
 
-    [Description("Removes noise")]
-    public Task<string> DenoiseImage(
-        [Description("The reference number of the image to denoise.")] string imageReference)
-    {
-        // Validation
-
-        // Data Loading
-        
-        // Image Processing
-        
-        // Save image with proper reference
-
-        // Return the reference
-        return Task.FromResult(string.Empty);
-    }
-        
-
+    // We'll expose tools in a later commit
     public IEnumerable<AITool> GetAITools()
     {
-        yield return AIFunctionFactory.Create(this.DenoiseImage);
+        yield break;
     }
 }
