@@ -36,7 +36,19 @@ public sealed class ZoomInPluginTests : PluginTestBase
 
     [TestMethod]
     public async Task ZoomInImage_RespectsCap() 
-        => await Task.CompletedTask;
+    {
+        // arrange
+        int startZoom = 0;
+        int endZoom = 990;
+        int step = 10;
+
+        // act
+        var result = await _plugin.ZoomInImage(TestImageRef, startZoom, endZoom, step);
+        var references = result.Split(',');
+
+        // assert
+        Assert.IsTrue(references.Length <= 20, "Should respect maximum output cap of 20.");
+    }
 
     [TestMethod]
     public async Task ZoomInImage_StoresMetadata() 
