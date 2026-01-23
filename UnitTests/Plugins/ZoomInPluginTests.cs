@@ -11,12 +11,28 @@ public sealed class ZoomInPluginTests : PluginTestBase
     [TestInitialize]
     public void Setup()
     {
-        // Setup logic removed
+        _plugin = new ZoomInPlugin(Store);
     }
 
     [TestMethod]
     public async Task ZoomInImage_GeneratesCorrectNumberOfVariants() 
-        => await Task.CompletedTask;
+    {
+        // arrange
+        int startZoom = 10;
+        int endZoom = 30;
+        int step = 10;
+
+        // act
+        var result = await _plugin.ZoomInImage(TestImageRef, startZoom, endZoom, step);
+        var references = result.Split(',');
+
+        // assert
+        Assert.AreEqual(3, references.Length, "Should generate 3 zoom variants.");
+        foreach (var refId in references)
+        {
+            AssertImageValid(refId.Trim());
+        }
+    }
 
     [TestMethod]
     public async Task ZoomInImage_RespectsCap() 
