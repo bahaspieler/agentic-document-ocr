@@ -52,5 +52,14 @@ public sealed class ZoomInPluginTests : PluginTestBase
 
     [TestMethod]
     public async Task ZoomInImage_StoresMetadata() 
-        => await Task.CompletedTask;
+    {
+        // arrange
+        int startZoom = 15;
+        int endZoom = 15;
+        int step = 10;
+
+        // act
+        var result = await _plugin.ZoomInImage(TestImageRef, startZoom, endZoom, step);
+        var reference = result.Split(',')[0].Trim();
+    }
 }
