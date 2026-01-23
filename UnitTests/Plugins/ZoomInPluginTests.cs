@@ -27,7 +27,7 @@ public sealed class ZoomInPluginTests : PluginTestBase
         var references = result.Split(',');
 
         // assert
-        Assert.AreEqual(3, references.Length, "Should generate 3 zoom variants.");
+        Assert.HasCount(3, (System.Collections.IEnumerable)references, "Should generate 3 zoom variants.");
         foreach (var refId in references)
         {
             AssertImageValid(refId.Trim());
@@ -47,7 +47,7 @@ public sealed class ZoomInPluginTests : PluginTestBase
         var references = result.Split(',');
 
         // assert
-        Assert.IsTrue(references.Length <= 20, "Should respect maximum output cap of 20.");
+        Assert.IsLessThanOrEqualTo(20, references.Length, "Should respect maximum output cap of 20.");
     }
 
     [TestMethod]
