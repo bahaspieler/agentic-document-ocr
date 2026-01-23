@@ -61,5 +61,11 @@ public sealed class ZoomInPluginTests : PluginTestBase
         // act
         var result = await _plugin.ZoomInImage(TestImageRef, startZoom, endZoom, step);
         var reference = result.Split(',')[0].Trim();
+
+        // assert
+        var meta = Store.GetMetadata(reference);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.AreEqual("zoom_in", meta["op"]);
+        Assert.AreEqual("15", meta["zoomPercent"]);
     }
 }
