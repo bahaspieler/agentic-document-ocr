@@ -27,7 +27,7 @@ public sealed class DeskewPluginTests : PluginTestBase
         Assert.AreEqual("deskew", meta["op"]);
         Assert.AreEqual("hough", meta["method"]);
     }
-
+    
     [TestMethod]
     public async Task DeskewImage_Projection_ProducesOutput()
     {
@@ -70,5 +70,18 @@ public sealed class DeskewPluginTests : PluginTestBase
         // Save
         Cv2.ImEncode(".png", rotated, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_skewed" }, "SKEWED001");
+    }
+    
+    [TestMethod]
+    public async Task DeskewImage_StoresAngleAndConfidence()
+    {
+        // Act
+        var result = await _plugin.DeskewImage(TestImageRef, 10.0);
+
+        // Assert
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectedAngle"));
+        Assert.IsTrue(meta.ContainsKey("confidence"));
+        Assert.IsTrue(meta.ContainsKey("correctionApplied"));
     }
 }
