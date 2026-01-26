@@ -1,136 +1,151 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
-using Microsoft.Extensions.AI;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using OcrAgent.Plugins.Enhancement;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
-namespace OcrAgent.Plugins.Enhancement;
-
-/// <summary>
-/// Plugin for removing noise from images using various denoising methods.
-/// Supports median blur, bilateral filtering, and Non-Local Means denoising.
-/// </summary>
-public sealed class DenoisePlugin : IImageProcessingTool
+namespace UnitTests.Plugins.Enhancement
 {
-    private readonly IImageStore _store;
-
-    public DenoisePlugin(IImageStore store)
+    [TestClass]
+    public class DenoisePluginTests
     {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
-    }
-
-    [System.ComponentModel.Description("Removes noise from the given image using the specified method. Returns the reference of the generated image.")]
-    public Task<string> DenoiseImage(
-        [System.ComponentModel.Description("The reference number of the image to denoise.")] string imageReference,
-        [System.ComponentModel.Description("The denoising method: 'median', 'bilateral', or 'nlm' (Non-Local Means).")] string method = "bilateral",
-        [System.ComponentModel.Description("The denoising strength: 'low', 'medium', or 'high'. For NLM, this is the filter strength.")] string strength = "medium")
-    {
-        method = method.ToLowerInvariant();
-        strength = strength.ToLowerInvariant();
-
-        if (method != "median" && method != "bilateral" && method != "nlm")
-            throw new ArgumentException("method must be 'median', 'bilateral', or 'nlm'");
-
-        if (strength != "low" && strength != "medium" && strength != "high")
-            throw new ArgumentException("strength must be 'low', 'medium', or 'high'");
-
-        // 1) Load image from store
-        var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
-
-        if (src.Empty())
-            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
-
-        // 2) Denoise
-        using var denoised = new Mat();
-
-        switch (method)
+        [TestMethod]
+        public async Task DenoiseImage_Bilateral_Medium_CreatesNewImage()
         {
-            case "median":
-                ApplyMedianBlur(src, denoised, strength);
-                break;
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
 
-            case "bilateral":
-                ApplyBilateralFilter(src, denoised, strength);
-                break;
+            var inputRef = "img_noisy";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
 
-            case "nlm":
-                ApplyNonLocalMeans(src, denoised, strength);
-                break;
+            using (var noisy = CreateNoisyImage(128, 128))
+            {
+                Cv2.ImWrite(inputPath, noisy);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+
+            var plugin = new DenoisePlugin(store);
+
+            var outRef = await plugin.DenoiseImage(inputRef, method: "bilateral", strength: "medium");
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(outRef));
+            Assert.AreNotEqual(inputRef, outRef);
+
+            var outPath = store.GetImagePath(outRef);
+            Assert.IsTrue(File.Exists(outPath), $"Expected output file to exist: {outPath}");
         }
 
-        // 3) Encode as PNG
-        Cv2.ImEncode(".png", denoised, out var pngBytes);
+        // --------------------
+        // Helpers
+        // --------------------
 
-        // 4) Metadata
-        var meta = new Dictionary<string, string>
+        private static Mat CreateNoisyImage(int width, int height)
         {
-            ["parent"] = imageReference,
-            ["op"] = "denoise",
-            ["method"] = method,
-            ["strength"] = strength
-        };
+            var img = new Mat(height, width, MatType.CV_8UC3);
+            var rng = new Random(123);
 
-        // 5) Unique output reference (no PluginHelpers dependency)
-        var baseRef = $"{imageReference}_denoise_{method}_{strength}";
-        var desiredRef = $"{baseRef}_{Guid.NewGuid():N}";
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    img.Set(y, x, new Vec3b(
+                        (byte)rng.Next(0, 256),
+                        (byte)rng.Next(0, 256),
+                        (byte)rng.Next(0, 256)
+                    ));
+                }
+            }
 
-        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
-        return Task.FromResult(newRef);
-    }
+            return img;
+        }
 
-    private static void ApplyMedianBlur(Mat src, Mat dst, string strength)
-    {
-        int ksize = strength switch
+        private sealed class TempFolder : IDisposable
         {
-            "low" => 3,
-            "medium" => 5,
-            "high" => 7,
-            _ => 5
-        };
+            public string Path { get; }
 
-        Cv2.MedianBlur(src, dst, ksize);
-    }
+            public TempFolder()
+            {
+                Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "DenoiseTests_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(Path);
+            }
 
-    private static void ApplyBilateralFilter(Mat src, Mat dst, string strength)
-    {
-        int d = strength switch
+            public void Dispose()
+            {
+                try { Directory.Delete(Path, recursive: true); } catch { /* ignore */ }
+            }
+        }
+
+        private sealed class TestImageStore : IImageStore
         {
-            "low" => 5,
-            "medium" => 9,
-            "high" => 15,
-            _ => 9
-        };
+            private readonly string _root;
+            private readonly Dictionary<string, string> _refToPath = new();
+            private readonly Dictionary<string, IDictionary<string, string>> _refToMeta = new();
 
-        double sigmaColor = strength switch
-        {
-            "low" => 50,
-            "medium" => 75,
-            "high" => 100,
-            _ => 75
-        };
+            public TestImageStore(string rootFolder)
+            {
+                _root = rootFolder;
+            }
 
-        double sigmaSpace = sigmaColor;
+            public void RegisterExisting(string imageReference, string filePath, IDictionary<string, string>? metadata = null)
+            {
+                _refToPath[imageReference] = filePath;
+                _refToMeta[imageReference] = metadata ?? new Dictionary<string, string>();
+            }
 
-        Cv2.BilateralFilter(src, dst, d, sigmaColor, sigmaSpace);
-    }
+            public bool Exists(string reference)
+                => _refToPath.ContainsKey(reference);
 
-    private static void ApplyNonLocalMeans(Mat src, Mat dst, string strength)
-    {
-        float h = strength switch
-        {
-            "low" => 3.0f,
-            "medium" => 7.0f,
-            "high" => 10.0f,
-            _ => 7.0f
-        };
+            public string GetImagePath(string imageReference)
+            {
+                if (!_refToPath.TryGetValue(imageReference, out var path))
+                    throw new FileNotFoundException($"Unknown image reference: {imageReference}");
 
-        Cv2.FastNlMeansDenoisingColored(src, dst, h, h, 7, 21);
-    }
+                return path;
+            }
 
-    public IEnumerable<AITool> GetAITools()
-    {
-        yield return AIFunctionFactory.Create(this.DenoiseImage);
+            public IDictionary<string, string> GetMetadata(string reference)
+            {
+                if (_refToMeta.TryGetValue(reference, out var meta))
+                    return meta;
+
+                return new Dictionary<string, string>();
+            }
+
+            public string SaveFromFile(string path, string? desiredReference)
+            {
+                if (!File.Exists(path))
+                    throw new FileNotFoundException($"Input file not found: {path}");
+
+                var ext = System.IO.Path.GetExtension(path);
+                var finalRef = string.IsNullOrWhiteSpace(desiredReference)
+                    ? $"img_{Guid.NewGuid():N}"
+                    : desiredReference;
+
+                var destPath = System.IO.Path.Combine(_root, $"{finalRef}{ext}");
+                File.Copy(path, destPath, overwrite: true);
+
+                _refToPath[finalRef] = destPath;
+                _refToMeta[finalRef] = new Dictionary<string, string>();
+                return finalRef;
+            }
+
+            public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null, string? desiredReference = null)
+            {
+                var finalRef = string.IsNullOrWhiteSpace(desiredReference)
+                    ? $"img_{Guid.NewGuid():N}"
+                    : desiredReference;
+
+                var filePath = System.IO.Path.Combine(_root, $"{finalRef}.{extension}");
+                File.WriteAllBytes(filePath, bytes);
+
+                _refToPath[finalRef] = filePath;
+                _refToMeta[finalRef] = metadata ?? new Dictionary<string, string>();
+                return finalRef;
+            }
+        }
     }
 }
