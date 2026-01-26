@@ -39,6 +39,63 @@ namespace UnitTests.Plugins.Enhancement
             Assert.IsTrue(File.Exists(outPath), $"Expected output file to exist: {outPath}");
         }
 
+        [TestMethod]
+        public async Task DenoiseImage_InvalidMethod_Throws()
+        {
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
+
+            var inputRef = "img_noisy";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
+
+            using (var noisy = CreateNoisyImage(64, 64))
+            {
+                Cv2.ImWrite(inputPath, noisy);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+
+            var plugin = new DenoisePlugin(store);
+
+            await ExpectThrowsAsync<ArgumentException>(() =>
+                plugin.DenoiseImage(inputRef, method: "wrong", strength: "medium"));
+        }
+
+        [TestMethod]
+        public async Task DenoiseImage_InvalidStrength_Throws()
+        {
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
+
+            var inputRef = "img_noisy";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
+
+            using (var noisy = CreateNoisyImage(64, 64))
+            {
+                Cv2.ImWrite(inputPath, noisy);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+
+            var plugin = new DenoisePlugin(store);
+
+            await ExpectThrowsAsync<ArgumentException>(() =>
+                plugin.DenoiseImage(inputRef, method: "bilateral", strength: "super"));
+        }
+
+        private static async Task ExpectThrowsAsync<T>(Func<Task> action) where T : Exception
+        {
+            try
+            {
+                await action();
+                Assert.Fail($"Expected exception of type {typeof(T).Name}, but no exception was thrown.");
+            }
+            catch (T)
+            {
+                // expected
+            }
+        }
+
         // --------------------
         // Helpers
         // --------------------
@@ -79,6 +136,10 @@ namespace UnitTests.Plugins.Enhancement
             }
         }
 
+        /// <summary>
+        /// Test implementation of IImageStore matching the interface members you reported:
+        /// Exists, SaveFromFile, GetMetadata, SaveBytes (with nullable optional params), GetImagePath.
+        /// </summary>
         private sealed class TestImageStore : IImageStore
         {
             private readonly string _root;
