@@ -29,5 +29,18 @@ public sealed class BrightnessPluginTests : PluginTestBase
             AssertImageValid(refId.Trim());
         }
     }
+    [TestMethod]
+    public async Task AdjustBrightness_StoresMetadata()
+    {
+        int brightness = 50;
+
+        var result = await _plugin.AdjustBrightness(TestImageRef, brightness, brightness, 10);
+        var reference = result.Split(',')[0].Trim();
+
+        var meta = Store.GetMetadata(reference);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.AreEqual("brightness", meta["op"]);
+        Assert.AreEqual("50", meta["adjustment"]);
+    }
 
 }
