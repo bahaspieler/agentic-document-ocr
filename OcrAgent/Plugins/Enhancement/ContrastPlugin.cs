@@ -43,6 +43,10 @@ public sealed class ContrastPlugin : IImageProcessingTool
             case "histogram":
                 ApplyHistogramEqualization(src, enhanced);
                 break;
+
+            case "clahe":
+                ApplyCLAHE(src, enhanced);
+                break;
         }
         // Return the reference
 
@@ -77,6 +81,26 @@ public sealed class ContrastPlugin : IImageProcessingTool
         Cv2.Merge(channels, merged);
 
         Cv2.CvtColor(merged, dst, ColorConversionCodes.YCrCb2BGR);
+
+        foreach (var ch in channels)
+            ch.Dispose();
+    }
+
+
+    private void ApplyCLAHE(Mat src, Mat dst)
+    {
+        using var lab = new Mat();
+        Cv2.CvtColor(src, lab, ColorConversionCodes.BGR2Lab);
+
+        var channels = Cv2.Split(lab);
+
+        using var clahe = Cv2.CreateCLAHE(clipLimit: 2.0, tileGridSize: new Size(8, 8));
+        clahe.Apply(channels[0], channels[0]);
+
+        using var merged = new Mat();
+        Cv2.Merge(channels, merged);
+
+        Cv2.CvtColor(merged, dst, ColorConversionCodes.Lab2BGR);
 
         foreach (var ch in channels)
             ch.Dispose();
