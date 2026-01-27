@@ -49,6 +49,15 @@ public sealed class ContrastPlugin : IImageProcessingTool
                 break;
         }
         // Return the reference
+        Cv2.ImEncode(".png", enhanced, out var pngBytes);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "contrast",
+            ["method"] = method
+        };
+
 
         return Task.FromResult(string.Empty);
     }
