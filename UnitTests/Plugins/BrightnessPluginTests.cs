@@ -23,7 +23,7 @@ public sealed class BrightnessPluginTests : PluginTestBase
         var result = await _plugin.AdjustBrightness(TestImageRef, start, end, step);
         var references = result.Split(',');
 
-        Assert.AreEqual(5, references.Length, "Should generate 5 brightness variants.");
+        Assert.HasCount(5, (System.Collections.IEnumerable)references, "Should generate 5 brightness variants.");
         foreach (var refId in references)
         {
             AssertImageValid(refId.Trim());
