@@ -34,6 +34,7 @@ public sealed class ContrastPlugin : IImageProcessingTool
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
         using var enhanced = new Mat();
+
         switch (method)
         {
             case "auto":
@@ -48,7 +49,7 @@ public sealed class ContrastPlugin : IImageProcessingTool
                 ApplyCLAHE(src, enhanced);
                 break;
         }
-        // Return the reference
+
         Cv2.ImEncode(".png", enhanced, out var pngBytes);
 
         var meta = new Dictionary<string, string>
@@ -58,59 +59,73 @@ public sealed class ContrastPlugin : IImageProcessingTool
             ["method"] = method
         };
 
+        var baseRef = $"{imageReference}_contrast_{method}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
 
-        return Task.FromResult(string.Empty);
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
-
 
     private void ApplyAutoContrast(Mat src, Mat dst)
     {
+        // Convert to grayscale for min/max
         using var gray = new Mat();
         Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
         Cv2.MinMaxLoc(gray, out double minVal, out double maxVal);
 
+        // 0-255 range
         double alpha = 255.0 / (maxVal - minVal);
         double beta = -minVal * alpha;
 
         src.ConvertTo(dst, MatType.CV_8UC3, alpha, beta);
     }
 
-
     private void ApplyHistogramEqualization(Mat src, Mat dst)
     {
+        // Convert to YCrCb
         using var ycrcb = new Mat();
         Cv2.CvtColor(src, ycrcb, ColorConversionCodes.BGR2YCrCb);
 
+        // Split channels
         var channels = Cv2.Split(ycrcb);
 
+        // Equalize the Y channel (luminance)
         Cv2.EqualizeHist(channels[0], channels[0]);
 
+        // Merge back
         using var merged = new Mat();
         Cv2.Merge(channels, merged);
 
+        // Convert back to BGR
         Cv2.CvtColor(merged, dst, ColorConversionCodes.YCrCb2BGR);
 
+        // Clean up channels
         foreach (var ch in channels)
             ch.Dispose();
     }
 
-
     private void ApplyCLAHE(Mat src, Mat dst)
     {
+        // Convert to LAB
         using var lab = new Mat();
         Cv2.CvtColor(src, lab, ColorConversionCodes.BGR2Lab);
 
+        // Split channels
         var channels = Cv2.Split(lab);
 
+        // Apply CLAHE to L channel
         using var clahe = Cv2.CreateCLAHE(clipLimit: 2.0, tileGridSize: new Size(8, 8));
         clahe.Apply(channels[0], channels[0]);
 
+        // Merge back
         using var merged = new Mat();
         Cv2.Merge(channels, merged);
 
+        // Convert back to BGR
         Cv2.CvtColor(merged, dst, ColorConversionCodes.Lab2BGR);
 
+        // Clean up channels
         foreach (var ch in channels)
             ch.Dispose();
     }
