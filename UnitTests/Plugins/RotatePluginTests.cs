@@ -45,4 +45,17 @@ public sealed class RotatePluginTests : PluginTestBase
         Assert.AreEqual("10", meta["angleDegrees"], "370° should normalize to 10°");
     }
     
+    [TestMethod]
+    public async Task RotateImage_StoresMetadata()
+    {
+        int angle = 90;
+        
+        var result = await _plugin.RotateImage(TestImageRef, angle, angle, 10);
+        var reference = result.Split(',')[0].Trim();
+        
+        var meta = Store.GetMetadata(reference);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.AreEqual("rotate", meta["op"]);
+        Assert.AreEqual("90", meta["angleDegrees"]);
+    }
 }
