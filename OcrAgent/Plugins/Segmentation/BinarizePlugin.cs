@@ -65,6 +65,24 @@ public sealed class BinarizePlugin : IImageProcessingTool
                 break;
         }
 
+        // Invert
+        if (invertForDarkBackground)
+        {
+            Cv2.BitwiseNot(binary, binary);
+        }
+        
+        Cv2.ImEncode(".png", binary, out var pngBytes);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "binarize",
+            ["method"] = method,
+            ["blockSize"] = blockSize.ToString(),
+            ["constant"] = constant.ToString(),
+            ["inverted"] = invertForDarkBackground.ToString()
+        };
+
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.BinarizeImage);
