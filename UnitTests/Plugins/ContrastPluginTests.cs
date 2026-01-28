@@ -25,4 +25,14 @@ public sealed class ContrastPluginTests : PluginTestBase
         Assert.AreEqual("auto", meta["method"]);
     }
 
+
+    [TestMethod]
+    public async Task EnhanceContrast_Histogram_ProducesOutput()
+    {
+        var result = await _plugin.EnhanceContrast(TestImageRef, "histogram");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("histogram", meta["method"]);
+    }
 }
