@@ -35,4 +35,15 @@ public sealed class ContrastPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("histogram", meta["method"]);
     }
+
+
+    [TestMethod]
+    public async Task EnhanceContrast_CLAHE_ProducesOutput()
+    {
+        var result = await _plugin.EnhanceContrast(TestImageRef, "clahe");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("clahe", meta["method"]);
+    }
 }
