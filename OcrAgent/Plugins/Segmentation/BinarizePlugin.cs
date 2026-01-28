@@ -38,6 +38,32 @@ public sealed class BinarizePlugin : IImageProcessingTool
 
         throw new NotImplementedException();
     }
+    var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        // grayscale
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var binary = new Mat();
+
+        switch (method)
+        {
+            case "otsu":
+                ApplyOtsuBinarization(gray, binary);
+                break;
+
+            case "adaptive_mean":
+                ApplyAdaptiveMean(gray, binary, blockSize, constant);
+                break;
+
+            case "adaptive_gaussian":
+                ApplyAdaptiveGaussian(gray, binary, blockSize, constant);
+                break;
+        }
 
     public IEnumerable<AITool> GetAITools()
     {
