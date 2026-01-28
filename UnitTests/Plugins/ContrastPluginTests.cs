@@ -13,4 +13,16 @@ public sealed class ContrastPluginTests : PluginTestBase
     {
         _plugin = new ContrastPlugin(Store);
     }
+
+    [TestMethod]
+    public async Task EnhanceContrast_Auto_ProducesOutput()
+    {
+        var result = await _plugin.EnhanceContrast(TestImageRef, "auto");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("contrast", meta["op"]);
+        Assert.AreEqual("auto", meta["method"]);
+    }
+
 }
