@@ -25,7 +25,6 @@ public sealed class ContrastPluginTests : PluginTestBase
         Assert.AreEqual("auto", meta["method"]);
     }
 
-
     [TestMethod]
     public async Task EnhanceContrast_Histogram_ProducesOutput()
     {
@@ -36,7 +35,6 @@ public sealed class ContrastPluginTests : PluginTestBase
         Assert.AreEqual("histogram", meta["method"]);
     }
 
-
     [TestMethod]
     public async Task EnhanceContrast_CLAHE_ProducesOutput()
     {
@@ -45,5 +43,15 @@ public sealed class ContrastPluginTests : PluginTestBase
         AssertImageValid(result);
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("clahe", meta["method"]);
+    }
+
+    [TestMethod]
+    public async Task EnhanceContrast_DefaultMethod()
+    {
+        var result = await _plugin.EnhanceContrast(TestImageRef);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("auto", meta["method"]);
     }
 }
