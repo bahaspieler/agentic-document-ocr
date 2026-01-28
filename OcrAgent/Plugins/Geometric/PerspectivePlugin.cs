@@ -90,73 +90,80 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    // Detection and Helpers
-
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByEdges(Mat src, string sensitivity, bool enhanceEdges)
+    // Detection method
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByEdges(
+        Mat src,
+        string sensitivity,
+        bool enhanceEdges)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
-        Mat prep;
-        using (var gray = new Mat())
+        using var gray = new Mat();
+        Cv2.CvtColor(resized, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var prep = new Mat();
+        if (enhanceEdges)
         {
-            Cv2.CvtColor(resized, gray, ColorConversionCodes.BGR2GRAY);
-            if (enhanceEdges)
-            {
-                using var filtered = new Mat();
-                Cv2.BilateralFilter(gray, filtered, 9, 75, 75);
-                using var clahe = Cv2.CreateCLAHE(3.0, new Size(8, 8));
-                var tmp = new Mat();
-                clahe.Apply(filtered, tmp);
-                prep = tmp;
-            }
-            else
-            {
-                prep = gray.Clone();
-            }
+            using var filtered = new Mat();
+            Cv2.BilateralFilter(gray, filtered, 9, 75, 75);
+            using var clahe = Cv2.CreateCLAHE(3.0, new Size(8, 8));
+            clahe.Apply(filtered, prep);
+        }
+        else
+        {
+            gray.CopyTo(prep);
         }
 
-        using (prep)
-        using (var blurred = new Mat())
-        using (var edges = new Mat())
+        using var blurred = new Mat();
+        Cv2.GaussianBlur(prep, blurred, new Size(5, 5), 0);
+
+        (double low, double high) = sensitivity switch
         {
-            Cv2.GaussianBlur(prep, blurred, new Size(5, 5), 0);
+            "aggressive" => (25, 90),
+            "conservative" => (80, 200),
+            _ => (50, 150)
+        };
 
-            (double low, double high) = sensitivity switch
-            {
-                "aggressive" => (25, 90),
-                "conservative" => (80, 200),
-                _ => (50, 150)
-            };
+        using var edges = new Mat();
+        Cv2.Canny(blurred, edges, low, high);
 
-            Cv2.Canny(blurred, edges, low, high);
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
+        using var morph = new Mat();
+        Cv2.Dilate(edges, morph, k, iterations: 2);
+        Cv2.MorphologyEx(morph, morph, MorphTypes.Close, k, iterations: 2);
 
-            var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
-            Cv2.Dilate(edges, edges, kernel, iterations: 2);
-            Cv2.MorphologyEx(edges, edges, MorphTypes.Close, kernel, iterations: 2);
+        Cv2.FindContours(morph, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return (null, 0.0, "edges_none");
 
-            Cv2.FindContours(edges, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        var best = SelectBestQuadFromContours(
+            contours,
+            resized.Width,
+            resized.Height,
+            MinAreaRatio,
+            MaxAreaRatio);
 
-            if (contours.Length == 0)
-                return (null, 0.0, "edges_none");
+        if (best.Quad is null) return (null, 0.0, "edges_no_quad");
 
-            var (quad, score) = GetBestQuad(contours, resized.Size());
+        // scale back to original
+        var quad = ScaleQuad(best.Quad, 1.0 / scale);
+        if (!IsReasonableQuad(quad, src.Width, src.Height)) return (null, 0.0, "edges_bad_quad");
 
-            if (quad == null)
-                return (null, 0.0, "edges_no_quad");
-
-            var scaledQuad = quad.Select(p => new Point2f((float)(p.X / scale), (float)(p.Y / scale))).ToArray();
-
-            if (!IsQuadReasonable(scaledQuad, src.Width, src.Height))
-                return (null, 0.0, "edges_bad_quad");
-
-            double conf = Math.Min(0.95, 0.40 + score * 0.7);
-            return (scaledQuad, conf, "edges");
-        }
+        // Confidence
+        double conf = Math.Min(0.95, 0.40 + best.Score * 0.70);
+        return (quad, conf, "edges");
     }
 
-    private static (Point2f[]? Quad, double Score) GetBestQuad(Point[][] contours, Size imageSize)
+    
+    // Contour Scoring and Geometry Helper Methods
+
+    private static (Point2f[]? Quad, double Score) SelectBestQuadFromContours(
+        Point[][] contours,
+        int imgW,
+        int imgH,
+        double minAreaRatio,
+        double maxAreaRatio)
     {
-        double imgArea = imageSize.Width * imageSize.Height;
-        double bestScore = 0;
+        double imgArea = (double)imgW * imgH;
+        double bestScore = 0.0;
         Point2f[]? bestQuad = null;
 
         foreach (var c in contours
@@ -165,19 +172,25 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         {
             double area = Cv2.ContourArea(c);
             double areaRatio = area / imgArea;
-            if (areaRatio < MinAreaRatio || areaRatio > MaxAreaRatio)
+            if (areaRatio < minAreaRatio || areaRatio > maxAreaRatio)
                 continue;
 
-            if (TouchesBorder(c, imageSize.Width, imageSize.Height, Math.Max(6, (int)(Math.Min(imageSize.Width, imageSize.Height) * 0.01))))
+            if (TouchesBorder(c, imgW, imgH, marginPx: Math.Max(6, (int)(Math.Min(imgW, imgH) * 0.01))))
                 continue;
 
-            Point2f[]? quad = TryApproxToQuad(c) ?? BoxPointsQuad(c);
-            if (quad == null || quad.Length != 4)
+            var quad = ApproximateToQuad(c);
+            if (quad is null)
+            {
+                var rr = Cv2.MinAreaRect(c);
+                quad = Cv2.BoxPoints(rr).Select(p => new Point2f(p.X, p.Y)).ToArray();
+            }
+
+            if (quad.Length != 4)
                 continue;
 
-            double rectScore = QuadRectangularity(quad);
-            double borderScore = QuadCornerBoundaryScore(quad, imageSize.Width, imageSize.Height);
-            double score = 0.6 * areaRatio + 0.3 * rectScore + 0.1 * borderScore;
+            double rect = RectangularityScore(quad);
+            double cornerPenalty = CornerBorderPenalty(quad, imgW, imgH);
+            double score = (areaRatio * 0.60) + (rect * 0.30) + (cornerPenalty * 0.10);
 
             if (score > bestScore)
             {
@@ -185,85 +198,117 @@ public sealed class PerspectivePlugin : IImageProcessingTool
                 bestQuad = quad;
             }
         }
+
         return (bestQuad, bestScore);
     }
 
-    private static Point2f[]? TryApproxToQuad(Point[] contour)
+    private static Point2f[]? ApproximateToQuad(Point[] contour)
     {
         var hull = Cv2.ConvexHull(contour);
         double peri = Cv2.ArcLength(hull, true);
-        foreach (var eps in new[] { 0.05, 0.03, 0.02, 0.015, 0.01 })
+
+        double[] epsList = { 0.05, 0.04, 0.03, 0.025, 0.02, 0.018, 0.015, 0.012, 0.01 };
+
+        foreach (var e in epsList)
         {
-            var approx = Cv2.ApproxPolyDP(hull, eps * peri, true);
+            var approx = Cv2.ApproxPolyDP(hull, e * peri, true);
             if (approx.Length == 4)
-                return approx.Select(pt => new Point2f(pt.X, pt.Y)).ToArray();
+                return approx.Select(p => new Point2f(p.X, p.Y)).ToArray();
         }
+
         return null;
     }
 
-    private static Point2f[] BoxPointsQuad(Point[] contour)
+    private static bool TouchesBorder(Point[] contour, int w, int h, int marginPx)
     {
-        var rect = Cv2.MinAreaRect(contour);
-        return Cv2.BoxPoints(rect).Select(p => new Point2f(p.X, p.Y)).ToArray();
+        foreach (var p in contour)
+        {
+            if (p.X <= marginPx || p.Y <= marginPx || p.X >= (w - 1 - marginPx) || p.Y >= (h - 1 - marginPx))
+                return true;
+        }
+        return false;
     }
 
-    private static bool TouchesBorder(Point[] pts, int w, int h, int m)
-        => pts.Any(p => p.X <= m || p.Y <= m || p.X >= (w - 1 - m) || p.Y >= (h - 1 - m));
-
-    private static double QuadCornerBoundaryScore(Point2f[] quad, int w, int h)
+    private static double CornerBorderPenalty(Point2f[] quad, int w, int h)
     {
-        int m = Math.Max(10, (int)(Math.Min(w, h) * 0.02));
-        return quad.Count(p => p.X > m && p.Y > m && p.X < w - m && p.Y < h - m) / 4.0;
-    }
+        int margin = Math.Max(10, (int)(Math.Min(w, h) * 0.02));
+        int good = 0;
 
-    private static Point2f[] OrderCorners(Point2f[] pts)
-    {
-        // Find TL, TR, BR, BL by sums/diffs. This is unchanged logic.
-        var sum = pts.Select(p => p.X + p.Y).ToArray();
-        var diff = pts.Select(p => p.X - p.Y).ToArray();
-        var tl = pts[Array.IndexOf(sum, sum.Min())];
-        var br = pts[Array.IndexOf(sum, sum.Max())];
-        var tr = pts[Array.IndexOf(diff, diff.Max())];
-        var bl = pts[Array.IndexOf(diff, diff.Min())];
-        return new[] { tl, tr, br, bl };
-    }
+        foreach (var p in quad)
+        {
+            if (p.X > margin && p.Y > margin && p.X < (w - 1 - margin) && p.Y < (h - 1 - margin))
+                good++;
+        }
 
-    private static double QuadRectangularity(Point2f[] quad)
-    {
-        var q = OrderCorners(quad);
-        double top = Distance(q[0], q[1]), right = Distance(q[1], q[2]);
-        double bot = Distance(q[2], q[3]), left = Distance(q[3], q[0]);
-        double hr = Math.Min(top, bot) / Math.Max(top, bot);
-        double vr = Math.Min(left, right) / Math.Max(left, right);
-        return (hr + vr) / 2.0;
-    }
-
-    private static double Distance(Point2f a, Point2f b) =>
-        Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
-
-    private static bool IsQuadReasonable(Point2f[] quad, int imgW, int imgH)
-    {
-        var rect = Cv2.BoundingRect(quad.Select(p => new Point((int)p.X, (int)p.Y)).ToArray());
-        if (rect.Width < imgW * 0.12 || rect.Height < imgH * 0.12) return false;
-        if (rect.Width > imgW * 0.997 && rect.Height > imgH * 0.997) return false;
-        var cont = quad.Select(p => new Point((int)p.X, (int)p.Y)).ToArray();
-        return Cv2.IsContourConvex(cont);
+        return good / 4.0;
     }
 
     private static Mat ResizeForDetection(Mat src, int maxSide, out double scale)
     {
-        int w = src.Width, h = src.Height, longest = Math.Max(w, h);
+        int w = src.Width;
+        int h = src.Height;
+        int longest = Math.Max(w, h);
+
         if (longest <= maxSide)
         {
             scale = 1.0;
             return src.Clone();
         }
+
         scale = (double)maxSide / longest;
-        int nw = (int)(w * scale), nh = (int)(h * scale);
+        int nw = (int)(w * scale);
+        int nh = (int)(h * scale);
+
         var dst = new Mat();
         Cv2.Resize(src, dst, new Size(nw, nh), 0, 0, InterpolationFlags.Area);
         return dst;
     }
+
+    private static Point2f[] OrderCorners(Point2f[] pts)
+    {
+        var sum = pts.Select(p => p.X + p.Y).ToArray();
+        var diff = pts.Select(p => p.X - p.Y).ToArray();
+
+        var tl = pts[Array.IndexOf(sum, sum.Min())];
+        var br = pts[Array.IndexOf(sum, sum.Max())];
+        var tr = pts[Array.IndexOf(diff, diff.Max())];
+        var bl = pts[Array.IndexOf(diff, diff.Min())];
+
+        return new[] { tl, tr, br, bl };
+    }
+
+    private static Point2f[] ScaleQuad(Point2f[] quad, double factor)
+        => quad.Select(p => new Point2f((float)(p.X * factor), (float)(p.Y * factor))).ToArray();
+
+    private static bool IsReasonableQuad(Point2f[] quad, int imgW, int imgH)
+    {
+        var rect = Cv2.BoundingRect(quad.Select(p => new Point((int)p.X, (int)p.Y)).ToArray());
+
+        if (rect.Width < imgW * 0.12 || rect.Height < imgH * 0.12)
+            return false;
+
+        if (rect.Width > imgW * 0.997 && rect.Height > imgH * 0.997)
+            return false;
+
+        var contour = quad.Select(p => new Point((int)p.X, (int)p.Y)).ToArray();
+        return Cv2.IsContourConvex(contour);
+    }
+
+    private static double RectangularityScore(Point2f[] quad)
+    {
+        quad = OrderCorners(quad);
+        double top = Dist(quad[0], quad[1]);
+        double right = Dist(quad[1], quad[2]);
+        double bottom = Dist(quad[2], quad[3]);
+        double left = Dist(quad[3], quad[0]);
+
+        double hr = Math.Min(top, bottom) / Math.Max(top, bottom);
+        double vr = Math.Min(left, right) / Math.Max(left, right);
+        return (hr + vr) / 2.0;
+    }
+
+    private static double Dist(Point2f a, Point2f b)
+        => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
     private static Point2f[] GetImageBoundaries(Mat src, int marginPercent)
     {
@@ -281,32 +326,48 @@ public sealed class PerspectivePlugin : IImageProcessingTool
 
     private static Point2f[] ExpandQuad(Point2f[] quad, int imgW, int imgH, int marginPercent)
     {
-        float cx = quad.Average(p => p.X), cy = quad.Average(p => p.Y);
+        float cx = quad.Average(p => p.X);
+        float cy = quad.Average(p => p.Y);
         double factor = 1.0 + (marginPercent / 100.0);
-        return quad.Select(p =>
+
+        Point2f Expand(Point2f p)
         {
             float nx = (float)(cx + (p.X - cx) * factor);
             float ny = (float)(cy + (p.Y - cy) * factor);
             nx = Math.Clamp(nx, 0, imgW - 1);
             ny = Math.Clamp(ny, 0, imgH - 1);
             return new Point2f(nx, ny);
-        }).ToArray();
+        }
+
+        return quad.Select(Expand).ToArray();
     }
 
     private static (int width, int height) CalculateOutputDimensions(Point2f[] corners, int targetWidth, int targetHeight)
     {
         corners = OrderCorners(corners);
-        double topW = Distance(corners[0], corners[1]), botW = Distance(corners[2], corners[3]);
-        double w = Math.Max(topW, botW);
-        double leftH = Distance(corners[0], corners[3]), rightH = Distance(corners[1], corners[2]);
-        double h = Math.Max(leftH, rightH);
+
+        double topWidth = Dist(corners[0], corners[1]);
+        double bottomWidth = Dist(corners[2], corners[3]);
+        double w = Math.Max(topWidth, bottomWidth);
+
+        double leftHeight = Dist(corners[0], corners[3]);
+        double rightHeight = Dist(corners[1], corners[2]);
+        double h = Math.Max(leftHeight, rightHeight);
 
         if (targetWidth > 0 && targetHeight > 0)
             return (targetWidth, targetHeight);
+
         if (targetWidth > 0)
-            return (targetWidth, Math.Max(1, (int)(h * (targetWidth / w))));
+        {
+            double s = targetWidth / w;
+            return (targetWidth, Math.Max(1, (int)(h * s)));
+        }
+
         if (targetHeight > 0)
-            return (Math.Max(1, (int)(w * (targetHeight / h))), targetHeight);
+        {
+            double s = targetHeight / h;
+            return (Math.Max(1, (int)(w * s)), targetHeight);
+        }
 
         return (Math.Max(1, (int)w), Math.Max(1, (int)h));
     }
