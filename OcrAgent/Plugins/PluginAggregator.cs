@@ -19,9 +19,20 @@ public sealed class PluginAggregator
         _plugins = new List<IImageProcessingTool>();
         
         // Register all plugins here
-        // Geometric plugins
+        
+        // Geometric transformations
         RegisterPlugin(new Geometric.ZoomInPlugin(store));
         RegisterPlugin(new Geometric.RotatePlugin(store));
+        RegisterPlugin(new Geometric.PerspectivePlugin(store));  // Apply before deskew
+        RegisterPlugin(new Geometric.DeskewPlugin(store));
+        
+        // Enhancement operations
+        RegisterPlugin(new Enhancement.ContrastPlugin(store));
+        RegisterPlugin(new Enhancement.BrightnessPlugin(store));
+        RegisterPlugin(new Enhancement.DenoisePlugin(store));
+        
+        // Segmentation operations
+        RegisterPlugin(new Segmentation.BinarizePlugin(store));
     }
 
     /// <summary>
