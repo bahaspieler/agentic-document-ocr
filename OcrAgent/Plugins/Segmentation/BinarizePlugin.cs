@@ -83,6 +83,32 @@ public sealed class BinarizePlugin : IImageProcessingTool
             ["inverted"] = invertForDarkBackground.ToString()
         };
 
+        var baseRef = $"{imageReference}_binarize_{method}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
+    }
+
+    private void ApplyOtsuBinarization(Mat gray, Mat binary)
+    {
+        // Otsu's method
+        Cv2.Threshold(gray, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+    }
+
+    private void ApplyAdaptiveMean(Mat gray, Mat binary, int blockSize, int constant)
+    {
+        // adaptive threshold with mean of neighborhood
+        Cv2.AdaptiveThreshold(
+            gray,
+            binary,
+            255,
+            AdaptiveThresholdTypes.MeanC,
+            ThresholdTypes.Binary,
+            blockSize,
+            constant);
+    }
+
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.BinarizeImage);
