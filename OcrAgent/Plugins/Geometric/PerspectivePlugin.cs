@@ -90,7 +90,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    // Detection method - multiple strategies (edge + otsu + hsv)
+    // Detection method - multiple strategies (edge + otsu + hsv + grabcut)
     private (Point2f[]? Corners, double Confidence, string Method) DetectCornersMultiStrategy(
         Mat src,
         string sensitivity,
@@ -112,6 +112,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         var hsv = TryDetectByHsvLightRegionSegmentation(src, sensitivity);
         if (hsv.Corners is { Length: 4 })
             candidates.Add((hsv.Corners, hsv.Confidence, hsv.Method));
+
+        // grabcut segmentation
+        var grabcut = TryDetectByGrabCut(src, sensitivity);
+        if (grabcut.Corners is { Length: 4 })
+            candidates.Add((grabcut.Corners, grabcut.Confidence, grabcut.Method));
 
         if (candidates.Count == 0)
             return (null, 0.0, "none");
@@ -263,6 +268,59 @@ public sealed class PerspectivePlugin : IImageProcessingTool
 
         double conf = Math.Min(0.88, 0.35 + best.Score * 0.75);
         return (quad, conf, "hsv_light_segmentation");
+    }
+
+    /// <summary>
+    /// Foreground segmentation with GrabCut.
+    /// </summary>
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity)
+    {
+        using var resized = ResizeForDetection(src, 900, out var scale);
+
+        using var mask = new Mat(resized.Rows, resized.Cols, MatType.CV_8UC1, Scalar.All(0));
+        using var bgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
+        using var fgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
+
+        double m = sensitivity == "aggressive" ? 0.03 : 0.05;
+        int x = (int)(resized.Cols * m);
+        int y = (int)(resized.Rows * m);
+        int w = (int)(resized.Cols * (1.0 - 2 * m));
+        int h = (int)(resized.Rows * (1.0 - 2 * m));
+        var rect = new Rect(x, y, w, h);
+
+        Cv2.GrabCut(resized, mask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithRect);
+
+        // foreground mask
+        using var fg = new Mat();
+        using var sure = new Mat();
+        using var prob = new Mat();
+        const byte GC_FGD = 1;
+        const byte GC_PR_FGD = 3;
+
+        Cv2.InRange(mask, new Scalar(GC_FGD), new Scalar(GC_FGD), sure);
+        Cv2.InRange(mask, new Scalar(GC_PR_FGD), new Scalar(GC_PR_FGD), prob);
+        Cv2.BitwiseOr(sure, prob, fg);
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(13, 13));
+        Cv2.MorphologyEx(fg, fg, MorphTypes.Close, k, iterations: 2);
+
+        Cv2.FindContours(fg, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return (null, 0.0, "grabcut_none");
+
+        var best = SelectBestQuadFromContours(
+            contours,
+            resized.Width,
+            resized.Height,
+            0.08,
+            MaxAreaRatio);
+
+        if (best.Quad is null) return (null, 0.0, "grabcut_no_quad");
+
+        var quad = ScaleQuad(best.Quad, 1.0 / scale);
+        if (!IsReasonableQuad(quad, src.Width, src.Height)) return (null, 0.0, "grabcut_bad_quad");
+
+        double conf = Math.Min(0.92, 0.55 + best.Score * 0.60);
+        return (quad, conf, "grabcut");
     }
 
     // Contour Scoring and Geometry Helper Methods
