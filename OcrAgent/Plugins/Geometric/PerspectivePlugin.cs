@@ -90,7 +90,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    // Detection method - multiple strategies (edge + otsu)
+    // Detection method - multiple strategies (edge + otsu + hsv)
     private (Point2f[]? Corners, double Confidence, string Method) DetectCornersMultiStrategy(
         Mat src,
         string sensitivity,
@@ -107,6 +107,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         var otsu = TryDetectByOtsuSegmentation(src, sensitivity);
         if (otsu.Corners is { Length: 4 })
             candidates.Add((otsu.Corners, otsu.Confidence, otsu.Method));
+
+        // hsv region segmentation
+        var hsv = TryDetectByHsvLightRegionSegmentation(src, sensitivity);
+        if (hsv.Corners is { Length: 4 })
+            candidates.Add((hsv.Corners, hsv.Confidence, hsv.Method));
 
         if (candidates.Count == 0)
             return (null, 0.0, "none");
@@ -219,6 +224,45 @@ public sealed class PerspectivePlugin : IImageProcessingTool
 
         double conf = Math.Min(0.94, 0.50 + best.Score * 0.65);
         return (quad, conf, "otsu_segmentation");
+    }
+
+    /// <summary>
+    /// Light region segmentation via HSV masking.
+    /// </summary>
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByHsvLightRegionSegmentation(Mat src, string sensitivity)
+    {
+        using var resized = ResizeForDetection(src, 900, out var scale);
+
+        using var hsv = new Mat();
+        Cv2.CvtColor(resized, hsv, ColorConversionCodes.BGR2HSV);
+
+        int sMax = sensitivity == "aggressive" ? 120 : 85;
+        int vMin = sensitivity == "conservative" ? 185 : 165;
+
+        using var mask = new Mat();
+        Cv2.InRange(hsv, new Scalar(0, 0, vMin), new Scalar(180, sMax, 255), mask);
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(19, 19));
+        Cv2.MorphologyEx(mask, mask, MorphTypes.Close, k, iterations: 2);
+        Cv2.MorphologyEx(mask, mask, MorphTypes.Open, k, iterations: 1);
+
+        Cv2.FindContours(mask, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return (null, 0.0, "hsv_none");
+
+        var best = SelectBestQuadFromContours(
+            contours,
+            resized.Width,
+            resized.Height,
+            MinAreaRatio,
+            MaxAreaRatio);
+
+        if (best.Quad is null) return (null, 0.0, "hsv_no_quad");
+
+        var quad = ScaleQuad(best.Quad, 1.0 / scale);
+        if (!IsReasonableQuad(quad, src.Width, src.Height)) return (null, 0.0, "hsv_bad_quad");
+
+        double conf = Math.Min(0.88, 0.35 + best.Score * 0.75);
+        return (quad, conf, "hsv_light_segmentation");
     }
 
     // Contour Scoring and Geometry Helper Methods
