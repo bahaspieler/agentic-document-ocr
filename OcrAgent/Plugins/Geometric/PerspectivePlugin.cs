@@ -12,7 +12,7 @@ namespace OcrAgent.Plugins.Geometric;
 public sealed class PerspectivePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
-    
+
     private const int MaxSearchContours = 15;
     private const double MinAreaRatio = 0.10;
     private const double MaxAreaRatio = 0.995;
@@ -43,7 +43,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        var det = TryDetectByEdges(src, sensitivity, enhanceEdges);
+        var det = DetectCornersMultiStrategy(src, sensitivity, enhanceEdges);
 
         Point2f[] corners;
         string detectionMethod;
@@ -90,7 +90,32 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    // Detection method
+    // Detection method - multiple strategies (edge + otsu)
+    private (Point2f[]? Corners, double Confidence, string Method) DetectCornersMultiStrategy(
+        Mat src,
+        string sensitivity,
+        bool enhanceEdges)
+    {
+        var candidates = new List<(Point2f[]? Corners, double Confidence, string Method)>();
+
+        // edge-based
+        var edge = TryDetectByEdges(src, sensitivity, enhanceEdges);
+        if (edge.Corners is { Length: 4 })
+            candidates.Add((edge.Corners, edge.Confidence, edge.Method));
+
+        // otsu paper segmentation
+        var otsu = TryDetectByOtsuSegmentation(src, sensitivity);
+        if (otsu.Corners is { Length: 4 })
+            candidates.Add((otsu.Corners, otsu.Confidence, otsu.Method));
+
+        if (candidates.Count == 0)
+            return (null, 0.0, "none");
+
+        // pick the best by confidence
+        var best = candidates.OrderByDescending(c => c.Confidence).First();
+        return (best.Corners, best.Confidence, best.Method);
+    }
+
     private (Point2f[]? Corners, double Confidence, string Method) TryDetectByEdges(
         Mat src,
         string sensitivity,
