@@ -152,7 +152,50 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return (quad, conf, "edges");
     }
 
-    
+    /// <summary>
+    /// Paper segmentation via Otsu (grayscale).
+    /// This fixes RECEIPT002 (sample-image) correction.
+    /// </summary>
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByOtsuSegmentation(Mat src, string sensitivity)
+    {
+        using var resized = ResizeForDetection(src, 900, out var scale);
+
+        using var gray = new Mat();
+        Cv2.CvtColor(resized, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var blurred = new Mat();
+        Cv2.GaussianBlur(gray, blurred, new Size(5, 5), 0);
+
+        // Otsu
+        using var bin = new Mat();
+        Cv2.Threshold(blurred, bin, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+        // cleanup
+        int kSize = sensitivity == "aggressive" ? 17 : 21;
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(kSize, kSize));
+        Cv2.MorphologyEx(bin, bin, MorphTypes.Close, k, iterations: 2);
+        Cv2.MorphologyEx(bin, bin, MorphTypes.Open, k, iterations: 1);
+
+        // contours
+        Cv2.FindContours(bin, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return (null, 0.0, "otsu_none");
+
+        var best = SelectBestQuadFromContours(
+            contours,
+            resized.Width,
+            resized.Height,
+            MinAreaRatio,
+            MaxAreaRatio);
+
+        if (best.Quad is null) return (null, 0.0, "otsu_no_quad");
+
+        var quad = ScaleQuad(best.Quad, 1.0 / scale);
+        if (!IsReasonableQuad(quad, src.Width, src.Height)) return (null, 0.0, "otsu_bad_quad");
+
+        double conf = Math.Min(0.94, 0.50 + best.Score * 0.65);
+        return (quad, conf, "otsu_segmentation");
+    }
+
     // Contour Scoring and Geometry Helper Methods
 
     private static (Point2f[]? Quad, double Score) SelectBestQuadFromContours(
