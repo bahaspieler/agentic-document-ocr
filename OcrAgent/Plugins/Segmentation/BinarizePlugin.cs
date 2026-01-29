@@ -21,7 +21,6 @@ public sealed class BinarizePlugin : IImageProcessingTool
         [Description("Block size for adaptive methods (must be odd number, e.g., 11, 15, 21). Larger values = smoother result.")] int blockSize = 11,
         [Description("Constant subtracted from calculated threshold (0-10). Higher = darker result.")] int constant = 2,
         [Description("Invert colors for dark backgrounds (some receipts/forms have dark backgrounds).")] bool invertForDarkBackground = false)
-    
     {
         method = method.ToLowerInvariant();
         if (method != "otsu" && method != "adaptive_mean" && method != "adaptive_gaussian")
@@ -36,9 +35,7 @@ public sealed class BinarizePlugin : IImageProcessingTool
                 throw new ArgumentException("constant must be between 0 and 20");
         }
 
-        throw new NotImplementedException();
-    }
-    var inputPath = _store.GetImagePath(imageReference);
+        var inputPath = _store.GetImagePath(imageReference);
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
 
         if (src.Empty())
@@ -104,6 +101,19 @@ public sealed class BinarizePlugin : IImageProcessingTool
             binary,
             255,
             AdaptiveThresholdTypes.MeanC,
+            ThresholdTypes.Binary,
+            blockSize,
+            constant);
+    }
+    
+    private void ApplyAdaptiveGaussian(Mat gray, Mat binary, int blockSize, int constant)
+    {
+        // Adaptive threshold with Gaussian
+        Cv2.AdaptiveThreshold(
+            gray,
+            binary,
+            255,
+            AdaptiveThresholdTypes.GaussianC,
             ThresholdTypes.Binary,
             blockSize,
             constant);
