@@ -16,6 +16,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     private const int MaxSearchContours = 15;
     private const double MinAreaRatio = 0.10;
     private const double MaxAreaRatio = 0.995;
+    private const string DebugFolderName = "perspective_debug";
 
     public PerspectivePlugin(IImageStore store)
     {
@@ -29,7 +30,8 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         [Description("Target output width in pixels (0 = auto).")] int targetWidth = 0,
         [Description("Target output height in pixels (0 = auto).")] int targetHeight = 0,
         [Description("Add margin padding around detected document.")] int marginPercent = 0,
-        [Description("Enhance edges before detection.")] bool enhanceEdges = true)
+        [Description("Enhance edges before detection.")] bool enhanceEdges = true,
+        [Description("Enable debug mode to save intermediate detection images.")] bool debug = false)
     {
         sensitivity = sensitivity.ToLowerInvariant();
         if (sensitivity is not ("auto" or "aggressive" or "conservative"))
@@ -43,8 +45,15 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
+        string? debugPath = null;
+        if (debug)
+        {
+            debugPath = PrepareDebugFolder(imageReference);
+            SaveDebugImage(src, debugPath, "00_input");
+        }
+
         // detect corners by combining multiple strategies
-        var det = DetectCornersMultiStrategy(src, sensitivity, enhanceEdges);
+        var det = DetectCornersMultiStrategy(src, sensitivity, enhanceEdges, debugPath);
 
         Point2f[] corners;
         string detectionMethod;
@@ -62,6 +71,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             corners = GetImageBoundaries(src, autoMargin);
             detectionMethod = "fallback_image_bounds";
             confidence = 0.30;
+        }
+
+        if (debugPath != null)
+        {
+            SaveDebugImageWithQuad(src, corners, debugPath, $"1ß0_best_{detectionMethod}", confidence);
         }
 
         if (marginPercent > 0 && detectionMethod != "fallback_image_bounds")
@@ -165,41 +179,50 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     private (Point2f[]? Corners, double Confidence, string Method) DetectCornersMultiStrategy(
         Mat src,
         string sensitivity,
-        bool enhanceEdges)
+        bool enhanceEdges,
+        string? debugPath = null)
     {
         // run all strategies and store results
         var candidates = new List<(Point2f[]? Corners, double Confidence, string Method, double Quality)>();
 
         // edge-based
-        var edge = TryDetectByEdges(src, sensitivity, enhanceEdges);
+        var edge = TryDetectByEdges(src, sensitivity, enhanceEdges, debugPath);
         if (edge.Corners is { Length: 4 })
         {
             double quality = CalculateDetectionQuality(edge.Corners, src.Width, src.Height);
             candidates.Add((edge.Corners, edge.Confidence, edge.Method, quality));
+            if (debugPath != null)
+                SaveDebugImageWithQuad(src, edge.Corners, debugPath, $"10_edges_result_q{quality:F2}", edge.Confidence);
         }
 
         // otsu paper segmentation
-        var otsu = TryDetectByOtsuSegmentation(src, sensitivity);
+        var otsu = TryDetectByOtsuSegmentation(src, sensitivity, debugPath);
         if (otsu.Corners is { Length: 4 })
         {
             double quality = CalculateDetectionQuality(otsu.Corners, src.Width, src.Height);
             candidates.Add((otsu.Corners, otsu.Confidence, otsu.Method, quality));
+            if (debugPath != null)
+                SaveDebugImageWithQuad(src, otsu.Corners, debugPath, $"20_otsu_result_q{quality:F2}", otsu.Confidence);
         }
 
         // hsv region segmentation
-        var hsv = TryDetectByHsvLightRegionSegmentation(src, sensitivity);
+        var hsv = TryDetectByHsvLightRegionSegmentation(src, sensitivity, debugPath);
         if (hsv.Corners is { Length: 4 })
         {
             double quality = CalculateDetectionQuality(hsv.Corners, src.Width, src.Height);
             candidates.Add((hsv.Corners, hsv.Confidence, hsv.Method, quality));
+            if (debugPath != null)
+                SaveDebugImageWithQuad(src, hsv.Corners, debugPath, $"30_hsv_result_q{quality:F2}", hsv.Confidence);
         }
 
         // grabcut segmentation
-        var grabcut = TryDetectByGrabCut(src, sensitivity);
+        var grabcut = TryDetectByGrabCut(src, sensitivity, debugPath);
         if (grabcut.Corners is { Length: 4 })
         {
             double quality = CalculateDetectionQuality(grabcut.Corners, src.Width, src.Height);
             candidates.Add((grabcut.Corners, grabcut.Confidence, grabcut.Method, quality));
+            if (debugPath != null)
+                SaveDebugImageWithQuad(src, grabcut.Corners, debugPath, $"40_grabcut_result_q{quality:F2}", grabcut.Confidence);
         }
 
         if (candidates.Count == 0)
@@ -258,7 +281,8 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     private (Point2f[]? Corners, double Confidence, string Method) TryDetectByEdges(
         Mat src,
         string sensitivity,
-        bool enhanceEdges)
+        bool enhanceEdges,
+        string? debugPath = null)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
         using var gray = new Mat();
@@ -277,6 +301,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             gray.CopyTo(prep);
         }
 
+        if (debugPath != null)
+            SaveDebugImage(prep, debugPath, "11_edges_preprocessed");
+
         using var blurred = new Mat();
         Cv2.GaussianBlur(prep, blurred, new Size(5, 5), 0);
 
@@ -290,13 +317,22 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var edges = new Mat();
         Cv2.Canny(blurred, edges, low, high);
 
+        if (debugPath != null)
+            SaveDebugImage(edges, debugPath, "12_edges_canny");
+
         using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
         using var morph = new Mat();
         Cv2.Dilate(edges, morph, k, iterations: 2);
         Cv2.MorphologyEx(morph, morph, MorphTypes.Close, k, iterations: 2);
 
+        if (debugPath != null)
+            SaveDebugImage(morph, debugPath, "13_edges_morphed");
+
         Cv2.FindContours(morph, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         if (contours.Length == 0) return (null, 0.0, "edges_none");
+
+        if (debugPath != null)
+            SaveDebugImageWithContours(resized, contours, debugPath, "14_edges_contours");
 
         var best = SelectBestQuadFromContours(
             contours,
@@ -320,7 +356,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     /// Paper segmentation via Otsu (grayscale).
     /// This fixes RECEIPT002 (sample-image) correction.
     /// </summary>
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByOtsuSegmentation(Mat src, string sensitivity)
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByOtsuSegmentation(Mat src, string sensitivity, string? debugPath = null)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
 
@@ -334,15 +370,24 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var bin = new Mat();
         Cv2.Threshold(blurred, bin, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
 
+        if (debugPath != null)
+            SaveDebugImage(bin, debugPath, "21_otsu_binary");
+
         // cleanup
         int kSize = sensitivity == "aggressive" ? 17 : 21;
         using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(kSize, kSize));
         Cv2.MorphologyEx(bin, bin, MorphTypes.Close, k, iterations: 2);
         Cv2.MorphologyEx(bin, bin, MorphTypes.Open, k, iterations: 1);
 
+        if (debugPath != null)
+            SaveDebugImage(bin, debugPath, "22_otsu_morphed");
+
         // contours
         Cv2.FindContours(bin, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         if (contours.Length == 0) return (null, 0.0, "otsu_none");
+
+        if (debugPath != null)
+            SaveDebugImageWithContours(resized, contours, debugPath, "23_otsu_contours");
 
         var best = SelectBestQuadFromContours(
             contours,
@@ -363,7 +408,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     /// <summary>
     /// Light region segmentation via HSV masking.
     /// </summary>
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByHsvLightRegionSegmentation(Mat src, string sensitivity)
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByHsvLightRegionSegmentation(Mat src, string sensitivity, string? debugPath = null)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
 
@@ -376,12 +421,21 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var mask = new Mat();
         Cv2.InRange(hsv, new Scalar(0, 0, vMin), new Scalar(180, sMax, 255), mask);
 
+        if (debugPath != null)
+            SaveDebugImage(mask, debugPath, "31_hsv_initial_mask");
+
         using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(19, 19));
         Cv2.MorphologyEx(mask, mask, MorphTypes.Close, k, iterations: 2);
         Cv2.MorphologyEx(mask, mask, MorphTypes.Open, k, iterations: 1);
 
+        if (debugPath != null)
+            SaveDebugImage(mask, debugPath, "32_hsv_morphed");
+
         Cv2.FindContours(mask, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         if (contours.Length == 0) return (null, 0.0, "hsv_none");
+
+        if (debugPath != null)
+            SaveDebugImageWithContours(resized, contours, debugPath, "33_hsv_contours");
 
         var best = SelectBestQuadFromContours(
             contours,
@@ -402,7 +456,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     /// <summary>
     /// Foreground segmentation with GrabCut.
     /// </summary>
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity)
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity, string? debugPath = null)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
 
@@ -417,6 +471,13 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         int h = (int)(resized.Rows * (1.0 - 2 * m));
         var rect = new Rect(x, y, w, h);
 
+        if (debugPath != null)
+        {
+            using var rectVis = resized.Clone();
+            Cv2.Rectangle(rectVis, rect, new Scalar(0, 255, 0), 2);
+            SaveDebugImage(rectVis, debugPath, "41_grabcut_init_rect");
+        }
+
         Cv2.GrabCut(resized, mask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithRect);
 
         // foreground mask
@@ -430,11 +491,20 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         Cv2.InRange(mask, new Scalar(GC_PR_FGD), new Scalar(GC_PR_FGD), prob);
         Cv2.BitwiseOr(sure, prob, fg);
 
+        if (debugPath != null)
+            SaveDebugImage(fg, debugPath, "42_grabcut_fg_mask");
+
         using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(13, 13));
         Cv2.MorphologyEx(fg, fg, MorphTypes.Close, k, iterations: 2);
 
+        if (debugPath != null)
+            SaveDebugImage(fg, debugPath, "43_grabcut_morphed");
+
         Cv2.FindContours(fg, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         if (contours.Length == 0) return (null, 0.0, "grabcut_none");
+
+        if (debugPath != null)
+            SaveDebugImageWithContours(resized, contours, debugPath, "44_grabcut_contours");
 
         var best = SelectBestQuadFromContours(
             contours,
@@ -773,6 +843,85 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         var safe = new string(s.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_').ToArray());
         while (safe.Contains("__")) safe = safe.Replace("__", "_");
         return safe.Trim('_');
+    }
+
+    // Debug helper methods
+
+    private string PrepareDebugFolder(string imageReference)
+    {
+        var storagePath = Path.GetDirectoryName(_store.GetImagePath(imageReference)) ?? ".";
+        var debugPath = Path.Combine(storagePath, DebugFolderName, imageReference);
+        
+        if (Directory.Exists(debugPath))
+            Directory.Delete(debugPath, true);
+        
+        Directory.CreateDirectory(debugPath);
+        return debugPath;
+    }
+
+    private static void SaveDebugImage(Mat img, string debugPath, string name)
+    {
+        var filePath = Path.Combine(debugPath, $"{name}.png");
+        Cv2.ImWrite(filePath, img);
+    }
+
+    private static void SaveDebugImageWithQuad(Mat src, Point2f[] quad, string debugPath, string name, double confidence)
+    {
+        using var vis = src.Clone();
+        var ordered = OrderCorners(quad);
+        var pts = ordered.Select(p => new Point((int)p.X, (int)p.Y)).ToArray();
+        
+        Cv2.Polylines(vis, new[] { pts }, true, new Scalar(0, 255, 0), 3);
+        
+        for (int i = 0; i < 4; i++)
+        {
+            string[] labels = { "TL", "TR", "BR", "BL" };
+            Cv2.Circle(vis, pts[i], 8, new Scalar(0, 0, 255), -1);
+            Cv2.PutText(vis, labels[i], new Point(pts[i].X + 10, pts[i].Y - 10), 
+                HersheyFonts.HersheySimplex, 0.8, new Scalar(255, 0, 0), 2);
+        }
+        
+        var infoText = $"Conf: {confidence:F2}";
+        Cv2.PutText(vis, infoText, new Point(10, 30), 
+            HersheyFonts.HersheySimplex, 1.0, new Scalar(0, 255, 255), 2);
+        
+        var filePath = Path.Combine(debugPath, $"{name}.png");
+        Cv2.ImWrite(filePath, vis);
+    }
+
+    private static void SaveDebugImageWithContours(Mat src, Point[][] contours, string debugPath, string name)
+    {
+        using var vis = src.Clone();
+        
+        var sortedContours = contours
+            .Select((c, i) => (Contour: c, Index: i, Area: Cv2.ContourArea(c)))
+            .OrderByDescending(x => x.Area)
+            .Take(5)
+            .ToList();
+        
+        var colors = new[]
+        {
+            new Scalar(0, 255, 0),
+            new Scalar(255, 0, 0),
+            new Scalar(0, 0, 255),
+            new Scalar(255, 255, 0),
+            new Scalar(255, 0, 255)
+        };
+        
+        for (int i = 0; i < sortedContours.Count; i++)
+        {
+            var (contour, _, area) = sortedContours[i];
+            Cv2.DrawContours(vis, new[] { contour }, 0, colors[i % colors.Length], 2);
+            
+            var rect = Cv2.BoundingRect(contour);
+            double areaRatio = area / (src.Width * src.Height);
+            var label = $"#{i + 1} ({areaRatio:P0})";
+            Cv2.PutText(vis, label, new Point(rect.X, rect.Y - 5), 
+                HersheyFonts.HersheySimplex, 0.6, colors[i % colors.Length], 2);
+        }
+        
+        var filePath = Path.Combine(debugPath, $"{name}.png");
+        Cv2.ImWrite(filePath, vis);
     }
 
     public IEnumerable<AITool> GetAITools()
