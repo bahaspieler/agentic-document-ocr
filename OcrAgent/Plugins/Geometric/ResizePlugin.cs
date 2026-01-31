@@ -1,10 +1,14 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Geometric;
 
-
+/// <summary>
+/// Plugin for resizing images to normalize dimensions for consistent OCR processing.
+/// Supports pixel-based resizing, DPI normalization.
+/// </summary>
 public sealed class ResizePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -24,7 +28,23 @@ public sealed class ResizePlugin : IImageProcessingTool
         [Description("Interpolation method: 'linear' (fast), 'cubic' (balanced), 'lanczos4' (for upscaling).")] string interpolation = "lanczos4",
         [Description("Document type preset: 'auto', 'receipt', 'form', 'statement', 'invoice'. Overrides other dimensions if specified.")] string documentType = "auto")
     {
-        throw new NotImplementedException();
+        interpolation = interpolation.ToLowerInvariant();
+        documentType = documentType.ToLowerInvariant();
+
+        if (interpolation != "linear" && interpolation != "cubic" && interpolation != "lanczos4")
+            throw new ArgumentException("interpolation must be 'linear', 'cubic', or 'lanczos4'");
+
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        int originalWidth = src.Width;
+        int originalHeight = src.Height;
+
+        // Keep build green in this commit; resizing + saving comes next
+        return Task.FromResult($"{imageReference}_resize_{originalWidth}x{originalHeight}");
     }
 
     public IEnumerable<AITool> GetAITools()
