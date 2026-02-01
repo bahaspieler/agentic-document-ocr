@@ -43,8 +43,48 @@ public sealed class ResizePlugin : IImageProcessingTool
         int originalWidth = src.Width;
         int originalHeight = src.Height;
 
-        // Keep build green in this commit; resizing + saving comes next
-        return Task.FromResult($"{imageReference}_resize_{originalWidth}x{originalHeight}");
+        // Dimension selection (build-safe version: inline presets + simple DPI conversion)
+        if (documentType != "auto")
+        {
+            (targetWidth, targetHeight) = documentType switch
+            {
+                "receipt" => (1200, 1600),
+                "form" => (2550, 3300),
+                "statement" => (2550, 3300),
+                "invoice" => (2550, 3300),
+                "letter" => (2550, 3300),
+                "a4" => (2550, 3300),
+                _ => throw new ArgumentException(
+                    $"Unknown document type: {documentType}. Use 'receipt', 'form', 'statement', 'invoice', 'letter', or 'a4'.")
+            };
+        }
+        else if (targetDPI > 0)
+        {
+            const int assumedOriginalDPI = 72;
+
+            double widthInches = originalWidth / (double)assumedOriginalDPI;
+            double heightInches = originalHeight / (double)assumedOriginalDPI;
+
+            if (widthInches > 12 || heightInches > 18)
+            {
+                widthInches = 8.27;
+                heightInches = 11.69;
+            }
+
+            targetWidth = (int)(widthInches * targetDPI);
+            targetHeight = (int)(heightInches * targetDPI);
+        }
+        else
+        {
+            if (targetWidth == 0 && targetHeight == 0)
+                throw new ArgumentException("Must specify either targetWidth, targetHeight, targetDPI, or documentType");
+
+            if (targetWidth < 0 || targetHeight < 0)
+                throw new ArgumentException("Dimensions must be >= 0");
+        }
+
+        // Still build-safe: no resize yet, just return the computed size
+        return Task.FromResult($"{imageReference}_resize_{targetWidth}x{targetHeight}");
     }
 
     public IEnumerable<AITool> GetAITools()
