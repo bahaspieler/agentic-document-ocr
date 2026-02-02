@@ -43,7 +43,7 @@ public sealed class ResizePlugin : IImageProcessingTool
         int originalWidth = src.Width;
         int originalHeight = src.Height;
 
-        // Dimension selection (build-safe version: inline presets + simple DPI conversion)
+        // Dimension selection (inline presets + simple DPI conversion)
         if (documentType != "auto")
         {
             (targetWidth, targetHeight) = documentType switch
@@ -83,8 +83,36 @@ public sealed class ResizePlugin : IImageProcessingTool
                 throw new ArgumentException("Dimensions must be >= 0");
         }
 
-        // Still build-safe: no resize yet, just return the computed size
-        return Task.FromResult($"{imageReference}_resize_{targetWidth}x{targetHeight}");
+        // Maintain aspect ratio when one dimension is 0
+        if (maintainAspectRatio)
+        {
+            double aspectRatio = (double)originalWidth / originalHeight;
+
+            if (targetWidth == 0 && targetHeight > 0)
+            {
+                targetWidth = (int)(targetHeight * aspectRatio);
+            }
+            else if (targetHeight == 0 && targetWidth > 0)
+            {
+                targetHeight = (int)(targetWidth / aspectRatio);
+            }
+        }
+
+        // Ensure valid dimensions
+        targetWidth = Math.Max(1, targetWidth);
+        targetHeight = Math.Max(1, targetHeight);
+
+        // Resolve interpolation flag
+        var interpFlag = interpolation switch
+        {
+            "linear" => InterpolationFlags.Linear,
+            "cubic" => InterpolationFlags.Cubic,
+            "lanczos4" => InterpolationFlags.Lanczos4,
+            _ => InterpolationFlags.Lanczos4
+        };
+
+        // Still build-safe: no resize yet, just return the computed size and method info
+        return Task.FromResult($"{imageReference}_resize_{targetWidth}x{targetHeight}_{interpFlag}");
     }
 
     public IEnumerable<AITool> GetAITools()
