@@ -111,8 +111,32 @@ public sealed class ResizePlugin : IImageProcessingTool
             _ => InterpolationFlags.Lanczos4
         };
 
-        // Still build-safe: no resize yet, just return the computed size and method info
-        return Task.FromResult($"{imageReference}_resize_{targetWidth}x{targetHeight}_{interpFlag}");
+        // Resize
+        using var resized = new Mat();
+        Cv2.Resize(src, resized, new Size(targetWidth, targetHeight), 0, 0, interpFlag);
+
+        // Encode to PNG
+        Cv2.ImEncode(".png", resized, out var pngBytes);
+
+        // Metadata
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "resize",
+            ["originalSize"] = $"{originalWidth}x{originalHeight}",
+            ["newSize"] = $"{targetWidth}x{targetHeight}",
+            ["targetDPI"] = targetDPI.ToString(),
+            ["documentType"] = documentType,
+            ["interpolation"] = interpolation,
+            ["maintainAspectRatio"] = maintainAspectRatio.ToString(),
+        };
+
+        // Save with unique reference
+        var baseRef = $"{imageReference}_resize_{targetWidth}x{targetHeight}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
     public IEnumerable<AITool> GetAITools()
