@@ -43,36 +43,14 @@ public sealed class ResizePlugin : IImageProcessingTool
         int originalWidth = src.Width;
         int originalHeight = src.Height;
 
-        // Dimension selection (inline presets + simple DPI conversion)
+
         if (documentType != "auto")
         {
-            (targetWidth, targetHeight) = documentType switch
-            {
-                "receipt" => (1200, 1600),
-                "form" => (2550, 3300),
-                "statement" => (2550, 3300),
-                "invoice" => (2550, 3300),
-                "letter" => (2550, 3300),
-                "a4" => (2550, 3300),
-                _ => throw new ArgumentException(
-                    $"Unknown document type: {documentType}. Use 'receipt', 'form', 'statement', 'invoice', 'letter', or 'a4'.")
-            };
+            (targetWidth, targetHeight) = GetDocumentPreset(documentType);
         }
         else if (targetDPI > 0)
         {
-            const int assumedOriginalDPI = 72;
-
-            double widthInches = originalWidth / (double)assumedOriginalDPI;
-            double heightInches = originalHeight / (double)assumedOriginalDPI;
-
-            if (widthInches > 12 || heightInches > 18)
-            {
-                widthInches = 8.27;
-                heightInches = 11.69;
-            }
-
-            targetWidth = (int)(widthInches * targetDPI);
-            targetHeight = (int)(heightInches * targetDPI);
+            (targetWidth, targetHeight) = CalculateDimensionsFromDPI(targetDPI, originalWidth, originalHeight);
         }
         else
         {
@@ -83,7 +61,7 @@ public sealed class ResizePlugin : IImageProcessingTool
                 throw new ArgumentException("Dimensions must be >= 0");
         }
 
-        // Maintain aspect ratio when one dimension is 0
+        // if maintain aspect ratio
         if (maintainAspectRatio)
         {
             double aspectRatio = (double)originalWidth / originalHeight;
@@ -98,11 +76,11 @@ public sealed class ResizePlugin : IImageProcessingTool
             }
         }
 
-        // Ensure valid dimensions
+        // valid dimensions
         targetWidth = Math.Max(1, targetWidth);
         targetHeight = Math.Max(1, targetHeight);
 
-        // Resolve interpolation flag
+        // interpolation method
         var interpFlag = interpolation switch
         {
             "linear" => InterpolationFlags.Linear,
@@ -111,14 +89,12 @@ public sealed class ResizePlugin : IImageProcessingTool
             _ => InterpolationFlags.Lanczos4
         };
 
-        // Resize
+        // resize
         using var resized = new Mat();
         Cv2.Resize(src, resized, new Size(targetWidth, targetHeight), 0, 0, interpFlag);
 
-        // Encode to PNG
         Cv2.ImEncode(".png", resized, out var pngBytes);
 
-        // Metadata
         var meta = new Dictionary<string, string>
         {
             ["parent"] = imageReference,
@@ -131,7 +107,6 @@ public sealed class ResizePlugin : IImageProcessingTool
             ["maintainAspectRatio"] = maintainAspectRatio.ToString(),
         };
 
-        // Save with unique reference
         var baseRef = $"{imageReference}_resize_{targetWidth}x{targetHeight}";
         var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
 
@@ -139,10 +114,47 @@ public sealed class ResizePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    private (int width, int height) GetDocumentPreset(string documentType)
+    {
+        // Standard document presets optimized for OCR workflows
+        return documentType switch
+        {
+            "receipt" => (1200, 1600),        // 200 DPI equivalent
+            "form" => (2550, 3300),           // A4 @ 300 DPI, preserve structure
+            "statement" => (2550, 3300),      // A4 @ 300 DPI, standard
+            "invoice" => (2550, 3300),        // A4 @ 300 DPI, standard
+            "letter" => (2550, 3300),         // US Letter @ 300 DPI
+            "a4" => (2550, 3300),             // A4 @ 300 DPI
+            _ => throw new ArgumentException($"Unknown document type: {documentType}. Use 'receipt', 'form', 'statement', 'invoice', 'letter', or 'a4'.")
+        };
+    }
+
+    private (int width, int height) CalculateDimensionsFromDPI(int dpi, int originalWidth, int originalHeight)
+    {
+        // physical dimensions from original size
+        // Assume original is at 72 DPI
+        const int assumedOriginalDPI = 72;
+
+        // physical dimensions in inches
+        double widthInches = originalWidth / (double)assumedOriginalDPI;
+        double heightInches = originalHeight / (double)assumedOriginalDPI;
+
+        // If unrealistic, assume A4 paper (8.27 x 11.69 inches)
+        if (widthInches > 12 || heightInches > 18)
+        {
+            widthInches = 8.27;
+            heightInches = 11.69;
+        }
+
+        // target dimensions at desired DPI
+        int targetWidth = (int)(widthInches * dpi);
+        int targetHeight = (int)(heightInches * dpi);
+
+        return (targetWidth, targetHeight);
+    }
+
     public IEnumerable<AITool> GetAITools()
     {
-        yield return AIFunctionFactory.Create(
-            (Func<string, int, int, int, bool, string, string, Task<string>>)this.ResizeImage
-        );
+        yield return AIFunctionFactory.Create(this.ResizeImage);
     }
 }
