@@ -52,8 +52,36 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             SaveDebugImage(src, debugPath, "00_input");
         }
 
+        // Early full-frame detection
+        var (isFullFrame, paperCoverage, isAligned) = DetectFullFrameScenario(src);
+
+        if (debugPath != null)
+            SaveDebugFullFrameAnalysis(src, isFullFrame, paperCoverage, isAligned, debugPath);
+
+        // For full-frame aligned documents, return original
+        if (isFullFrame && isAligned && paperCoverage > 0.85)
+        {
+            Cv2.ImEncode(".png", src, out var origBytes);
+            var fullFrameMeta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "perspective_correct",
+                ["detectedCorners"] = FormatCorners(GetImageBoundaries(src, 0)),
+                ["outputDimensions"] = $"{src.Width}x{src.Height}",
+                ["confidence"] = "0.95",
+                ["detectionMethod"] = "full_frame_aligned",
+                ["paperCoverage"] = paperCoverage.ToString("F2"),
+                ["isFullFrame"] = "true",
+                ["note"] = "Document fills frame and is well-aligned, returned original"
+            };
+            var fullFrameRef = $"{imageReference}_perspective_fullframe";
+            var fullFrameDesiredRef = PluginHelpers.MakeUniqueRef(_store, fullFrameRef);
+            var fullFrameNewRef = _store.SaveBytes(origBytes, "png", fullFrameMeta, fullFrameDesiredRef);
+            return Task.FromResult(fullFrameNewRef);
+        }
+
         // detect corners by combining multiple strategies
-        var det = DetectCornersMultiStrategy(src, sensitivity, enhanceEdges, debugPath);
+        var det = DetectCornersMultiStrategy(src, sensitivity, enhanceEdges, debugPath, isFullFrame);
 
         Point2f[] corners;
         string detectionMethod;
@@ -64,6 +92,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             corners = OrderCorners(det.Corners);
             detectionMethod = det.Method;
             confidence = det.Confidence;
+            
+            if (isFullFrame)
+            {
+                corners = ExtendCornersToImageBounds(corners, src.Width, src.Height, 0.05);
+            }
         }
         else
         {
@@ -165,6 +198,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             ["distortionAmount"] = distortionAmount.ToString("F3"),
             ["coverage"] = coverage.ToString("F2"),
             ["marginPercent"] = marginPercent.ToString(),
+            ["marginApplied"] = marginPercent.ToString(),
             ["enhanceEdges"] = enhanceEdges.ToString()
         };
 
@@ -180,7 +214,8 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         Mat src,
         string sensitivity,
         bool enhanceEdges,
-        string? debugPath = null)
+        string? debugPath = null,
+        bool isFullFrame = false)
     {
         // run all strategies and store results
         var candidates = new List<(Point2f[]? Corners, double Confidence, string Method, double Quality)>();
@@ -216,7 +251,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         }
 
         // grabcut segmentation
-        var grabcut = TryDetectByGrabCut(src, sensitivity, debugPath);
+        var grabcut = TryDetectByGrabCut(src, sensitivity, debugPath, isFullFrame);
         if (grabcut.Corners is { Length: 4 })
         {
             double quality = CalculateDetectionQuality(grabcut.Corners, src.Width, src.Height);
@@ -456,7 +491,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     /// <summary>
     /// Foreground segmentation with GrabCut.
     /// </summary>
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity, string? debugPath = null)
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity, string? debugPath = null, bool isFullFrame = false)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
 
@@ -464,7 +499,8 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var bgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
         using var fgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
 
-        double m = sensitivity == "aggressive" ? 0.03 : 0.05;
+        // smaller margin for full-frame documents
+        double m = isFullFrame ? 0.01 : (sensitivity == "aggressive" ? 0.03 : 0.05);
         int x = (int)(resized.Cols * m);
         int y = (int)(resized.Rows * m);
         int w = (int)(resized.Cols * (1.0 - 2 * m));
@@ -740,6 +776,98 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return distortion;
     }
 
+    /// <summary>
+    /// Detects if the document fills the whole frame.
+    /// </summary>
+    private static (bool IsFullFrame, double PaperCoverage, bool IsAligned) DetectFullFrameScenario(Mat src)
+    {
+        using var hsv = new Mat();
+        Cv2.CvtColor(src, hsv, ColorConversionCodes.BGR2HSV);
+
+        // Paper detection
+        using var paperMask = new Mat();
+        Cv2.InRange(hsv, new Scalar(0, 0, 160), new Scalar(180, 80, 255), paperMask);
+
+        // overall paper coverage
+        double totalPixels = src.Width * src.Height;
+        double paperPixels = Cv2.CountNonZero(paperMask);
+        double paperCoverage = paperPixels / totalPixels;
+
+        // border regions
+        double borderRatio = 0.03;
+        int topH = (int)(src.Height * borderRatio);
+        int bottomY = (int)(src.Height * (1 - borderRatio));
+        int leftW = (int)(src.Width * borderRatio);
+        int rightX = (int)(src.Width * (1 - borderRatio));
+
+        // border strips
+        var topStrip = new Rect(0, 0, src.Width, topH);
+        var bottomStrip = new Rect(0, bottomY, src.Width, src.Height - bottomY);
+        var leftStrip = new Rect(0, 0, leftW, src.Height);
+        var rightStrip = new Rect(rightX, 0, src.Width - rightX, src.Height);
+
+        double topPaper = CountPaperRatio(paperMask, topStrip);
+        double bottomPaper = CountPaperRatio(paperMask, bottomStrip);
+        double leftPaper = CountPaperRatio(paperMask, leftStrip);
+        double rightPaper = CountPaperRatio(paperMask, rightStrip);
+
+        // Full-frame if most borders are paper-colored
+        double avgBorderPaper = (topPaper + bottomPaper + leftPaper + rightPaper) / 4.0;
+        bool isFullFrame = avgBorderPaper > 0.60 && paperCoverage > 0.75;
+
+        // alignment
+        bool isAligned = false;
+        if (isFullFrame)
+        {
+            // edge detection
+            using var gray = new Mat();
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+            using var edges = new Mat();
+            Cv2.Canny(gray, edges, 50, 150);
+
+            // Hough lines
+            var lines = Cv2.HoughLines(edges, 1, Math.PI / 180, 100);
+            if (lines.Length > 0)
+            {
+                var angles = lines.Take(20).Select(l => l.Theta * 180 / Math.PI).ToList();
+                
+                // aligned
+                int alignedCount = angles.Count(a => 
+                    a < 10 || a > 170 || (a > 80 && a < 100));
+                
+                isAligned = alignedCount > lines.Length * 0.5 || angles.Count < 5;
+            }
+            else
+            {
+                // aligned
+                isAligned = true;
+            }
+        }
+
+        return (isFullFrame, paperCoverage, isAligned);
+    }
+
+    private static double CountPaperRatio(Mat paperMask, Rect region)
+    {
+        if (region.Width <= 0 || region.Height <= 0)
+            return 0.0;
+        
+        region = new Rect(
+            Math.Max(0, region.X),
+            Math.Max(0, region.Y),
+            Math.Min(region.Width, paperMask.Width - region.X),
+            Math.Min(region.Height, paperMask.Height - region.Y)
+        );
+        
+        if (region.Width <= 0 || region.Height <= 0)
+            return 0.0;
+
+        using var roi = new Mat(paperMask, region);
+        double pixels = region.Width * region.Height;
+        double paperPixels = Cv2.CountNonZero(roi);
+        return paperPixels / pixels;
+    }
+
     private static double Dist(Point2f a, Point2f b)
         => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
@@ -773,6 +901,29 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         }
 
         return quad.Select(Expand).ToArray();
+    }
+
+    /// <summary>
+    /// For full-frame documents, snap corners near image boundaries.
+    /// This fixes cases where detection finds 95% of document but misses edge pixels.
+    /// </summary>
+    private static Point2f[] ExtendCornersToImageBounds(Point2f[] corners, int imgW, int imgH, double threshold = 0.05)
+    {
+        var result = corners.Select(c => {
+            float x = c.X, y = c.Y;
+            
+            // Snap to left/right edges
+            if (x < imgW * threshold) x = 0;
+            if (x > imgW * (1 - threshold)) x = imgW - 1;
+            
+            // Snap to top/bottom edges
+            if (y < imgH * threshold) y = 0;
+            if (y > imgH * (1 - threshold)) y = imgH - 1;
+            
+            return new Point2f(x, y);
+        }).ToArray();
+        
+        return OrderCorners(result);
     }
 
     private static (int width, int height) CalculateOutputDimensions(Point2f[] corners, int targetWidth, int targetHeight)
@@ -863,6 +1014,47 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     {
         var filePath = Path.Combine(debugPath, $"{name}.png");
         Cv2.ImWrite(filePath, img);
+    }
+
+    private static void SaveDebugFullFrameAnalysis(Mat src, bool isFullFrame, double paperCoverage, bool isAligned, string debugPath)
+    {
+        using var vis = src.Clone();
+        
+        // info overlay
+        var info = new[]
+        {
+            $"Full-Frame Analysis",
+            $"IsFullFrame: {isFullFrame}",
+            $"PaperCoverage: {paperCoverage:P0}",
+            $"IsAligned: {isAligned}"
+        };
+        
+        int y = 30;
+        var bgColor = isFullFrame ? new Scalar(0, 100, 0) : new Scalar(100, 0, 0);
+        Cv2.Rectangle(vis, new Rect(5, 5, 300, 120), bgColor, -1);
+        
+        foreach (var line in info)
+        {
+            Cv2.PutText(vis, line, new Point(10, y), 
+                HersheyFonts.HersheySimplex, 0.7, new Scalar(255, 255, 255), 2);
+            y += 28;
+        }
+        
+        // border analysis strips
+        double borderRatio = 0.03;
+        int topH = (int)(src.Height * borderRatio);
+        int bottomY = (int)(src.Height * (1 - borderRatio));
+        int leftW = (int)(src.Width * borderRatio);
+        int rightX = (int)(src.Width * (1 - borderRatio));
+        
+        var borderColor = new Scalar(255, 255, 0);
+        Cv2.Rectangle(vis, new Rect(0, 0, src.Width, topH), borderColor, 2);
+        Cv2.Rectangle(vis, new Rect(0, bottomY, src.Width, src.Height - bottomY), borderColor, 2);
+        Cv2.Rectangle(vis, new Rect(0, 0, leftW, src.Height), borderColor, 2);
+        Cv2.Rectangle(vis, new Rect(rightX, 0, src.Width - rightX, src.Height), borderColor, 2);
+        
+        var filePath = Path.Combine(debugPath, "01_fullframe_analysis.png");
+        Cv2.ImWrite(filePath, vis);
     }
 
     private static void SaveDebugImageWithQuad(Mat src, Point2f[] quad, string debugPath, string name, double confidence)
