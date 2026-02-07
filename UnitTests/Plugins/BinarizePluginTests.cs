@@ -53,4 +53,13 @@ public sealed class BinarizePluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("True", meta["inverted"]);
     }
+
+    [TestMethod]
+    public async Task BinarizeImage_StoresMetadata()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "otsu");
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.IsTrue(meta.ContainsKey("suitableFor"));
+    }
 }
