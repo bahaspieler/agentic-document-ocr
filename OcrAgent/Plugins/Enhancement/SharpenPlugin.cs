@@ -38,10 +38,9 @@ public sealed class SharpenPlugin : IImageProcessingTool
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
 
         if (src.Empty())
-            throw new InvalidOperationException(
-                $"Could not read image for reference {imageReference} from {inputPath}");
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Detect blur and adapt strength if requested
+        // Detect blur level if adaptive
         string detectedBlur = "unknown";
         if (adaptiveStrength)
         {
@@ -61,10 +60,8 @@ public sealed class SharpenPlugin : IImageProcessingTool
             ApplyLaplacianSharpening(src, sharpened, strength);
         }
 
-        // Encode result
         Cv2.ImEncode(".png", sharpened, out var pngBytes);
 
-        // Metadata
         var meta = new Dictionary<string, string>
         {
             ["parent"] = imageReference,
@@ -75,7 +72,6 @@ public sealed class SharpenPlugin : IImageProcessingTool
             ["blurDetected"] = detectedBlur
         };
 
-        // Save with unique reference
         var baseRef = $"{imageReference}_sharpen_{strength}";
         var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
 
@@ -83,11 +79,10 @@ public sealed class SharpenPlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    /// <summary>
-    /// Unsharp masking: gentle sharpening that preserves structure.
-    /// </summary>
     private void ApplyUnsharpMask(Mat src, Mat dst, string strength)
     {
+        // unsharp masking
+
         var (kernelSize, sigma, amount) = strength switch
         {
             "low" => (3, 1.0, 0.5),
@@ -96,23 +91,25 @@ public sealed class SharpenPlugin : IImageProcessingTool
             _ => (3, 1.0, 1.0)
         };
 
+        // blurred
         using var blurred = new Mat();
         Cv2.GaussianBlur(src, blurred, new Size(kernelSize, kernelSize), sigma);
 
+        // unsharp mask: src - blurred
         using var unsharp = new Mat();
         Cv2.Subtract(src, blurred, unsharp);
 
+        // weighted unsharp mask
         using var sharpened = new Mat();
         Cv2.AddWeighted(src, 1.0, unsharp, amount, 0, sharpened);
 
         sharpened.CopyTo(dst);
     }
 
-    /// <summary>
-    /// Laplacian-based sharpening for stronger edge enhancement.
-    /// </summary>
     private void ApplyLaplacianSharpening(Mat src, Mat dst, string strength)
     {
+        // Laplacian-based sharpening
+
         double amount = strength switch
         {
             "low" => 0.5,
@@ -121,36 +118,42 @@ public sealed class SharpenPlugin : IImageProcessingTool
             _ => 1.0
         };
 
+        // float
         using var srcFloat = new Mat();
         src.ConvertTo(srcFloat, MatType.CV_32F);
 
+        // apply Laplacian
         using var laplacian = new Mat();
         Cv2.Laplacian(srcFloat, laplacian, MatType.CV_32F, ksize: 3);
 
+        // weighted Laplacian
         using var sharpened = new Mat();
         Cv2.AddWeighted(srcFloat, 1.0, laplacian, amount, 0, sharpened);
 
+        // convert back to 8-bit
         sharpened.ConvertTo(dst, MatType.CV_8U);
     }
 
-    /// <summary>
-    /// Detects blur using Laplacian variance.
-    /// Lower variance means more blur.
-    /// </summary>
     private double DetectBlurLevel(Mat src)
     {
+        // Laplacian variance
+        // Lower variance = more blur
         using var gray = new Mat();
         Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
         using var laplacian = new Mat();
         Cv2.Laplacian(gray, laplacian, MatType.CV_64F);
 
-        Cv2.MeanStdDev(laplacian, out _, out var stddev);
-        return stddev.Val0 * stddev.Val0;
+        Cv2.MeanStdDev(laplacian, out var mean, out var stddev);
+
+        // variance
+        double variance = stddev.Val0 * stddev.Val0;
+        return variance;
     }
 
     private string CategorizeBlur(double blurLevel)
     {
+        // thresholds
         if (blurLevel > 500)
             return "sharp";
         else if (blurLevel > 100)
@@ -162,11 +165,11 @@ public sealed class SharpenPlugin : IImageProcessingTool
     private string AdjustStrengthForBlur(double blurLevel)
     {
         if (blurLevel > 500)
-            return "low";
+            return "low";   // moderate sharp
         else if (blurLevel > 100)
-            return "medium";
+            return "medium"; // moderate blur
         else
-            return "high";
+            return "high";   // very blurry
     }
 
     public IEnumerable<AITool> GetAITools()
