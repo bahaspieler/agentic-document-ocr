@@ -25,14 +25,17 @@ public sealed class FakeImageStore : IImageStore
             ? m
             : new Dictionary<string, string>();
 
+  
     public string SaveBytes(
         byte[] bytes,
         string extension,
         IDictionary<string, string>? metadata = null,
         string? desiredReference = null)
     {
-        // Stub implementation — real file persistence comes later
         var reference = desiredReference ?? Guid.NewGuid().ToString("N");
+        var path = Path.Combine(_baseDir, $"{reference}.{extension}");
+
+        File.WriteAllBytes(path, bytes);
 
         _meta[reference] = metadata != null
             ? new Dictionary<string, string>(metadata)
@@ -41,9 +44,9 @@ public sealed class FakeImageStore : IImageStore
         return reference;
     }
 
+    
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
-        // Stub implementation — real copy comes later
         var reference = desiredReference ?? Guid.NewGuid().ToString("N");
         _meta[reference] = new Dictionary<string, string>();
         return reference;
