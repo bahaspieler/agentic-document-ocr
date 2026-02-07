@@ -1,10 +1,14 @@
-﻿using OpenCvSharp;
+﻿using Microsoft.Extensions.AI;
 using System.ComponentModel;
-using Microsoft.Extensions.AI;
 using OcrAgent.Storage;
+using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Plugin for sharpening images to enhance text edges and reduce blur.
+/// Particularly useful for blurry documents.
+/// </summary>
 public sealed class SharpenPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -36,8 +40,43 @@ public sealed class SharpenPlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Still stub: real processing comes next commits
+        // Commit 3: implement unsharp mask (laplacian will come in next commit)
+        using var sharpened = new Mat();
+
+        if (method == "unsharp")
+        {
+            ApplyUnsharpMask(src, sharpened, strength);
+        }
+        else
+        {
+            // Not implemented yet in commit 3.
+            // Keep behavior safe: return original reference without changes.
+            // (We will implement Laplacian + saving in later commits.)
+        }
+
         return Task.FromResult(imageReference);
+    }
+
+    private void ApplyUnsharpMask(Mat src, Mat dst, string strength)
+    {
+        var (kernelSize, sigma, amount) = strength switch
+        {
+            "low" => (3, 1.0, 0.5),
+            "medium" => (3, 1.0, 1.0),
+            "high" => (5, 1.5, 1.5),
+            _ => (3, 1.0, 1.0)
+        };
+
+        using var blurred = new Mat();
+        Cv2.GaussianBlur(src, blurred, new Size(kernelSize, kernelSize), sigma);
+
+        using var unsharp = new Mat();
+        Cv2.Subtract(src, blurred, unsharp);
+
+        using var sharpened = new Mat();
+        Cv2.AddWeighted(src, 1.0, unsharp, amount, 0, sharpened);
+
+        sharpened.CopyTo(dst);
     }
 
     public IEnumerable<AITool> GetAITools()
