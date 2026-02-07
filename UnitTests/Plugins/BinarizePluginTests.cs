@@ -34,4 +34,14 @@ public sealed class BinarizePluginTests : PluginTestBase
         Assert.AreEqual("11", meta["blockSize"]);
         Assert.AreEqual("2", meta["constant"]);
     }
+
+    [TestMethod]
+    public async Task BinarizeImage_AdaptiveGaussian_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "adaptive_gaussian", 15, 3);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("adaptive_gaussian", meta["method"]);
+        Assert.AreEqual("15", meta["blockSize"]);
+    }
 }
