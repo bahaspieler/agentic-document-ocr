@@ -20,12 +20,10 @@ public sealed class FakeImageStore : IImageStore
     public bool Exists(string reference)
         => File.Exists(GetImagePath(reference));
 
-    public IDictionary<string, string> GetMetadata(string reference)
-        => _meta.TryGetValue(reference, out var m)
-            ? m
-            : new Dictionary<string, string>();
 
-    // Save raw bytes as a file and store metadata
+    public IDictionary<string, string> GetMetadata(string reference)
+        => _meta[reference];
+
     public string SaveBytes(
         byte[] bytes,
         string extension,
@@ -44,7 +42,6 @@ public sealed class FakeImageStore : IImageStore
         return reference;
     }
 
-    // Save an existing file into the fake store
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
         var reference = desiredReference ?? Guid.NewGuid().ToString("N");
