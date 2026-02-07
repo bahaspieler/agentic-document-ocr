@@ -44,4 +44,22 @@ public sealed class BinarizePluginTests : PluginTestBase
         Assert.AreEqual("adaptive_gaussian", meta["method"]);
         Assert.AreEqual("15", meta["blockSize"]);
     }
+
+    [TestMethod]
+    public async Task BinarizeImage_WithInvert_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "otsu", invertForDarkBackground: true);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("True", meta["inverted"]);
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_StoresMetadata()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "otsu");
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.IsTrue(meta.ContainsKey("suitableFor"));
+    }
 }
