@@ -23,4 +23,25 @@ public sealed class BinarizePluginTests : PluginTestBase
         Assert.AreEqual("binarize", meta["op"]);
         Assert.AreEqual("otsu", meta["method"]);
     }
+
+    [TestMethod]
+    public async Task BinarizeImage_AdaptiveMean_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "adaptive_mean", 11, 2);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("adaptive_mean", meta["method"]);
+        Assert.AreEqual("11", meta["blockSize"]);
+        Assert.AreEqual("2", meta["constant"]);
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_AdaptiveGaussian_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "adaptive_gaussian", 15, 3);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("adaptive_gaussian", meta["method"]);
+        Assert.AreEqual("15", meta["blockSize"]);
+    }
 }
