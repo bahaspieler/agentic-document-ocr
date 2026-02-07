@@ -41,6 +41,15 @@ public sealed class SharpenPlugin : IImageProcessingTool
             throw new InvalidOperationException(
                 $"Could not read image for reference {imageReference} from {inputPath}");
 
+        // Commit 5: blur detection + adaptive strength
+        string detectedBlur = "unknown";
+        if (adaptiveStrength)
+        {
+            double blurLevel = DetectBlurLevel(src);
+            detectedBlur = CategorizeBlur(blurLevel);
+            strength = AdjustStrengthForBlur(blurLevel);
+        }
+
         using var sharpened = new Mat();
 
         if (method == "unsharp")
@@ -52,8 +61,8 @@ public sealed class SharpenPlugin : IImageProcessingTool
             ApplyLaplacianSharpening(src, sharpened, strength);
         }
 
-        // Commit 4 still returns original reference
-        // (saving + metadata will be added in later commits)
+        // Commit 5 still returns original reference
+        // (saving + metadata will be added in Commit 6)
         return Task.FromResult(imageReference);
     }
 
@@ -105,6 +114,44 @@ public sealed class SharpenPlugin : IImageProcessingTool
         Cv2.AddWeighted(srcFloat, 1.0, laplacian, amount, 0, sharpened);
 
         sharpened.ConvertTo(dst, MatType.CV_8U);
+    }
+
+    /// <summary>
+    /// Detects blur using Laplacian variance.
+    /// Lower variance means more blur.
+    /// </summary>
+    private double DetectBlurLevel(Mat src)
+    {
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var laplacian = new Mat();
+        Cv2.Laplacian(gray, laplacian, MatType.CV_64F);
+
+        Cv2.MeanStdDev(laplacian, out var mean, out var stddev);
+
+        double variance = stddev.Val0 * stddev.Val0;
+        return variance;
+    }
+
+    private string CategorizeBlur(double blurLevel)
+    {
+        if (blurLevel > 500)
+            return "sharp";
+        else if (blurLevel > 100)
+            return "moderate";
+        else
+            return "blurry";
+    }
+
+    private string AdjustStrengthForBlur(double blurLevel)
+    {
+        if (blurLevel > 500)
+            return "low";
+        else if (blurLevel > 100)
+            return "medium";
+        else
+            return "high";
     }
 
     public IEnumerable<AITool> GetAITools()
