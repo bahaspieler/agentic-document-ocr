@@ -25,7 +25,7 @@ public sealed class FakeImageStore : IImageStore
             ? m
             : new Dictionary<string, string>();
 
-  
+    // Save raw bytes as a file and store metadata
     public string SaveBytes(
         byte[] bytes,
         string extension,
@@ -44,11 +44,16 @@ public sealed class FakeImageStore : IImageStore
         return reference;
     }
 
-    
+    // Save an existing file into the fake store
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
         var reference = desiredReference ?? Guid.NewGuid().ToString("N");
+        var ext = Path.GetExtension(filePath).TrimStart('.');
+        var destPath = Path.Combine(_baseDir, $"{reference}.{ext}");
+
+        File.Copy(filePath, destPath, overwrite: true);
         _meta[reference] = new Dictionary<string, string>();
+
         return reference;
     }
 }
