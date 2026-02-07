@@ -38,9 +38,9 @@ public sealed class SharpenPlugin : IImageProcessingTool
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
 
         if (src.Empty())
-            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+            throw new InvalidOperationException(
+                $"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Commit 3: implement unsharp mask (laplacian will come in next commit)
         using var sharpened = new Mat();
 
         if (method == "unsharp")
@@ -49,14 +49,17 @@ public sealed class SharpenPlugin : IImageProcessingTool
         }
         else
         {
-            // Not implemented yet in commit 3.
-            // Keep behavior safe: return original reference without changes.
-            // (We will implement Laplacian + saving in later commits.)
+            ApplyLaplacianSharpening(src, sharpened, strength);
         }
 
+        // Commit 4 still returns original reference
+        // (saving + metadata will be added in later commits)
         return Task.FromResult(imageReference);
     }
 
+    /// <summary>
+    /// Unsharp masking: gentle sharpening that preserves structure.
+    /// </summary>
     private void ApplyUnsharpMask(Mat src, Mat dst, string strength)
     {
         var (kernelSize, sigma, amount) = strength switch
@@ -77,6 +80,31 @@ public sealed class SharpenPlugin : IImageProcessingTool
         Cv2.AddWeighted(src, 1.0, unsharp, amount, 0, sharpened);
 
         sharpened.CopyTo(dst);
+    }
+
+    /// <summary>
+    /// Laplacian-based sharpening for stronger edge enhancement.
+    /// </summary>
+    private void ApplyLaplacianSharpening(Mat src, Mat dst, string strength)
+    {
+        double amount = strength switch
+        {
+            "low" => 0.5,
+            "medium" => 1.0,
+            "high" => 1.5,
+            _ => 1.0
+        };
+
+        using var srcFloat = new Mat();
+        src.ConvertTo(srcFloat, MatType.CV_32F);
+
+        using var laplacian = new Mat();
+        Cv2.Laplacian(srcFloat, laplacian, MatType.CV_32F, ksize: 3);
+
+        using var sharpened = new Mat();
+        Cv2.AddWeighted(srcFloat, 1.0, laplacian, amount, 0, sharpened);
+
+        sharpened.ConvertTo(dst, MatType.CV_8U);
     }
 
     public IEnumerable<AITool> GetAITools()
