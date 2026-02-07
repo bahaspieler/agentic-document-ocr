@@ -41,7 +41,7 @@ public sealed class SharpenPlugin : IImageProcessingTool
             throw new InvalidOperationException(
                 $"Could not read image for reference {imageReference} from {inputPath}");
 
-        // Commit 5: blur detection + adaptive strength
+        // Detect blur and adapt strength if requested
         string detectedBlur = "unknown";
         if (adaptiveStrength)
         {
@@ -61,9 +61,26 @@ public sealed class SharpenPlugin : IImageProcessingTool
             ApplyLaplacianSharpening(src, sharpened, strength);
         }
 
-        // Commit 5 still returns original reference
-        // (saving + metadata will be added in Commit 6)
-        return Task.FromResult(imageReference);
+        // Encode result
+        Cv2.ImEncode(".png", sharpened, out var pngBytes);
+
+        // Metadata
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "sharpen",
+            ["strength"] = strength,
+            ["method"] = method,
+            ["adaptiveStrength"] = adaptiveStrength.ToString(),
+            ["blurDetected"] = detectedBlur
+        };
+
+        // Save with unique reference
+        var baseRef = $"{imageReference}_sharpen_{strength}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
     /// <summary>
@@ -128,10 +145,8 @@ public sealed class SharpenPlugin : IImageProcessingTool
         using var laplacian = new Mat();
         Cv2.Laplacian(gray, laplacian, MatType.CV_64F);
 
-        Cv2.MeanStdDev(laplacian, out var mean, out var stddev);
-
-        double variance = stddev.Val0 * stddev.Val0;
-        return variance;
+        Cv2.MeanStdDev(laplacian, out _, out var stddev);
+        return stddev.Val0 * stddev.Val0;
     }
 
     private string CategorizeBlur(double blurLevel)
