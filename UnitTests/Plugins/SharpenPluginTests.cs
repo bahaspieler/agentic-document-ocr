@@ -44,4 +44,24 @@ public sealed class SharpenPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("high", meta["strength"]);
     }
+
+    [TestMethod]
+    public async Task SharpenImage_UnsharpMethod_ProducesOutput()
+    {
+        var result = await _plugin.SharpenImage(TestImageRef, "medium", "unsharp");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("unsharp", meta["method"]);
+    }
+
+    [TestMethod]
+    public async Task SharpenImage_LaplacianMethod_ProducesOutput()
+    {
+        var result = await _plugin.SharpenImage(TestImageRef, "medium", "laplacian");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("laplacian", meta["method"]);
+    }
 }
