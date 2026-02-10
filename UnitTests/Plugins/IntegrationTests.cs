@@ -3,6 +3,7 @@ using OcrAgent.Plugins;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
+
 namespace UnitTests; [TestClass] public sealed class IntegrationTests
 {
     private string _tempRoot = null!;
@@ -33,5 +34,13 @@ namespace UnitTests; [TestClass] public sealed class IntegrationTests
         {
             // ignore cleanup failures
         }
+    }
+
+    [TestMethod]
+    public void PluginAggregator_RegistersAllPlugins()
+    {
+        var tools = _aggregator.GetAllTools().ToList();
+
+        Assert.IsGreaterThanOrEqualTo(tools.Count, 6, $"Should have at least 6 tools registered, but found {tools.Count}");
     }
 }
