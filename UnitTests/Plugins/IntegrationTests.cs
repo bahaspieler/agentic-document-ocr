@@ -20,4 +20,18 @@ namespace UnitTests; [TestClass] public sealed class IntegrationTests
         _aggregator = new PluginAggregator(_store);
     }
 
+    [TestCleanup]
+    public void Cleanup()
+    {
+        // cleanup temp files after test
+        try
+        {
+            if (Directory.Exists(_tempRoot))
+                Directory.Delete(_tempRoot, recursive: true);
+        }
+        catch
+        {
+            // ignore cleanup failures
+        }
+    }
 }
