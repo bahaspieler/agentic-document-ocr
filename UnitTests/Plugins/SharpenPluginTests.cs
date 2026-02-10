@@ -1,56 +1,47 @@
-﻿using OcrAgent.Storage;
-using System.Collections.Concurrent;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using OcrAgent.Plugins.Enhancement;
 
-namespace OcrAgent.Tests.Fakes;
+namespace UnitTests.Plugins;
 
-public sealed class FakeImageStore : IImageStore
+[TestClass]
+public sealed class SharpenPluginTests : PluginTestBase
 {
-    private readonly string _baseDir;
-    private readonly ConcurrentDictionary<string, Dictionary<string, string>> _meta = new();
+    private SharpenPlugin _plugin = null!;
 
-    public FakeImageStore(string baseDir)
+    [TestInitialize]
+    public void Setup()
     {
-        _baseDir = baseDir;
-        Directory.CreateDirectory(_baseDir);
+        _plugin = new SharpenPlugin(Store);
     }
 
-    public string GetImagePath(string reference)
-        => Path.Combine(_baseDir, $"{reference}.png");
-
-    public bool Exists(string reference)
-        => File.Exists(GetImagePath(reference));
-
-
-    public IDictionary<string, string> GetMetadata(string reference)
-        => _meta[reference];
-
-    public string SaveBytes(
-        byte[] bytes,
-        string extension,
-        IDictionary<string, string>? metadata = null,
-        string? desiredReference = null)
+    [TestMethod]
+    public async Task SharpenImage_LowStrength_ProducesOutput()
     {
-        var reference = desiredReference ?? Guid.NewGuid().ToString("N");
-        var path = Path.Combine(_baseDir, $"{reference}.{extension}");
+        var result = await _plugin.SharpenImage(TestImageRef, "low");
 
-        File.WriteAllBytes(path, bytes);
-
-        _meta[reference] = metadata != null
-            ? new Dictionary<string, string>(metadata)
-            : new Dictionary<string, string>();
-
-        return reference;
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("sharpen", meta["op"]);
+        Assert.AreEqual("low", meta["strength"]);
     }
 
-    public string SaveFromFile(string filePath, string? desiredReference = null)
+    [TestMethod]
+    public async Task SharpenImage_MediumStrength_ProducesOutput()
     {
-        var reference = desiredReference ?? Guid.NewGuid().ToString("N");
-        var ext = Path.GetExtension(filePath).TrimStart('.');
-        var destPath = Path.Combine(_baseDir, $"{reference}.{ext}");
+        var result = await _plugin.SharpenImage(TestImageRef, "medium");
 
-        File.Copy(filePath, destPath, overwrite: true);
-        _meta[reference] = new Dictionary<string, string>();
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("medium", meta["strength"]);
+    }
 
-        return reference;
+    [TestMethod]
+    public async Task SharpenImage_HighStrength_ProducesOutput()
+    {
+        var result = await _plugin.SharpenImage(TestImageRef, "high");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("high", meta["strength"]);
     }
 }
