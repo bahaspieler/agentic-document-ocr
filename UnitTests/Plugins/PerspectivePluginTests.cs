@@ -111,4 +111,31 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Cv2.ImEncode(".png", distorted, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_distorted" }, "DISTORTED001");
     }
+
+    private string CreateReceiptLikeDocument()
+    {
+        // a receipt-like image with white background
+        using var receipt = new Mat(500, 350, MatType.CV_8UC3, new Scalar(245, 245, 245));
+        
+        // draw receipt header
+        Cv2.PutText(receipt, "STORE NAME", new Point(80, 40), HersheyFonts.HersheySimplex, 1.0, Scalar.Black, 2);
+        Cv2.Line(receipt, new Point(30, 60), new Point(320, 60), Scalar.Black, 1);
+        
+        // draw items
+        Cv2.PutText(receipt, "Coffee", new Point(40, 100), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        Cv2.PutText(receipt, "$4.50", new Point(250, 100), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        
+        Cv2.PutText(receipt, "Sandwich", new Point(40, 140), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        Cv2.PutText(receipt, "$7.99", new Point(250, 140), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        
+        Cv2.Line(receipt, new Point(30, 160), new Point(320, 160), Scalar.Black, 1);
+        
+        // draw total
+        Cv2.PutText(receipt, "TOTAL", new Point(40, 200), HersheyFonts.HersheySimplex, 0.8, Scalar.Black, 2);
+        Cv2.PutText(receipt, "$12.49", new Point(230, 200), HersheyFonts.HersheySimplex, 0.8, Scalar.Black, 2);
+
+        // save
+        Cv2.ImEncode(".png", receipt, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_receipt" }, "RECEIPT_TEST");
+    }
 }
