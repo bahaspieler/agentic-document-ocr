@@ -93,9 +93,15 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             detectionMethod = det.Method;
             confidence = det.Confidence;
             
-            if (isFullFrame)
+            // For full-frame documents, aggressively snap corners to image boundaries
+            // This prevents header/footer clipping by ensuring we capture the entire frame
+            if (isFullFrame || paperCoverage > 0.65)
             {
-                corners = ExtendCornersToImageBounds(corners, src.Width, src.Height, 0.05);
+                // Use more aggressive threshold (0.08) for full-frame snapping
+                corners = ExtendCornersToImageBounds(corners, src.Width, src.Height, 0.08);
+                
+                if (debugPath != null)
+                    SaveDebugImageWithQuad(src, corners, debugPath, "91_after_edge_snap", confidence);
             }
         }
         else
@@ -267,6 +273,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         var best = candidates
             .OrderByDescending(c => c.Confidence * 0.4 + c.Quality * 0.6)
             .First();
+
+        if (debugPath != null && best.Corners != null)
+        {
+            SaveDebugImageWithQuad(src, best.Corners, debugPath, $"90_winner_{best.Method}", best.Confidence);
+        }
 
         return (best.Corners, best.Confidence, best.Method);
     }
@@ -573,11 +584,12 @@ public sealed class PerspectivePlugin : IImageProcessingTool
 
         // NEW: Detect if document fills most part of the frame
         bool isLikelyFullFrame = false;
+        double largestCoverageRatio = 0.0;
         if (contours.Length > 0)
         {
             var largest = contours.OrderByDescending(c => Cv2.ContourArea(c)).First();
-            double largestRatio = Cv2.ContourArea(largest) / imgArea;
-            isLikelyFullFrame = largestRatio > 0.70; // >70% coverage = full frame
+            largestCoverageRatio = Cv2.ContourArea(largest) / imgArea;
+            isLikelyFullFrame = largestCoverageRatio > 0.65; // Lowered from 0.70 to catch more full-frame cases
         }
 
         foreach (var c in contours
@@ -595,13 +607,25 @@ public sealed class PerspectivePlugin : IImageProcessingTool
                 TouchesBorder(c, imgW, imgH, marginPx: Math.Max(6, (int)(Math.Min(imgW, imgH) * 0.01))))
                 continue;
 
-            // approximate to a 4-corner quad
-            var quad = ApproximateToQuad(c);
-            if (quad is null)
+            Point2f[]? quad;
+
+            // high-coverage contours, use min area rect directly
+            // This handles bumpy contours caused by background texture (e.g., granite)
+            if (areaRatio > 0.60)
             {
-                // fallback: rotated rectangle
-                var rr = Cv2.MinAreaRect(c);
-                quad = Cv2.BoxPoints(rr).Select(p => new Point2f(p.X, p.Y)).ToArray();
+                // regularized contour for full-frame to smooth out texture bumps
+                quad = RegularizeContourForFullFrame(c, imgW, imgH);
+            }
+            else
+            {
+                // standard approximation for documents with clear background
+                quad = ApproximateToQuad(c);
+                if (quad is null)
+                {
+                    // fallback: min area rect
+                    var rr = Cv2.MinAreaRect(c);
+                    quad = Cv2.BoxPoints(rr).Select(p => new Point2f(p.X, p.Y)).ToArray();
+                }
             }
 
             if (quad.Length != 4)
@@ -616,11 +640,14 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             double coverage = (double)(boundingRect.Width * boundingRect.Height) / imgArea;
             double coverageBonus = coverage > 0.5 ? (coverage - 0.5) * 0.3 : 0;
 
-            // new: penalize internal elements
-            // prevents detecting internal text blocks as the document
+            // full-frame documents, add bonus for high coverage (reduces penalty for touching borders)
+            if (isLikelyFullFrame && coverage > 0.80)
+                coverageBonus += 0.15;
+
+            // penalize internal elements - prevents detecting internal text blocks as the document
             double internalPenalty = areaRatio < 0.30 ? 0.15 : 0;
 
-            // score: big size, close to rectangle, good area, not inside content
+            // score
             double score = (areaRatio * 0.50) + (rect * 0.25) + (cornerPenalty * 0.05) + coverageBonus - internalPenalty;
 
             if (score > bestScore)
@@ -651,6 +678,51 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// regularizes a contour for full-frame documents by using min area rect.
+    /// this smooths out texture bumps (e.g., granite background noise) that cause
+    /// contour irregularities along the edges.
+    /// </summary>
+    private static Point2f[] RegularizeContourForFullFrame(Point[] contour, int imgW, int imgH)
+    {    
+        // minimum area rect to get clean edges
+        var minRect = Cv2.MinAreaRect(contour);
+        var boxPoints = Cv2.BoxPoints(minRect);
+        
+        var quad = boxPoints.Select(p => new Point2f(p.X, p.Y)).ToArray();
+        
+        // snap corners that are very close to image edges
+        quad = SnapQuadToImageEdges(quad, imgW, imgH, edgeThresholdRatio: 0.03);
+        
+        return OrderCorners(quad);
+    }
+
+    /// <summary>
+    /// snaps quad corners that are near image edges to the exact edge.
+    /// prevents small gaps or overflows at the boundaries.
+    /// </summary>
+    private static Point2f[] SnapQuadToImageEdges(Point2f[] quad, int imgW, int imgH, double edgeThresholdRatio)
+    {
+        double thresholdX = imgW * edgeThresholdRatio;
+        double thresholdY = imgH * edgeThresholdRatio;
+        
+        return quad.Select(p =>
+        {
+            float x = p.X, y = p.Y;
+            
+            // snap to left edge
+            if (x < thresholdX) x = 0;
+            // snap to right edge
+            if (x > imgW - 1 - thresholdX) x = imgW - 1;
+            // snap to top edge
+            if (y < thresholdY) y = 0;
+            // snap to bottom edge
+            if (y > imgH - 1 - thresholdY) y = imgH - 1;
+            
+            return new Point2f(x, y);
+        }).ToArray();
     }
 
     private static bool TouchesBorder(Point[] contour, int w, int h, int marginPx)
@@ -812,8 +884,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         double rightPaper = CountPaperRatio(paperMask, rightStrip);
 
         // Full-frame if most borders are paper-colored
+        // Lowered threshold from 0.75 to 0.65 to catch more full-frame scenarios (e.g., RECEIPT001 at 71%)
         double avgBorderPaper = (topPaper + bottomPaper + leftPaper + rightPaper) / 4.0;
-        bool isFullFrame = avgBorderPaper > 0.60 && paperCoverage > 0.75;
+        bool isFullFrame = avgBorderPaper > 0.55 && paperCoverage > 0.65;
 
         // alignment
         bool isAligned = false;
