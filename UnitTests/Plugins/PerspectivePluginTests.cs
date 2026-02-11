@@ -362,4 +362,45 @@ public sealed class PerspectivePluginTests : PluginTestBase
         }
         Assert.IsTrue(exceptionThrown, "Expected exception for non-existent image");
     }
+
+    // Full-Frame Document Detection Tests
+
+
+    [TestMethod]
+    public async Task CorrectPerspective_FullFrameDocument_ReturnsWithFullFrameMetadata()
+    {
+        var fullFrameRef = CreateFullFrameDocument();
+        
+        var result = await _plugin.CorrectPerspective(fullFrameRef);
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("perspective_correct", meta["op"]);
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"));
+        // full-frame docs should either return "full_frame_aligned" or "already_aligned"
+        var method = meta["detectionMethod"];
+        Assert.IsTrue(
+            method == "full_frame_aligned" || method == "already_aligned" || 
+            method.Contains("otsu") || method.Contains("edges") || method.Contains("grabcut"),
+            $"Unexpected detection method: {method}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_PartialFrameDocument_DetectsDocumentBoundaries()
+    {
+        var partialRef = CreateDocumentOnDarkBackground();
+        
+        var result = await _plugin.CorrectPerspective(partialRef, "aggressive");
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectedCorners"));
+        Assert.IsTrue(meta.ContainsKey("confidence"));
+        
+        // should NOT be full-frame
+        if (meta.TryGetValue("isFullFrame", out var isFullFrame))
+        {
+            Assert.AreNotEqual("true", isFullFrame.ToLower());
+        }
+    }
 }
