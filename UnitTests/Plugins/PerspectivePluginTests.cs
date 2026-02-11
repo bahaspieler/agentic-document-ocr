@@ -75,6 +75,16 @@ public sealed class PerspectivePluginTests : PluginTestBase
     }
 
     [TestMethod]
+    public async Task CorrectPerspective_WithEnhanceEdges_EnhancesEdges()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef, enhanceEdges: true);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("True", meta["enhanceEdges"]);
+    }
+
+    [TestMethod]
     public async Task CorrectPerspective_WithPerspectiveDistortion_CorrectsPerspective()
     {
         // create a document with perspective distortion
