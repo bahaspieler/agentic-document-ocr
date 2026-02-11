@@ -126,6 +126,8 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Assert.IsTrue(meta.ContainsKey("detectionMethod"));
     }
 
+    // Helper Methods
+
     private string CreateDistortedDocument()
     {
         // a white document with black text
@@ -189,5 +191,53 @@ public sealed class PerspectivePluginTests : PluginTestBase
         // save
         Cv2.ImEncode(".png", receipt, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_receipt" }, "RECEIPT_TEST");
+    }
+
+
+    /// <summary>
+    /// Creates a full-frame document that fills the entire image.
+    /// </summary>
+    private string CreateFullFrameDocument()
+    {
+        // White receipt filling entire frame
+        using var doc = new Mat(600, 400, MatType.CV_8UC3, new Scalar(250, 250, 250));
+        
+        // draw receipt content
+        Cv2.PutText(doc, "FULL FRAME RECEIPT", new Point(60, 60), HersheyFonts.HersheySimplex, 0.9, Scalar.Black, 2);
+        Cv2.Line(doc, new Point(20, 80), new Point(380, 80), Scalar.Black, 1);
+        
+        Cv2.PutText(doc, "Item 1", new Point(30, 120), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        Cv2.PutText(doc, "$5.00", new Point(300, 120), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        
+        Cv2.PutText(doc, "Item 2", new Point(30, 160), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        Cv2.PutText(doc, "$8.50", new Point(300, 160), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        
+        Cv2.Line(doc, new Point(20, 200), new Point(380, 200), Scalar.Black, 1);
+        Cv2.PutText(doc, "TOTAL: $13.50", new Point(200, 240), HersheyFonts.HersheySimplex, 0.8, Scalar.Black, 2);
+
+        Cv2.ImEncode(".png", doc, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_fullframe" }, "FULLFRAME001");
+    }
+
+    /// <summary>
+    /// Creates a document on a dark background.
+    /// </summary>
+    private string CreateDocumentOnDarkBackground()
+    {
+        // Dark background
+        using var img = new Mat(600, 600, MatType.CV_8UC3, new Scalar(40, 40, 40));
+        
+        // White document region in center
+        var docRect = new Rect(150, 100, 300, 400);
+        Cv2.Rectangle(img, docRect, new Scalar(245, 245, 245), -1);
+        
+        // draw some text to the document
+        Cv2.PutText(img, "DOCUMENT", new Point(220, 200), HersheyFonts.HersheySimplex, 0.9, Scalar.Black, 2);
+        Cv2.PutText(img, "On Dark BG", new Point(210, 250), HersheyFonts.HersheySimplex, 0.7, Scalar.Black, 1);
+        Cv2.Line(img, new Point(180, 280), new Point(420, 280), Scalar.Black, 1);
+        Cv2.PutText(img, "Content here", new Point(200, 320), HersheyFonts.HersheySimplex, 0.6, Scalar.Black, 1);
+
+        Cv2.ImEncode(".png", img, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_dark_bg" }, "DARKBG001");
     }
 }
