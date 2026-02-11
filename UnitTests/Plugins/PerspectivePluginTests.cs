@@ -74,6 +74,33 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Assert.AreEqual("5", meta["marginApplied"]);
     }
 
+    [TestMethod]
+    public async Task CorrectPerspective_WithPerspectiveDistortion_CorrectsPerspective()
+    {
+        // create a document with perspective distortion
+        var distortedRef = CreateDistortedDocument();
+
+        // correct perspective
+        var result = await _plugin.CorrectPerspective(distortedRef, "aggressive");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectedCorners"));
+        Assert.IsTrue(meta.ContainsKey("outputDimensions"));
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithReceiptLikeImage_ProducesOutput()
+    {
+        // create a receipt-like document
+        var receiptRef = CreateReceiptLikeDocument();
+
+        // correct perspective
+        var result = await _plugin.CorrectPerspective(receiptRef);
+
+        AssertImageValid(result);
+    }
+
     private string CreateDistortedDocument()
     {
         // a white document with black text
