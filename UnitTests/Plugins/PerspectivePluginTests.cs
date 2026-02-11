@@ -111,6 +111,21 @@ public sealed class PerspectivePluginTests : PluginTestBase
         AssertImageValid(result);
     }
 
+    [TestMethod]
+    public async Task CorrectPerspective_StoresComprehensiveMetadata()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef);
+
+
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.AreEqual("perspective_correct", meta["op"]);
+        Assert.IsTrue(meta.ContainsKey("detectedCorners"));
+        Assert.IsTrue(meta.ContainsKey("outputDimensions"));
+        Assert.IsTrue(meta.ContainsKey("confidence"));
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"));
+    }
+
     private string CreateDistortedDocument()
     {
         // a white document with black text
