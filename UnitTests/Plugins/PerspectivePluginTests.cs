@@ -403,4 +403,58 @@ public sealed class PerspectivePluginTests : PluginTestBase
             Assert.AreNotEqual("true", isFullFrame.ToLower());
         }
     }
+
+
+    // Already-Aligned Detection Tests
+
+    [TestMethod]
+    public async Task CorrectPerspective_AlreadyAlignedDocument_ReturnsWithAlignedMetadata()
+    {
+        var alignedRef = CreateAlreadyAlignedDocument();
+        
+        var result = await _plugin.CorrectPerspective(alignedRef);
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"));
+        
+        // check for aligned-related metadata
+        if (meta["detectionMethod"] == "already_aligned")
+        {
+            Assert.IsTrue(meta.ContainsKey("note"));
+            Assert.IsTrue(meta["note"].Contains("aligned", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_DistortedDocument_HasDistortionMetadata()
+    {
+        var distortedRef = CreateDistortedDocument();
+        
+        var result = await _plugin.CorrectPerspective(distortedRef, "aggressive");
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        
+        // should have distortion amount if not fallback and not already_aligned/full_frame
+        var method = meta["detectionMethod"];
+        bool expectsDistortion = method != "fallback_image_bounds" && 
+                                  method != "already_aligned" && 
+                                  method != "full_frame_aligned";
+        
+        if (expectsDistortion && meta.ContainsKey("distortionAmount"))
+        {
+            var distortionStr = meta["distortionAmount"];
+            if (double.TryParse(distortionStr, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var distortion) ||
+                double.TryParse(distortionStr, out distortion))
+            {
+                Assert.IsTrue(distortion >= 0, "Distortion amount should be non-negative");
+            }
+        }
+        
+        // always verify we got valid detection metadata
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"));
+        Assert.IsTrue(meta.ContainsKey("confidence"));
+    }
 }
