@@ -299,4 +299,67 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Cv2.ImEncode(".png", img, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_aligned" }, "ALIGNED001");
     }
+
+    // Error Handling Tests
+
+
+    [TestMethod]
+    public async Task CorrectPerspective_InvalidSensitivity_ThrowsArgumentException()
+    {
+        bool exceptionThrown = false;
+        try
+        {
+            await _plugin.CorrectPerspective(TestImageRef, "invalid_sensitivity");
+        }
+        catch (ArgumentException)
+        {
+            exceptionThrown = true;
+        }
+        Assert.IsTrue(exceptionThrown, "Expected ArgumentException for invalid sensitivity");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_MarginTooHigh_ThrowsArgumentException()
+    {
+        bool exceptionThrown = false;
+        try
+        {
+            await _plugin.CorrectPerspective(TestImageRef, marginPercent: 25);
+        }
+        catch (ArgumentException)
+        {
+            exceptionThrown = true;
+        }
+        Assert.IsTrue(exceptionThrown, "Expected ArgumentException for margin > 20");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_MarginNegative_ThrowsArgumentException()
+    {
+        bool exceptionThrown = false;
+        try
+        {
+            await _plugin.CorrectPerspective(TestImageRef, marginPercent: -5);
+        }
+        catch (ArgumentException)
+        {
+            exceptionThrown = true;
+        }
+        Assert.IsTrue(exceptionThrown, "Expected ArgumentException for negative margin");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_NonExistentImage_ThrowsException()
+    {
+        bool exceptionThrown = false;
+        try
+        {
+            await _plugin.CorrectPerspective("NONEXISTENT_IMAGE_REF");
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or InvalidOperationException)
+        {
+            exceptionThrown = true;
+        }
+        Assert.IsTrue(exceptionThrown, "Expected exception for non-existent image");
+    }
 }
