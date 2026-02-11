@@ -240,4 +240,40 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Cv2.ImEncode(".png", img, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_dark_bg" }, "DARKBG001");
     }
+
+    /// <summary>
+    /// Creates a full-frame document with textured/noisy edges.
+    /// </summary>
+    private string CreateTexturedFullFrameDocument()
+    {
+        // White document base
+        using var doc = new Mat(500, 350, MatType.CV_8UC3, new Scalar(248, 248, 248));
+        
+        // draw content
+        Cv2.PutText(doc, "TEXTURED DOC", new Point(70, 50), HersheyFonts.HersheySimplex, 0.9, Scalar.Black, 2);
+        Cv2.Line(doc, new Point(20, 70), new Point(330, 70), Scalar.Black, 1);
+        
+        for (int i = 0; i < 8; i++)
+        {
+            int y = 100 + i * 40;
+            Cv2.PutText(doc, $"Line {i + 1}", new Point(30, y), HersheyFonts.HersheySimplex, 0.6, Scalar.Black, 1);
+            Cv2.PutText(doc, $"${(i + 1) * 2.50:F2}", new Point(260, y), HersheyFonts.HersheySimplex, 0.6, Scalar.Black, 1);
+        }
+        
+        // draw some noise at edges to simulate texture bumps
+        var rng = new Random(42);
+        for (int i = 0; i < 50; i++)
+        {
+            int x = rng.Next(0, 10);
+            int y = rng.Next(0, doc.Height);
+            Cv2.Circle(doc, new Point(x, y), 2, new Scalar(200, 200, 200), -1);
+            
+            x = rng.Next(doc.Width - 10, doc.Width);
+            y = rng.Next(0, doc.Height);
+            Cv2.Circle(doc, new Point(x, y), 2, new Scalar(200, 200, 200), -1);
+        }
+
+        Cv2.ImEncode(".png", doc, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_textured" }, "TEXTURED001");
+    }
 }
