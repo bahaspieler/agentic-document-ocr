@@ -4,7 +4,10 @@ using OcrAgent.Storage;
 using OpenCvSharp;
 
 
-namespace UnitTests; [TestClass] public sealed class IntegrationTests
+namespace UnitTests; 
+
+[TestClass] 
+public sealed class IntegrationTests
 {
     private string _tempRoot = null!;
     private LocalFileImageStore _store = null!;
