@@ -276,4 +276,27 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Cv2.ImEncode(".png", doc, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_textured" }, "TEXTURED001");
     }
+
+    /// <summary>
+    /// Creates an already well-aligned rectangular document.
+    /// </summary>
+    private string CreateAlreadyAlignedDocument()
+    {
+        // a clean, aligned document on slightly gray background
+        using var img = new Mat(500, 400, MatType.CV_8UC3, new Scalar(220, 220, 220));
+        
+        // document fills most of the frame but not entirely
+        var docRect = new Rect(10, 10, 380, 480);
+        Cv2.Rectangle(img, docRect, new Scalar(255, 255, 255), -1);
+        Cv2.Rectangle(img, docRect, new Scalar(100, 100, 100), 1);
+        
+        // draw content
+        Cv2.PutText(img, "ALIGNED DOC", new Point(100, 80), HersheyFonts.HersheySimplex, 1.0, Scalar.Black, 2);
+        Cv2.Line(img, new Point(30, 110), new Point(370, 110), Scalar.Black, 1);
+        Cv2.PutText(img, "This document is already", new Point(50, 160), HersheyFonts.HersheySimplex, 0.6, Scalar.Black, 1);
+        Cv2.PutText(img, "perfectly aligned.", new Point(80, 200), HersheyFonts.HersheySimplex, 0.6, Scalar.Black, 1);
+
+        Cv2.ImEncode(".png", img, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_aligned" }, "ALIGNED001");
+    }
 }
