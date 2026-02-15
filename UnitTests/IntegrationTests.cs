@@ -81,4 +81,19 @@ public sealed class IntegrationTests
         Assert.AreEqual(200, loadedImage.Width);
         Assert.AreEqual(200, loadedImage.Height);
     }
+
+    [TestMethod]
+    public async Task EndToEnd_ProcessingChain()
+    {
+        // arrange: create a test image
+        var testImagePath = Path.Combine(_tempRoot, "test_chain.png");
+        using (var img = new Mat(150, 150, MatType.CV_8UC3, Scalar.White))
+        {
+            Cv2.Circle(img, new Point(75, 75), 50, Scalar.Black, -1);
+            Cv2.ImWrite(testImagePath, img);
+        }
+
+        // register the image
+        var originalRef = _aggregator.RegisterImage(testImagePath);
+    }
 }
