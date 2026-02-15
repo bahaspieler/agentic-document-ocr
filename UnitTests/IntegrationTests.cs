@@ -124,5 +124,13 @@ public sealed class IntegrationTests
         Assert.IsTrue(_store.Exists(denoiseRef));
         var denoiseMeta = _store.GetMetadata(denoiseRef);
         Assert.AreEqual(contrastRef, denoiseMeta["parent"]);        Assert.AreEqual("denoise", denoiseMeta["op"]);
+
+        // assert 4: all images in the chain are valid
+        foreach (var refId in new[] { originalRef, zoomedRef, contrastRef, denoiseRef })
+        {
+            var path = _store.GetImagePath(refId);
+            using var img = Cv2.ImRead(path);
+            Assert.IsFalse(img.Empty(), $"Image {refId} should be valid.");
+        }
     }
 }
