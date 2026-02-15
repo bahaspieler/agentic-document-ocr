@@ -75,5 +75,10 @@ public sealed class IntegrationTests
         // act 3: verify image can be read
         var imagePath = _store.GetImagePath(originalRef);
         using var loadedImage = Cv2.ImRead(imagePath);
+
+        // assert 3: image is valid
+        Assert.IsFalse(loadedImage.Empty(), "Loaded image should not be empty.");
+        Assert.AreEqual(200, loadedImage.Width);
+        Assert.AreEqual(200, loadedImage.Height);
     }
 }
