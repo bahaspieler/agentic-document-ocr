@@ -95,5 +95,15 @@ public sealed class IntegrationTests
 
         // register the image
         var originalRef = _aggregator.RegisterImage(testImagePath);
+        // act 1: apply zoom
+        var zoomPlugin = new OcrAgent.Plugins.Geometric.ZoomInPlugin(_store);
+        var zoomResult = await zoomPlugin.ZoomInImage(originalRef, 10, 10, 10);
+        var zoomedRef = zoomResult.Split(',')[0];
+
+        // assert 1: zoom created a new image
+        Assert.IsTrue(_store.Exists(zoomedRef));
+        var zoomMeta = _store.GetMetadata(zoomedRef);
+        Assert.AreEqual(originalRef, zoomMeta["parent"]);
+        Assert.AreEqual("zoom_in", zoomMeta["op"]);
     }
 }
