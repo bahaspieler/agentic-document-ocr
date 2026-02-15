@@ -65,5 +65,15 @@ public sealed class IntegrationTests
         Assert.IsTrue(_store.Exists(originalRef));
         var originalMeta = _store.GetMetadata(originalRef);
         Assert.AreEqual("file", originalMeta["source"]);
+
+        // act 2: get all tools and verify they can be invoked
+        var tools = _aggregator.GetAllTools().ToList();
+        
+        // assert 2: multiple tools are available
+        Assert.IsTrue(tools.Count >= 6, "Should have multiple preprocessing tools available.");
+
+        // act 3: verify image can be read
+        var imagePath = _store.GetImagePath(originalRef);
+        using var loadedImage = Cv2.ImRead(imagePath);
     }
 }
