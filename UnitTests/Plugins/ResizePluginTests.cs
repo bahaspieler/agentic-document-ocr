@@ -34,4 +34,14 @@ public sealed class ResizePluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.IsTrue(meta["newSize"].EndsWith("x50"));
     }
+
+    [TestMethod]
+    public async Task ResizeImage_ExactDimensions_ProducesCorrectSize()
+    {
+        var result = await _plugin.ResizeImage(TestImageRef, 60, 80);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("60x80", meta["newSize"]);
+    }
 }
