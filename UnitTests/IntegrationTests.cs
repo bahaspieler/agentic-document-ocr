@@ -105,5 +105,24 @@ public sealed class IntegrationTests
         var zoomMeta = _store.GetMetadata(zoomedRef);
         Assert.AreEqual(originalRef, zoomMeta["parent"]);
         Assert.AreEqual("zoom_in", zoomMeta["op"]);
+
+        // act 2: apply contrast enhancement to the zoomed image
+        var contrastPlugin = new OcrAgent.Plugins.Enhancement.ContrastPlugin(_store);
+        var contrastRef = await contrastPlugin.EnhanceContrast(zoomedRef, "auto");
+
+        // assert 2: contrast created another variant
+        Assert.IsTrue(_store.Exists(contrastRef));
+        var contrastMeta = _store.GetMetadata(contrastRef);
+        Assert.AreEqual(zoomedRef, contrastMeta["parent"]);
+        Assert.AreEqual("contrast", contrastMeta["op"]);
+
+        // act 3: apply denoising to the contrast-enhanced image
+        var denoisePlugin = new OcrAgent.Plugins.Enhancement.DenoisePlugin(_store);
+        var denoiseRef = await denoisePlugin.DenoiseImage(contrastRef, "bilateral", "low");
+
+        // assert 3: denoise created final variant
+        Assert.IsTrue(_store.Exists(denoiseRef));
+        var denoiseMeta = _store.GetMetadata(denoiseRef);
+        Assert.AreEqual(contrastRef, denoiseMeta["parent"]);        Assert.AreEqual("denoise", denoiseMeta["op"]);
     }
 }
