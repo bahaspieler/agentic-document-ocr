@@ -44,4 +44,15 @@ public sealed class ResizePluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("60x80", meta["newSize"]);
     }
+
+    [TestMethod]
+    public async Task ResizeImage_WithDPI_CalculatesDimensions()
+    {
+        var result = await _plugin.ResizeImage(TestImageRef, targetDPI: 300);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("300", meta["targetDPI"]);
+        Assert.IsTrue(meta.ContainsKey("newSize"));
+    }
 }
