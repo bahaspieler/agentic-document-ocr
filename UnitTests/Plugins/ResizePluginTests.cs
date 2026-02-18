@@ -66,4 +66,15 @@ public sealed class ResizePluginTests : PluginTestBase
         Assert.AreEqual("receipt", meta["documentType"]);
         Assert.AreEqual("1200x1600", meta["newSize"]);
     }
+
+    [TestMethod]
+    public async Task ResizeImage_FormPreset_UsesCorrectDimensions()
+    {
+        var result = await _plugin.ResizeImage(TestImageRef, documentType: "form");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("form", meta["documentType"]);
+        Assert.AreEqual("2550x3300", meta["newSize"]);
+    }
 }
