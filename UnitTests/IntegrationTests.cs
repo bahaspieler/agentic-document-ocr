@@ -133,4 +133,15 @@ public sealed class IntegrationTests
             Assert.IsFalse(img.Empty(), $"Image {refId} should be valid.");
         }
     }
+
+    [TestMethod]
+    public void EndToEnd_MetadataChain()
+    {
+        // arrange: create and register an image
+        var testImagePath = Path.Combine(_tempRoot, "test_metadata.png");
+        using (var img = new Mat(100, 100, MatType.CV_8UC3, Scalar.White))
+        {
+            Cv2.ImWrite(testImagePath, img);
+        }
+    }
 }
