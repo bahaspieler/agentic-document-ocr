@@ -152,5 +152,7 @@ public sealed class IntegrationTests
         Assert.AreEqual("ORIGINAL", meta["reference"]);
         Assert.AreEqual("file", meta["source"]);
         Assert.AreEqual("png", meta["extension"]);
+        Assert.IsTrue(meta.ContainsKey("createdUtc"));
+        Assert.AreEqual(testImagePath, meta["originalPath"]);
     }
 }
