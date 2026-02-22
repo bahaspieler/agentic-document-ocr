@@ -143,5 +143,14 @@ public sealed class IntegrationTests
         {
             Cv2.ImWrite(testImagePath, img);
         }
+
+        var originalRef = _aggregator.RegisterImage(testImagePath, "ORIGINAL");
+
+        // act: get metadata
+        var meta = _store.GetMetadata(originalRef);
+        // assert: metadata is complete
+        Assert.AreEqual("ORIGINAL", meta["reference"]);
+        Assert.AreEqual("file", meta["source"]);
+        Assert.AreEqual("png", meta["extension"]);
     }
 }
