@@ -64,4 +64,15 @@ public sealed class SharpenPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("laplacian", meta["method"]);
     }
+
+    [TestMethod]
+    public async Task SharpenImage_AdaptiveMode_DetectsBlur()
+    {
+        var result = await _plugin.SharpenImage(TestImageRef, adaptiveStrength: true);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("True", meta["adaptiveStrength"]);
+        Assert.IsTrue(meta.ContainsKey("blurDetected"));
+    }
 }
