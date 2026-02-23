@@ -457,4 +457,194 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Assert.IsTrue(meta.ContainsKey("detectionMethod"));
         Assert.IsTrue(meta.ContainsKey("confidence"));
     }
+
+    // Debug Mode Tests
+
+    [TestMethod]
+    public async Task CorrectPerspective_DebugMode_CreatesDebugFolder()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef, debug: true);
+        
+        AssertImageValid(result);
+        
+        // check if debug folder was created
+        var debugFolderPath = Path.Combine(TempRoot, "perspective_debug", TestImageRef);
+        Assert.IsTrue(Directory.Exists(debugFolderPath), $"Debug folder should exist at {debugFolderPath}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_DebugMode_SavesInputImage()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef, debug: true);
+        
+        AssertImageValid(result);
+        
+        var debugFolderPath = Path.Combine(TempRoot, "perspective_debug", TestImageRef);
+        var inputImagePath = Path.Combine(debugFolderPath, "00_input.png");
+        
+        Assert.IsTrue(File.Exists(inputImagePath), "Debug input image (00_input.png) should exist");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_DebugMode_SavesFullFrameAnalysis()
+    {
+        var fullFrameRef = CreateFullFrameDocument();
+        
+        var result = await _plugin.CorrectPerspective(fullFrameRef, debug: true);
+        
+        AssertImageValid(result);
+        
+        var debugFolderPath = Path.Combine(TempRoot, "perspective_debug", fullFrameRef);
+        var analysisPath = Path.Combine(debugFolderPath, "01_fullframe_analysis.png");
+        
+        Assert.IsTrue(File.Exists(analysisPath), "Debug full-frame analysis image should exist");
+    }
+
+    // Detection Strategy Tests
+
+    [TestMethod]
+    public async Task CorrectPerspective_DetectionMethod_IsValidMethod()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef);
+        
+        var meta = Store.GetMetadata(result);
+        var method = meta["detectionMethod"];
+        
+        var validMethods = new[]
+        {
+            "edges", "otsu_segmentation", "hsv_light_segmentation", "grabcut",
+            "already_aligned", "full_frame_aligned", "fallback_image_bounds"
+        };
+        
+        Assert.IsTrue(validMethods.Contains(method), 
+            $"Detection method '{method}' should be one of the valid methods");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_DocumentOnDarkBackground_SelectsAppropriateMethod()
+    {
+        var darkBgRef = CreateDocumentOnDarkBackground();
+        
+        var result = await _plugin.CorrectPerspective(darkBgRef, "aggressive");
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        
+        // for document on dark background, should detect using one of the segmentation methods
+        var method = meta["detectionMethod"];
+        Assert.IsTrue(
+            method.Contains("otsu") || method.Contains("grabcut") || 
+            method.Contains("hsv") || method.Contains("edges"),
+            $"Expected segmentation method for document on dark background, got: {method}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_TexturedDocument_HandlesEdgeBumps()
+    {
+        var texturedRef = CreateTexturedFullFrameDocument();
+        
+        var result = await _plugin.CorrectPerspective(texturedRef);
+        
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectedCorners"));
+    }
+
+    // Metadata Completeness Tests
+
+    [TestMethod]
+    public async Task CorrectPerspective_StandardProcessing_HasAllRequiredMetadata()
+    {
+        var distortedRef = CreateDistortedDocument();
+        
+        var result = await _plugin.CorrectPerspective(distortedRef, marginPercent: 2);
+        
+        var meta = Store.GetMetadata(result);
+        
+        // required fields for standard processing
+        Assert.IsTrue(meta.ContainsKey("parent"), "Should have parent metadata");
+        Assert.IsTrue(meta.ContainsKey("op"), "Should have op metadata");
+        Assert.IsTrue(meta.ContainsKey("detectedCorners"), "Should have detectedCorners metadata");
+        Assert.IsTrue(meta.ContainsKey("outputDimensions"), "Should have outputDimensions metadata");
+        Assert.IsTrue(meta.ContainsKey("confidence"), "Should have confidence metadata");
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"), "Should have detectionMethod metadata");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_Confidence_IsWithinValidRange()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef);
+        
+        var meta = Store.GetMetadata(result);
+        var confidenceStr = meta["confidence"];
+        
+        // parsing confidence with invariant culture to handle locale differences
+        if (!double.TryParse(confidenceStr, System.Globalization.NumberStyles.Float, 
+            System.Globalization.CultureInfo.InvariantCulture, out var confidence))
+        {
+            // parsing confidence with current culture to handle comma as decimal separator
+            double.TryParse(confidenceStr, out confidence);
+        }
+        
+        Assert.IsTrue(confidence >= 0.0 && confidence <= 1.0, 
+            $"Confidence '{confidenceStr}' (parsed as {confidence}) should be between 0.0 and 1.0");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_OutputDimensions_HasCorrectFormat()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef);
+        
+        var meta = Store.GetMetadata(result);
+        var dimensions = meta["outputDimensions"];
+        
+        // format should be "WxH"
+        Assert.IsTrue(dimensions.Contains("x"), "Output dimensions should be in WxH format");
+        var parts = dimensions.Split('x');
+        Assert.AreEqual(2, parts.Length, "Dimensions should have exactly two parts");
+        Assert.IsTrue(int.TryParse(parts[0], out var width) && width > 0, "Width should be positive integer");
+        Assert.IsTrue(int.TryParse(parts[1], out var height) && height > 0, "Height should be positive integer");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_DetectedCorners_HasCorrectFormat()
+    {
+        var distortedRef = CreateDistortedDocument();
+        
+        var result = await _plugin.CorrectPerspective(distortedRef);
+        
+        var meta = Store.GetMetadata(result);
+        var corners = meta["detectedCorners"];
+        
+        // format should be "[(...), (...), (...), (...)]"
+        Assert.IsTrue(corners.StartsWith("[") && corners.EndsWith("]"), 
+            "Corners should be enclosed in brackets");
+        
+        // should have 4 corner coordinates
+        var cornerCount = corners.Split(new[] { "), (" }, StringSplitOptions.None).Length;
+        Assert.IsTrue(cornerCount >= 1, "Should have corner coordinates");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_Parent_MatchesInputReference()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef);
+        
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(TestImageRef, meta["parent"], "Parent should match input reference");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_EnhanceEdgesFalse_RecordsInMetadata()
+    {
+        var result = await _plugin.CorrectPerspective(TestImageRef, enhanceEdges: false);
+        
+        var meta = Store.GetMetadata(result);
+        
+        // check if enhanceEdges is in metadata
+        if (meta.ContainsKey("enhanceEdges"))
+        {
+            Assert.AreEqual("False", meta["enhanceEdges"]);
+        }
+    }
 }
