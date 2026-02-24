@@ -44,8 +44,7 @@ public sealed class InvertPlugin : IImageProcessingTool
                 break;
 
             case "smart":
-                shouldInvert = meanBrightness < 127;
-                darkPixelRatio = 0;
+                (shouldInvert, darkPixelRatio) = AnalyzeDarkBackground(gray);
                 break;
 
             default: // auto
@@ -84,6 +83,37 @@ public sealed class InvertPlugin : IImageProcessingTool
 
         var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
+    }
+
+    private static (bool ShouldInvert, double DarkPixelRatio) AnalyzeDarkBackground(Mat gray)
+    {
+        double totalPixels = gray.Rows * gray.Cols;
+
+        using var darkMask = new Mat();
+        Cv2.Threshold(gray, darkMask, 100, 255, ThresholdTypes.BinaryInv);
+        double darkPixels = Cv2.CountNonZero(darkMask);
+        double darkRatio = darkPixels / totalPixels;
+
+        using var hist = new Mat();
+        int[] histSize = { 256 };
+        Rangef[] ranges = { new Rangef(0, 256) };
+        Cv2.CalcHist(new[] { gray }, new[] { 0 }, null, hist, 1, histSize, ranges);
+
+        int peakBin = 0;
+        float peakVal = 0;
+        for (int i = 0; i < 256; i++)
+        {
+            float val = hist.At<float>(i);
+            if (val > peakVal)
+            {
+                peakVal = val;
+                peakBin = i;
+            }
+        }
+
+        bool isDarkBackground = peakBin < 80 && darkRatio > 0.60;
+
+        return (isDarkBackground, darkRatio);
     }
 
     public IEnumerable<AITool> GetAITools()
