@@ -36,7 +36,17 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
         {
             appliedMethod = DetectBestMethod(src);
         }
+        using var corrected = new Mat();
 
+        switch (appliedMethod)
+        {
+            case "gray_world":
+                ApplyGrayWorld(src, corrected);
+                break;
+            default:
+                ApplyGrayWorld(src, corrected);
+                break;
+        }
         return Task.FromResult(imageReference);
     }
 
@@ -68,6 +78,35 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
                 return "white_patch";
 
             return "gray_world";
+        }
+        finally
+        {
+            foreach (var ch in channels)
+                ch.Dispose();
+        }
+    }
+
+    private static void ApplyGrayWorld(Mat src, Mat dst)
+    {
+        var channels = Cv2.Split(src);
+        try
+        {
+            double meanB = Cv2.Mean(channels[0]).Val0;
+            double meanG = Cv2.Mean(channels[1]).Val0;
+            double meanR = Cv2.Mean(channels[2]).Val0;
+
+            double overallMean = (meanB + meanG + meanR) / 3.0;
+
+            // Scale each channel to match overall mean
+            double scaleB = meanB > 0 ? overallMean / meanB : 1.0;
+            double scaleG = meanG > 0 ? overallMean / meanG : 1.0;
+            double scaleR = meanR > 0 ? overallMean / meanR : 1.0;
+
+            channels[0].ConvertTo(channels[0], MatType.CV_8UC1, scaleB);
+            channels[1].ConvertTo(channels[1], MatType.CV_8UC1, scaleG);
+            channels[2].ConvertTo(channels[2], MatType.CV_8UC1, scaleR);
+
+            Cv2.Merge(channels, dst);
         }
         finally
         {
