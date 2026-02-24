@@ -27,12 +27,54 @@ public sealed class MorphologyPlugin : IImageProcessingTool
         [Description("Number of iterations (1-10). More iterations = stronger effect.")] int iterations = 1,
         [Description("Kernel shape: 'rect' (sharp edges), 'cross' (directional), 'ellipse' (smooth/round).")] string kernelShape = "rect")
     {
-        // TODO: Implement actual morphology logic using OpenCvSharp
-        // Placeholder: return Task.FromResult("");
-        return Task.FromResult("");
-    }
-    public IEnumerable<AITool> GetAITools()
-    {
-        yield return AIFunctionFactory.Create(this.ApplyMorphology);
+        operation = operation.ToLowerInvariant();
+        kernelShape = kernelShape.ToLowerInvariant();
+
+        if (operation is not ("erode" or "dilate" or "open" or "close" or "gradient"))
+            throw new ArgumentException("operation must be 'erode', 'dilate', 'open', 'close', or 'gradient'");
+
+        if (kernelSize < 3 || kernelSize > 21 || kernelSize % 2 == 0)
+            throw new ArgumentException("kernelSize must be an odd number between 3 and 21");
+
+        if (iterations < 1 || iterations > 10)
+            throw new ArgumentException("iterations must be between 1 and 10");
+
+        if (kernelShape is not ("rect" or "cross" or "ellipse"))
+            throw new ArgumentException("kernelShape must be 'rect', 'cross', or 'ellipse'");
+
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        var shape = kernelShape switch
+        {
+            "cross" => MorphShapes.Cross,
+            "ellipse" => MorphShapes.Ellipse,
+            _ => MorphShapes.Rect
+        };
+
+        using var kernel = Cv2.GetStructuringElement(shape, new Size(kernelSize, kernelSize));
+        using var result = new Mat();
+
+        switch (operation)
+        {
+            case "erode":
+                Cv2.Erode(src, result, kernel, iterations: iterations);
+                break;
+            case "dilate":
+                Cv2.Dilate(src, result, kernel, iterations: iterations);
+                break;
+            case "open":
+                Cv2.MorphologyEx(src, result, MorphTypes.Open, kernel, iterations: iterations);
+                break;
+            case "close":
+                Cv2.MorphologyEx(src, result, MorphTypes.Close, kernel, iterations: iterations);
+                break;
+            case "gradient":
+                Cv2.MorphologyEx(src, result, MorphTypes.Gradient, kernel, iterations: iterations);
+                break;
+        }
     }
 }
