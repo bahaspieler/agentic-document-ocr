@@ -35,7 +35,44 @@ public sealed class InvertPlugin : IImageProcessingTool
 
         double meanBrightness = Cv2.Mean(gray).Val0;
 
-        return Task.FromResult(string.Empty);
+        bool shouldInvert;
+        switch (mode)
+        {
+            case "always":
+                shouldInvert = true;
+                break;
+
+            default: // auto + smart (smart comes later)
+                shouldInvert = meanBrightness < 127;
+                break;
+        }
+
+        using var output = new Mat();
+        if (shouldInvert)
+        {
+            Cv2.BitwiseNot(src, output);
+        }
+        else
+        {
+            src.CopyTo(output);
+        }
+
+        Cv2.ImEncode(".png", output, out var pngBytes);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "invert",
+            ["mode"] = mode,
+            ["wasInverted"] = shouldInvert.ToString(),
+            ["meanBrightness"] = meanBrightness.ToString("F1")
+        };
+
+        var baseRef = $"{imageReference}_invert_{mode}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
     public IEnumerable<AITool> GetAITools()
