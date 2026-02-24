@@ -30,8 +30,50 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
 
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+        string appliedMethod = method;
+
+        if (method == "auto")
+        {
+            appliedMethod = DetectBestMethod(src);
+        }
 
         return Task.FromResult(imageReference);
+    }
+
+    private static string DetectBestMethod(Mat src)
+    {
+        var channels = Cv2.Split(src);
+        try
+        {
+            double meanB = Cv2.Mean(channels[0]).Val0;
+            double meanG = Cv2.Mean(channels[1]).Val0;
+            double meanR = Cv2.Mean(channels[2]).Val0;
+
+            double overallMean = (meanB + meanG + meanR) / 3.0;
+
+            // standard deviation across channel means measures color cast strength
+            double variance = ((meanB - overallMean) * (meanB - overallMean) +
+                               (meanG - overallMean) * (meanG - overallMean) +
+                               (meanR - overallMean) * (meanR - overallMean)) / 3.0;
+            double stdDev = Math.Sqrt(variance);
+
+            // strong color cast so gray_world is best
+            if (stdDev > 15)
+                return "gray_world";
+
+            // brightness skew (one channel much brighter) so white_patch is best
+            double maxMean = Math.Max(meanB, Math.Max(meanG, meanR));
+            double minMean = Math.Min(meanB, Math.Min(meanG, meanR));
+            if (maxMean - minMean > 30)
+                return "white_patch";
+
+            return "gray_world";
+        }
+        finally
+        {
+            foreach (var ch in channels)
+                ch.Dispose();
+        }
     }
 
     public IEnumerable<AITool> GetAITools()
