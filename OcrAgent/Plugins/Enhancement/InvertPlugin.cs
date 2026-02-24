@@ -33,16 +33,22 @@ public sealed class InvertPlugin : IImageProcessingTool
         using var gray = new Mat();
         Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
-        double meanBrightness = Cv2.Mean(gray).Val0;
-
         bool shouldInvert;
+        double meanBrightness = Cv2.Mean(gray).Val0;
+        double darkPixelRatio = 0;
+
         switch (mode)
         {
             case "always":
                 shouldInvert = true;
                 break;
 
-            default: // auto + smart (smart comes later)
+            case "smart":
+                shouldInvert = meanBrightness < 127;
+                darkPixelRatio = 0;
+                break;
+
+            default: // auto
                 shouldInvert = meanBrightness < 127;
                 break;
         }
@@ -67,6 +73,11 @@ public sealed class InvertPlugin : IImageProcessingTool
             ["wasInverted"] = shouldInvert.ToString(),
             ["meanBrightness"] = meanBrightness.ToString("F1")
         };
+
+        if (mode == "smart")
+        {
+            meta["darkPixelRatio"] = darkPixelRatio.ToString("F3");
+        }
 
         var baseRef = $"{imageReference}_invert_{mode}";
         var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
