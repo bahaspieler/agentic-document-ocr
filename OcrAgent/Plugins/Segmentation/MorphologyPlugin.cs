@@ -76,5 +76,28 @@ public sealed class MorphologyPlugin : IImageProcessingTool
                 Cv2.MorphologyEx(src, result, MorphTypes.Gradient, kernel, iterations: iterations);
                 break;
         }
+
+        Cv2.ImEncode(".png", result, out var pngBytes);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "morphology",
+            ["operation"] = operation,
+            ["kernelSize"] = kernelSize.ToString(),
+            ["iterations"] = iterations.ToString(),
+            ["kernelShape"] = kernelShape
+        };
+
+        var baseRef = $"{imageReference}_morphology_{operation}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
+    }
+
+    public IEnumerable<AITool> GetAITools()
+    {
+        yield return AIFunctionFactory.Create(this.ApplyMorphology);
     }
 }
