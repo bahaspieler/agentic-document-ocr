@@ -53,7 +53,21 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
                 ApplyGrayWorld(src, corrected);
                 break;
         }
-        return Task.FromResult(imageReference);
+        Cv2.ImEncode(".png", corrected, out var pngBytes);
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "color_correction",
+            ["method"] = method,
+            ["appliedMethod"] = appliedMethod
+        };
+
+        var baseRef = $"{imageReference}_color_{appliedMethod}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
     }
 
     private static string DetectBestMethod(Mat src)
@@ -196,8 +210,9 @@ private static double GetPercentileValue(Mat channel, double percentile)
         }
     }
 
+
     public IEnumerable<AITool> GetAITools()
     {
-        yield break;
+        yield return AIFunctionFactory.Create(this.CorrectColor);
     }
 }
