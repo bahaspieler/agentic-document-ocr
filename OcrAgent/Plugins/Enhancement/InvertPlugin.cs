@@ -5,6 +5,10 @@ using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Inverts image colors (dark becomes light, light becomes dark).
+/// Useful for documents with light text on dark backgrounds.
+/// </summary>
 public sealed class InvertPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
@@ -85,20 +89,27 @@ public sealed class InvertPlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    /// <summary>
+    /// Examines the grayscale histogram to determine if a document has a dark background.
+    /// Considers both the position of the main histogram peak in the dark region and whether over 60% of pixels are dark.
+    /// </summary>
     private static (bool ShouldInvert, double DarkPixelRatio) AnalyzeDarkBackground(Mat gray)
     {
         double totalPixels = gray.Rows * gray.Cols;
 
+        // count pixels below brightness threshold of 100
         using var darkMask = new Mat();
         Cv2.Threshold(gray, darkMask, 100, 255, ThresholdTypes.BinaryInv);
         double darkPixels = Cv2.CountNonZero(darkMask);
         double darkRatio = darkPixels / totalPixels;
 
+        // check histogram peak location
         using var hist = new Mat();
         int[] histSize = { 256 };
         Rangef[] ranges = { new Rangef(0, 256) };
         Cv2.CalcHist(new[] { gray }, new[] { 0 }, null, hist, 1, histSize, ranges);
 
+        // the main histogram peak
         int peakBin = 0;
         float peakVal = 0;
         for (int i = 0; i < 256; i++)
@@ -111,6 +122,7 @@ public sealed class InvertPlugin : IImageProcessingTool
             }
         }
 
+        // dark background if: main histogram peak is in dark range and dark pixels > 60%
         bool isDarkBackground = peakBin < 80 && darkRatio > 0.60;
 
         return (isDarkBackground, darkRatio);
@@ -118,6 +130,6 @@ public sealed class InvertPlugin : IImageProcessingTool
 
     public IEnumerable<AITool> GetAITools()
     {
-        yield break;
+        yield return AIFunctionFactory.Create(this.InvertImage);
     }
 }
