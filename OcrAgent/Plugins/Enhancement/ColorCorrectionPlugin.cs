@@ -46,6 +46,9 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
             case "white_patch":
                 ApplyWhitePatch(src, corrected);
                 break;
+            case "histogram_match":
+                ApplyHistogramMatch(src, corrected);
+                break;
             default:
                 ApplyGrayWorld(src, corrected);
                 break;
@@ -165,6 +168,33 @@ private static double GetPercentileValue(Mat channel, double percentile)
     return 255;
 }
 
+    private static void ApplyHistogramMatch(Mat src, Mat dst)
+    {
+        using var lab = new Mat();
+        Cv2.CvtColor(src, lab, ColorConversionCodes.BGR2Lab);
+
+        var channels = Cv2.Split(lab);
+        try
+        {
+            // equalize the L channel (luminance)
+            Cv2.EqualizeHist(channels[0], channels[0]);
+
+            // equalize A and B channels
+            using var clahe = Cv2.CreateCLAHE(clipLimit: 1.0, tileGridSize: new Size(8, 8));
+            clahe.Apply(channels[1], channels[1]);
+            clahe.Apply(channels[2], channels[2]);
+
+            using var merged = new Mat();
+            Cv2.Merge(channels, merged);
+
+            Cv2.CvtColor(merged, dst, ColorConversionCodes.Lab2BGR);
+        }
+        finally
+        {
+            foreach (var ch in channels)
+                ch.Dispose();
+        }
+    }
 
     public IEnumerable<AITool> GetAITools()
     {
