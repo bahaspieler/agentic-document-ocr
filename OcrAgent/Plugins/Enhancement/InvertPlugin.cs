@@ -24,6 +24,17 @@ public sealed class InvertPlugin : IImageProcessingTool
         if (mode is not ("auto" or "always" or "smart"))
             throw new ArgumentException("mode must be 'auto', 'always', or 'smart'");
 
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        double meanBrightness = Cv2.Mean(gray).Val0;
+
         return Task.FromResult(string.Empty);
     }
 
