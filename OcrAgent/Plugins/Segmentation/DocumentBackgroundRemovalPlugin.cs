@@ -233,6 +233,65 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         return ScaleMaskToOriginal(mask, src.Width, src.Height);
     }
+    
+    /// <summary>
+    /// Generates a document mask using GrabCut foreground segmentation.
+    /// Can handle complex backgrounds.
+    /// </summary>
+    private Mat? GenerateGrabCutMask(Mat src, string sensitivity, string? debugPath, Mat? priorMask = null)
+    {
+        using var resized = ResizeForProcessing(src, 900, out var scale);
+
+        using var gcMask = new Mat(resized.Rows, resized.Cols, MatType.CV_8UC1, Scalar.All(0));
+        using var bgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
+        using var fgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
+
+        double m = sensitivity == "aggressive" ? 0.03 : 0.05;
+        int x = (int)(resized.Cols * m);
+        int y = (int)(resized.Rows * m);
+        int w = (int)(resized.Cols * (1.0 - 2 * m));
+        int h = (int)(resized.Rows * (1.0 - 2 * m));
+        var rect = new Rect(x, y, w, h);
+
+        if (priorMask != null)
+        {
+            using var scaledPrior = new Mat();
+            Cv2.Resize(priorMask, scaledPrior, resized.Size(), 0, 0, InterpolationFlags.Nearest);
+
+            gcMask.SetTo(new Scalar(2)); // GC_PR_BGD
+            for (int r = 0; r < gcMask.Rows; r++)
+                for (int c = 0; c < gcMask.Cols; c++)
+                    if (scaledPrior.At<byte>(r, c) > 127)
+                        gcMask.Set(r, c, (byte)3); // GC_PR_FGD
+
+            Cv2.GrabCut(resized, gcMask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithMask);
+        }
+        else
+        {
+            Cv2.GrabCut(resized, gcMask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithRect);
+        }
+
+        using var fg = new Mat();
+        using var sure = new Mat();
+        using var prob = new Mat();
+        const byte GC_FGD = 1;
+        const byte GC_PR_FGD = 3;
+
+        Cv2.InRange(gcMask, new Scalar(GC_FGD), new Scalar(GC_FGD), sure);
+        Cv2.InRange(gcMask, new Scalar(GC_PR_FGD), new Scalar(GC_PR_FGD), prob);
+        Cv2.BitwiseOr(sure, prob, fg);
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(13, 13));
+        Cv2.MorphologyEx(fg, fg, MorphTypes.Close, k, iterations: 2);
+
+        Cv2.FindContours(fg, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return null;
+
+        var mask = FillLargestContour(contours, resized.Width, resized.Height);
+        if (mask == null) return null;
+
+        return ScaleMaskToOriginal(mask, src.Width, src.Height);
+    }
 
     /// <summary>
     /// Builds a binary mask by fitting a MinAreaRect to the largest contour
