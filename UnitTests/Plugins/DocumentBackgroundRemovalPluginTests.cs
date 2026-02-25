@@ -108,6 +108,33 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         Assert.IsTrue(thrown, "Expected ArgumentException for invalid mode");
     }
 
+    [TestMethod]
+    public async Task RemoveBackground_InvalidSensitivity_ThrowsArgumentException()
+    {
+        bool thrown = false;
+        try { await _plugin.RemoveDocumentBackground(TestImageRef, sensitivity: "invalid_sens"); }
+        catch (ArgumentException) { thrown = true; }
+        Assert.IsTrue(thrown, "Expected ArgumentException for invalid sensitivity");
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_DebugMode_CreatesDebugFolder()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white", debug: true);
+
+        AssertImageValid(result);
+
+        var imagePath = Store.GetImagePath(docRef);
+        var storageDir = Path.GetDirectoryName(imagePath)!;
+        var debugDir = Path.Combine(storageDir, "bgremoval_debug", docRef);
+        Assert.IsTrue(Directory.Exists(debugDir), $"Debug folder should exist at {debugDir}");
+
+        var debugFiles = Directory.GetFiles(debugDir, "*.png");
+        Assert.IsTrue(debugFiles.Length >= 3, $"Debug folder should have at least 3 images, found {debugFiles.Length}");
+    }
+    
     /// <summary>
     /// Creates an image of a white document on a dark desk-colored background.
     /// </summary>
