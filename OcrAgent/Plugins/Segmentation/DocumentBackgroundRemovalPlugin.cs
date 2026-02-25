@@ -31,7 +31,6 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         [Description("Fill holes inside the document mask to prevent text cutout.")] bool fillHoles = true,
         [Description("Enable debug mode to save intermediate mask images.")] bool debug = false)
     {
-        // Only allow on_white for now
         mode = mode.ToLowerInvariant();
         if (mode is not ("on_white"))
             throw new ArgumentException("Only 'on_white' mode is supported in initial version");
@@ -54,8 +53,87 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             SaveDebugImage(src, debugPath, "00_input");
         }
 
+        var mask = GenerateEdgeBasedMask(src, sensitivity, debugPath);
+
+        if (mask == null)
+            throw new InvalidOperationException("No valid document mask could be generated from the image");
         
-        return Task.FromResult(string.Empty);
+        double coverage = Cv2.CountNonZero(mask) / (double)(src.Width * src.Height);
+
+        byte[] outputBytes;
+        
+        using (var result = ApplyMaskOnWhite(src, mask, false))
+        {
+            if (debugPath != null)
+                SaveDebugImage(result, debugPath, "70_output");
+            Cv2.ImEncode(".png", result, out outputBytes);
+        }
+
+        mask.Dispose();
+
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "remove_background",
+            ["mode"] = mode,
+            ["detectionMethod"] = "edges",
+            ["maskCoverage"] = coverage.ToString("F3", CultureInfo.InvariantCulture),
+            ["confidence"] = "1.00",
+            ["feather"] = feather.ToString(),
+            ["fillHoles"] = fillHoles.ToString()
+        };
+
+        var baseRef = $"{imageReference}_bgremoval_{mode}";
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
+        var newRef = _store.SaveBytes(outputBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
+    }
+
+    /// <summary>
+    /// Generates a basic document mask using Canny edge detection
+    /// </summary>
+    private Mat? GenerateEdgeBasedMask(Mat src, string sensitivity, string? debugPath)
+    {
+        using var resized = ResizeForProcessing(src, 900, out var scale);
+
+        // Just use grayscale for edge detection
+        using var gray = new Mat();
+        Cv2.CvtColor(resized, gray, ColorConversionCodes.BGR2GRAY);
+
+        (double lo, double hi) = sensitivity switch
+        {
+            "aggressive" => (25.0, 90.0),
+            "conservative" => (80.0, 200.0),
+            _ => (40.0, 120.0)
+        };
+
+        using var edges = new Mat();
+        Cv2.Canny(gray, edges, lo, hi);
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
+        Cv2.Dilate(edges, edges, k, iterations: 3);
+
+        Cv2.FindContours(edges, out var contours, out _,
+            RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return null;
+
+        // fill the largest contour
+        int maxIdx = -1; double maxArea = 0;
+        for (int i = 0; i < contours.Length; i++)
+        {
+            double area = Cv2.ContourArea(contours[i]);
+            if (area > maxArea)
+            {
+                maxArea = area;
+                maxIdx = i;
+            }
+        }
+        if (maxIdx == -1) return null;
+
+        var mask = new Mat(resized.Height, resized.Width, MatType.CV_8UC1, Scalar.All(0));
+        Cv2.DrawContours(mask, contours, maxIdx, Scalar.White, -1);
+        
+        return ScaleMaskToOriginal(mask, src.Width, src.Height);
     }
 
     private static Mat ResizeForProcessing(Mat src, int maxSide, out double scale)
