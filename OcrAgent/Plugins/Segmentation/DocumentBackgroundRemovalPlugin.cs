@@ -375,6 +375,76 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     }
 
     /// <summary>
+    /// Scores a binary mask by coverage, rectangularity, compactness, border contact,
+    /// and contrast.
+    /// </summary>
+    private static double CalculateMaskQuality(Mat mask, int imgW, int imgH,
+        double contrastRatio = 0.5, string method = "")
+    {
+        double imgArea = (double)imgW * imgH;
+        double maskPixels = Cv2.CountNonZero(mask);
+        double coverage = maskPixels / imgArea;
+
+        if (coverage < MinMaskCoverage || coverage > MaxMaskCoverage)
+            return 0.0;
+
+        double score = 0.0;
+
+        if (coverage >= 0.15 && coverage <= 0.85)
+            score += 0.30;
+        else if (coverage > 0.85)
+            score += 0.15;
+        else
+            score += coverage * 1.5;
+
+        Cv2.FindContours(mask, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length > 0)
+        {
+            var largest = contours.OrderByDescending(c => Cv2.ContourArea(c)).First();
+            double contourArea = Cv2.ContourArea(largest);
+            var minRect = Cv2.MinAreaRect(largest);
+            double rectArea = minRect.Size.Width * minRect.Size.Height;
+            double rectangularity = rectArea > 0 ? contourArea / rectArea : 0;
+            score += rectangularity * 0.30;
+        }
+
+        int numComponents = contours.Length;
+        if (numComponents == 1)
+            score += 0.20;
+        else if (numComponents <= 3)
+            score += 0.10;
+
+        int edgesTouched = 0;
+        for (int col = 0; col < imgW; col++)
+        {
+            if (mask.At<byte>(0, col) > 0) { edgesTouched |= 1; break; }
+        }
+        for (int col = 0; col < imgW; col++)
+        {
+            if (mask.At<byte>(imgH - 1, col) > 0) { edgesTouched |= 2; break; }
+        }
+        for (int row = 0; row < imgH; row++)
+        {
+            if (mask.At<byte>(row, 0) > 0) { edgesTouched |= 4; break; }
+        }
+        for (int row = 0; row < imgH; row++)
+        {
+            if (mask.At<byte>(row, imgW - 1) > 0) { edgesTouched |= 8; break; }
+        }
+        int touchedCount = System.Numerics.BitOperations.PopCount((uint)edgesTouched);
+        if (touchedCount == 4)
+            score -= 0.15;
+
+        // contrast-aware scoring: low contrast means brightness methods might be unreliable
+        if (contrastRatio < 0.25 && method is "edges")
+            score += 0.15;
+        else if (contrastRatio > 0.4 && method is "otsu" or "hsv")
+            score += 0.10;
+
+        return Math.Max(0.0, Math.Min(1.0, score));
+    }
+
+    /// <summary>
     /// Cleans the mask: fill holes, morphological close, keep largest component.
     /// </summary>
     private static Mat CleanupMask(Mat rawMask, bool fillHoles, string? debugPath)
