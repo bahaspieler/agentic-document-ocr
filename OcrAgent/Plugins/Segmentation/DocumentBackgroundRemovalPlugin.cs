@@ -164,6 +164,70 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         return result;
     }
 
+    /// <summary>
+    /// Builds a binary mask by fitting a MinAreaRect to the largest contour
+    /// and merging nearby smaller contours that are within the largest contour.
+    /// </summary>
+    private static Mat? FillLargestContour(Point[][] contours, int imgW, int imgH)
+    {
+        double imgArea = (double)imgW * imgH;
+
+        var ranked = contours
+            .Select(c => (Contour: c, Area: Cv2.ContourArea(c)))
+            .Where(c =>
+            {
+                double ratio = c.Area / imgArea;
+                return ratio >= MinMaskCoverage && ratio <= MaxMaskCoverage;
+            })
+            .OrderByDescending(c => c.Area)
+            .ToList();
+
+        if (ranked.Count == 0) return null;
+
+        var largest = ranked[0];
+        var minRect = Cv2.MinAreaRect(largest.Contour);
+
+        // expand by 2% to avoid clipping document edges
+        minRect.Size = new Size2f(
+            minRect.Size.Width * 1.02f,
+            minRect.Size.Height * 1.02f);
+
+        var boxPts = Cv2.BoxPoints(minRect)
+            .Select(p => new Point(
+                Math.Clamp((int)p.X, 0, imgW - 1),
+                Math.Clamp((int)p.Y, 0, imgH - 1)))
+            .ToArray();
+
+        var mask = new Mat(imgH, imgW, MatType.CV_8UC1, Scalar.All(0));
+        Cv2.FillConvexPoly(mask, boxPts, Scalar.White);
+
+        var mainBounds = Cv2.BoundingRect(boxPts);
+        var expanded = ExpandRect(mainBounds, imgW, imgH, 0.03);
+
+        foreach (var (contour, area) in ranked.Skip(1))
+        {
+            double ratio = area / imgArea;
+            if (ratio < 0.01) continue;
+
+            var cRect = Cv2.BoundingRect(contour);
+            if (RectsOverlap(expanded, cRect))
+            {
+                var subRect = Cv2.MinAreaRect(contour);
+                subRect.Size = new Size2f(
+                    subRect.Size.Width * 1.02f,
+                    subRect.Size.Height * 1.02f);
+                var subPts = Cv2.BoxPoints(subRect)
+                    .Select(p => new Point(
+                        Math.Clamp((int)p.X, 0, imgW - 1),
+                        Math.Clamp((int)p.Y, 0, imgH - 1)))
+                    .ToArray();
+                Cv2.FillConvexPoly(mask, subPts, Scalar.White);
+            }
+        }
+
+        return mask;
+    }
+
     private static Rect ExpandRect(Rect r, int imgW, int imgH, double margin)
     {
         int mx = (int)(r.Width * margin);
