@@ -164,6 +164,41 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         return result;
     }
 
+    private static Rect ExpandRect(Rect r, int imgW, int imgH, double margin)
+    {
+        int mx = (int)(r.Width * margin);
+        int my = (int)(r.Height * margin);
+        int x = Math.Max(0, r.X - mx);
+        int y = Math.Max(0, r.Y - my);
+        int right = Math.Min(imgW, r.X + r.Width + mx);
+        int bottom = Math.Min(imgH, r.Y + r.Height + my);
+        return new Rect(x, y, right - x, bottom - y);
+    }
+
+    private static bool RectsOverlap(Rect a, Rect b)
+    {
+        return a.X < b.X + b.Width && a.X + a.Width > b.X &&
+               a.Y < b.Y + b.Height && a.Y + a.Height > b.Y;
+    }
+
+    /// <summary>
+    /// Applies Gaussian blur to mask edges for smooth edges.
+    /// </summary>
+    private static Mat ApplyFeathering(Mat cleanedMask, int feather, string? debugPath)
+    {
+        if (feather <= 0)
+            return cleanedMask.Clone();
+
+        int kernelSize = feather * 2 + 1;
+        var feathered = new Mat();
+        Cv2.GaussianBlur(cleanedMask, feathered, new Size(kernelSize, kernelSize), 0);
+
+        if (debugPath != null)
+            SaveDebugImage(feathered, debugPath, "60_feathered_mask");
+
+        return feathered;
+    }
+
     private static Mat ResizeForProcessing(Mat src, int maxSide, out double scale)
     {
         int w = src.Width;
