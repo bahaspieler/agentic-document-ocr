@@ -43,5 +43,13 @@ public sealed class ColorCorrectionPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("white_patch", meta["method"]);
     }
+    [TestMethod]
+    public async Task CorrectColor_HistogramMatch_ProducesOutput()
+    {
+        var result = await _plugin.CorrectColor(TestImageRef, "histogram_match");
 
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("histogram_match", meta["method"]);
+    }
 }
