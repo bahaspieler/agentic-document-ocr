@@ -7,7 +7,8 @@ using System.Globalization;
 namespace OcrAgent.Plugins.Segmentation;
 
 /// <summary>
-/// Removes non-document background from images using multi-strategy mask generation.
+/// Removes non-document background from images using multi-strategy
+/// mask generation.
 /// </summary>
 public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 {
