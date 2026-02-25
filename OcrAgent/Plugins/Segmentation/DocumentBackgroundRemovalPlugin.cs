@@ -7,7 +7,7 @@ using System.Globalization;
 namespace OcrAgent.Plugins.Segmentation;
 
 /// <summary>
-/// Removes non-document background from images using edge-based mask generation.
+/// Removes non-document background from images using multi-strategy mask generation.
 /// </summary>
 public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 {
@@ -53,12 +53,12 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             SaveDebugImage(src, debugPath, "00_input");
         }
 
-        var mask = GenerateEdgeBasedMask(src, sensitivity, debugPath);
+        var (winnerMask, winnerScore, winnerMethod) = GenerateMasksMultiStrategy(src, sensitivity, debugPath);
 
-        if (mask == null)
+        if (winnerMask == null)
             throw new InvalidOperationException("No valid document mask could be generated from the image");
 
-        using var cleanedMask = CleanupMask(mask, fillHoles, debugPath);
+        using var cleanedMask = CleanupMask(winnerMask, fillHoles, debugPath);
 
         double coverage = Cv2.CountNonZero(cleanedMask) / (double)(src.Width * src.Height);
 
@@ -77,16 +77,16 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             Cv2.ImEncode(".png", result, out outputBytes);
         }
 
-        mask.Dispose();
+        winnerMask.Dispose();
 
         var meta = new Dictionary<string, string>
         {
             ["parent"] = imageReference,
             ["op"] = "remove_background",
             ["mode"] = mode,
-            ["detectionMethod"] = "edges",
+            ["detectionMethod"] = winnerMethod,
             ["maskCoverage"] = coverage.ToString("F3", CultureInfo.InvariantCulture),
-            ["confidence"] = "1.00",
+            ["confidence"] = winnerScore.ToString("F2", CultureInfo.InvariantCulture),
             ["feather"] = feather.ToString(),
             ["fillHoles"] = fillHoles.ToString()
         };
