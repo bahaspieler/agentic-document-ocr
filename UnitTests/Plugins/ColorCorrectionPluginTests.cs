@@ -61,4 +61,15 @@ public sealed class ColorCorrectionPluginTests : PluginTestBase
         catch (ArgumentException) { thrown = true; }
         Assert.IsTrue(thrown, "Expected ArgumentException for invalid method");
     }
+    [TestMethod]
+    public async Task CorrectColor_StoresMetadata()
+    {
+        var result = await _plugin.CorrectColor(TestImageRef, "gray_world");
+
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(TestImageRef, meta["parent"]);
+        Assert.AreEqual("color_correction", meta["op"]);
+        Assert.AreEqual("gray_world", meta["method"]);
+        Assert.AreEqual("gray_world", meta["appliedMethod"]);
+    }
 }
