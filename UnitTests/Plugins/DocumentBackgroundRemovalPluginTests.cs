@@ -15,6 +15,35 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         _plugin = new DocumentBackgroundRemovalPlugin(Store);
     }
 
+    [TestMethod]
+    public async Task RemoveBackground_OnWhite_ProducesOutput()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("remove_background", meta["op"]);
+        Assert.AreEqual("on_white", meta["mode"]);
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_MaskOnly_ProducesOutput()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "mask_only");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("mask_only", meta["mode"]);
+
+        var path = Store.GetImagePath(result);
+        using var maskImg = Cv2.ImRead(path, ImreadModes.Grayscale);
+        Assert.IsFalse(maskImg.Empty());
+    }
+
     /// <summary>
     /// Creates an image of a white document on a dark desk-colored background.
     /// </summary>
