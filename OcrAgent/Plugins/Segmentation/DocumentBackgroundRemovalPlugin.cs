@@ -95,10 +95,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     private Mat? GenerateEdgeBasedMask(Mat src, string sensitivity, string? debugPath)
     {
         using var resized = ResizeForProcessing(src, 900, out var scale);
+        using var normalized = NormalizeForSegmentation(resized);
 
-        // Just use grayscale for edge detection
-        using var gray = new Mat();
-        Cv2.CvtColor(resized, gray, ColorConversionCodes.BGR2GRAY);
+        using var filtered = new Mat();
+        Cv2.BilateralFilter(normalized, filtered, 9, 75, 75);
 
         (double lo, double hi) = sensitivity switch
         {
@@ -108,31 +108,19 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         };
 
         using var edges = new Mat();
-        Cv2.Canny(gray, edges, lo, hi);
+        Cv2.Canny(filtered, edges, lo, hi);
 
         using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
         Cv2.Dilate(edges, edges, k, iterations: 3);
+        Cv2.MorphologyEx(edges, edges, MorphTypes.Close, k, iterations: 3);
 
         Cv2.FindContours(edges, out var contours, out _,
             RetrievalModes.External, ContourApproximationModes.ApproxSimple);
         if (contours.Length == 0) return null;
 
-        // fill the largest contour
-        int maxIdx = -1; double maxArea = 0;
-        for (int i = 0; i < contours.Length; i++)
-        {
-            double area = Cv2.ContourArea(contours[i]);
-            if (area > maxArea)
-            {
-                maxArea = area;
-                maxIdx = i;
-            }
-        }
-        if (maxIdx == -1) return null;
+        var mask = FillLargestContour(contours, resized.Width, resized.Height);
+        if (mask == null) return null;
 
-        var mask = new Mat(resized.Height, resized.Width, MatType.CV_8UC1, Scalar.All(0));
-        Cv2.DrawContours(mask, contours, maxIdx, Scalar.White, -1);
-        
         return ScaleMaskToOriginal(mask, src.Width, src.Height);
     }
     
