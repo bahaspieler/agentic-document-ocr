@@ -143,6 +143,108 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     }
     
     /// <summary>
+    /// Generates a document mask using multiple strategies.
+    /// </summary>
+    private (Mat? Mask, double Score, string Method) GenerateMasksMultiStrategy(
+        Mat src, string sensitivity, string? debugPath)
+    {
+        double contrastRatio = AnalyzeBackgroundContrast(src);
+        var candidates = new List<(Mat Mask, double Score, string Method)>();
+
+        if (debugPath != null)
+        {
+            using var normVis = NormalizeForSegmentation(src);
+            SaveDebugImage(normVis, debugPath, "05_normalized");
+        }
+
+        var otsuMask = GenerateOtsuPaperMask(src, sensitivity, debugPath);
+        if (otsuMask != null)
+        {
+            double score = CalculateMaskQuality(otsuMask, src.Width, src.Height, contrastRatio, "otsu");
+            candidates.Add((otsuMask, score, "otsu"));
+            if (debugPath != null)
+                SaveDebugMaskOverlay(src, otsuMask, debugPath, $"10_otsu_mask_q{score:F2}");
+        }
+
+        var hsvMask = GenerateHsvLightRegionMask(src, sensitivity, debugPath);
+        if (hsvMask != null)
+        {
+            double score = CalculateMaskQuality(hsvMask, src.Width, src.Height, contrastRatio, "hsv");
+            candidates.Add((hsvMask, score, "hsv"));
+            if (debugPath != null)
+                SaveDebugMaskOverlay(src, hsvMask, debugPath, $"20_hsv_mask_q{score:F2}");
+        }
+
+        var edgeMask = GenerateEdgeBasedMask(src, sensitivity, debugPath);
+        if (edgeMask != null)
+        {
+            double score = CalculateMaskQuality(edgeMask, src.Width, src.Height, contrastRatio, "edges");
+            candidates.Add((edgeMask, score, "edges"));
+            if (debugPath != null)
+                SaveDebugMaskOverlay(src, edgeMask, debugPath, $"25_edges_mask_q{score:F2}");
+        }
+
+        // seed GrabCut with the best mask from brightness/edge strategies
+        Mat? priorMask = null;
+        if (candidates.Count > 0)
+        {
+            var bestPrior = candidates.OrderByDescending(c => c.Score).First();
+            if (bestPrior.Score > 0.3)
+                priorMask = bestPrior.Mask;
+        }
+
+        var grabcutMask = GenerateGrabCutMask(src, sensitivity, debugPath, priorMask);
+        if (grabcutMask != null)
+        {
+            double score = CalculateMaskQuality(grabcutMask, src.Width, src.Height, contrastRatio, "grabcut");
+            candidates.Add((grabcutMask, score, "grabcut"));
+            if (debugPath != null)
+                SaveDebugMaskOverlay(src, grabcutMask, debugPath, $"30_grabcut_mask_q{score:F2}");
+        }
+
+        if (candidates.Count == 0)
+            return (null, 0.0, "none");
+
+        // single candidate
+        if (candidates.Count == 1)
+            return (candidates[0].Mask, candidates[0].Score, candidates[0].Method);
+
+        // weighted pixel-voting combination
+        using var voteMap = new Mat(src.Height, src.Width, MatType.CV_32FC1, Scalar.All(0));
+        double totalWeight = 0;
+        foreach (var (mask, score, _) in candidates)
+        {
+            using var sized = (mask.Width == src.Width && mask.Height == src.Height)
+                ? mask.Clone()
+                : new Mat();
+            if (mask.Width != src.Width || mask.Height != src.Height)
+                Cv2.Resize(mask, sized, src.Size(), 0, 0, InterpolationFlags.Nearest);
+
+            using var floatMask = new Mat();
+            sized.ConvertTo(floatMask, MatType.CV_32FC1, score / 255.0);
+            Cv2.Add(voteMap, floatMask, voteMap);
+            totalWeight += score;
+        }
+
+        double voteThreshold = totalWeight * 0.4;
+        var combinedMask = new Mat();
+        Cv2.Threshold(voteMap, combinedMask, voteThreshold, 255, ThresholdTypes.Binary);
+        combinedMask.ConvertTo(combinedMask, MatType.CV_8UC1);
+
+        string combinedMethod = string.Join("+",
+            candidates.OrderByDescending(c => c.Score).Select(c => c.Method));
+        double combinedScore = candidates.Max(c => c.Score);
+
+        foreach (var c in candidates)
+            c.Mask.Dispose();
+
+        if (debugPath != null)
+            SaveDebugMaskOverlay(src, combinedMask, debugPath, "40_combined_vote");
+
+        return (combinedMask, combinedScore, combinedMethod);
+    }
+    
+    /// <summary>
     /// Generates a basic document mask using Canny edge detection
     /// </summary>
     private Mat? GenerateEdgeBasedMask(Mat src, string sensitivity, string? debugPath)
