@@ -86,6 +86,27 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         Assert.IsTrue(meta.ContainsKey("feather"), "Should have feather");
         Assert.IsTrue(meta.ContainsKey("fillHoles"), "Should have fillHoles");
     }
+    
+    [TestMethod]
+    public async Task RemoveBackground_WithFeather_ProducesOutput()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white", feather: 5);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("5", meta["feather"]);
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_InvalidMode_ThrowsArgumentException()
+    {
+        bool thrown = false;
+        try { await _plugin.RemoveDocumentBackground(TestImageRef, "invalid_mode"); }
+        catch (ArgumentException) { thrown = true; }
+        Assert.IsTrue(thrown, "Expected ArgumentException for invalid mode");
+    }
 
     /// <summary>
     /// Creates an image of a white document on a dark desk-colored background.
