@@ -52,4 +52,13 @@ public sealed class ColorCorrectionPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("histogram_match", meta["method"]);
     }
+
+    [TestMethod]
+    public async Task CorrectColor_InvalidMethod_ThrowsArgumentException()
+    {
+        bool thrown = false;
+        try { await _plugin.CorrectColor(TestImageRef, "invalid"); }
+        catch (ArgumentException) { thrown = true; }
+        Assert.IsTrue(thrown, "Expected ArgumentException for invalid method");
+    }
 }
