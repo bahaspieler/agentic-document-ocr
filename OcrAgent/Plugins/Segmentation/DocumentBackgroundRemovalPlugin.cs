@@ -124,7 +124,24 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         Cv2.Normalize(result, result, 0, 255, NormTypes.MinMax);
         return result;
     }
+    
+    /// <summary>
+    /// Analyzes image contrast to determine if brightness-based methods might work.
+    /// Low ratio = light background (stone, wood) where Otsu/HSV might fail.
+    /// High ratio = dark background (dark blue, black) where Otsu/HSV might work.
+    /// </summary>
+    private static double AnalyzeBackgroundContrast(Mat src)
+    {
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
+        Cv2.MeanStdDev(gray, out var mean, out var stddev);
+        double grayMean = mean[0];
+        double grayStd = stddev[0];
+
+        return grayStd / Math.Max(grayMean, 1.0);
+    }
+    
     /// <summary>
     /// Generates a basic document mask using Canny edge detection
     /// </summary>
