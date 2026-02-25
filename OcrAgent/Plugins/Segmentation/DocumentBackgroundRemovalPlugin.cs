@@ -371,13 +371,46 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     }
 
     /// <summary>
-    /// Applies the mask to produce a white-background output (no feathering).
+    /// Applies the mask to produce a white-background output.
+    /// Uses alpha blending when the mask is feathered.
     /// </summary>
     private static Mat ApplyMaskOnWhite(Mat src, Mat mask, bool isFeathered)
     {
-        var output = new Mat(src.Size(), src.Type(), Scalar.White);
-        src.CopyTo(output, mask);
-        return output;
+        if (!isFeathered)
+        {
+            var output = new Mat(src.Size(), src.Type(), Scalar.White);
+            src.CopyTo(output, mask);
+            return output;
+        }
+
+        // alpha-blend for feathered masks
+        using var srcFloat = new Mat();
+        src.ConvertTo(srcFloat, MatType.CV_32FC3, 1.0 / 255.0);
+
+        using var alpha1c = new Mat();
+        mask.ConvertTo(alpha1c, MatType.CV_32FC1, 1.0 / 255.0);
+
+        using var alpha3c = new Mat();
+        Cv2.Merge(new[] { alpha1c, alpha1c, alpha1c }, alpha3c);
+
+        using var invAlpha = new Mat();
+        using var ones3c = new Mat(alpha3c.Size(), alpha3c.Type(), new Scalar(1.0, 1.0, 1.0));
+        Cv2.Subtract(ones3c, alpha3c, invAlpha);
+
+        using var whiteFloat = new Mat(src.Size(), MatType.CV_32FC3, new Scalar(1.0, 1.0, 1.0));
+
+        using var fg = new Mat();
+        Cv2.Multiply(srcFloat, alpha3c, fg);
+
+        using var bg = new Mat();
+        Cv2.Multiply(whiteFloat, invAlpha, bg);
+
+        using var blended = new Mat();
+        Cv2.Add(fg, bg, blended);
+
+        var result = new Mat();
+        blended.ConvertTo(result, MatType.CV_8UC3, 255.0);
+        return result;
     }
 
     private string PrepareDebugFolder(string imageReference)
