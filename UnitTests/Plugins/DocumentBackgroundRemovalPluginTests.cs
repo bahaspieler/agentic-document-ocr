@@ -135,6 +135,28 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         Assert.IsTrue(debugFiles.Length >= 3, $"Debug folder should have at least 3 images, found {debugFiles.Length}");
     }
     
+    [TestMethod]
+    public async Task RemoveBackground_MaskCoverage_IsReasonable()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white");
+
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("maskCoverage"), "Should have maskCoverage");
+
+        bool parsed = double.TryParse(meta["maskCoverage"],
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out double coverage);
+        if (!parsed)
+            parsed = double.TryParse(meta["maskCoverage"], out coverage);
+
+        Assert.IsTrue(parsed, $"maskCoverage should be parseable, got '{meta["maskCoverage"]}'");
+        Assert.IsTrue(coverage >= 0.1 && coverage <= 0.95,
+            $"maskCoverage should be between 0.1 and 0.95, got {coverage}");
+    }
+    
     /// <summary>
     /// Creates an image of a white document on a dark desk-colored background.
     /// </summary>
