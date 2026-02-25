@@ -32,8 +32,8 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         [Description("Enable debug mode to save intermediate mask images.")] bool debug = false)
     {
         mode = mode.ToLowerInvariant();
-        if (mode is not ("on_white"))
-            throw new ArgumentException("Only 'on_white' mode is supported in initial version");
+        if (mode is not ("on_white" or "mask_only"))
+            throw new ArgumentException("mode must be 'on_white' or 'mask_only'");
 
         sensitivity = sensitivity.ToLowerInvariant();
         if (sensitivity is not ("auto" or "aggressive" or "conservative"))
@@ -57,13 +57,21 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         if (mask == null)
             throw new InvalidOperationException("No valid document mask could be generated from the image");
-        
-        double coverage = Cv2.CountNonZero(mask) / (double)(src.Width * src.Height);
+
+        using var cleanedMask = CleanupMask(mask, fillHoles, debugPath);
+
+        double coverage = Cv2.CountNonZero(cleanedMask) / (double)(src.Width * src.Height);
+
+        using var finalMask = ApplyFeathering(cleanedMask, feather, debugPath);
 
         byte[] outputBytes;
-        
-        using (var result = ApplyMaskOnWhite(src, mask, false))
+        if (mode == "mask_only")
         {
+            Cv2.ImEncode(".png", cleanedMask, out outputBytes);
+        }
+        else
+        {
+            using var result = ApplyMaskOnWhite(src, finalMask, feather > 0);
             if (debugPath != null)
                 SaveDebugImage(result, debugPath, "70_output");
             Cv2.ImEncode(".png", result, out outputBytes);
