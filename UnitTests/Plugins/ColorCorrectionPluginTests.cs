@@ -13,4 +13,15 @@ public sealed class ColorCorrectionPluginTests : PluginTestBase
     {
         _plugin = new ColorCorrectionPlugin(Store);
     }
+    [TestMethod]
+    public async Task CorrectColor_Auto_ProducesOutput()
+    {
+        var result = await _plugin.CorrectColor(TestImageRef, "auto");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("color_correction", meta["op"]);
+        Assert.AreEqual("auto", meta["method"]);
+        Assert.IsTrue(meta.ContainsKey("appliedMethod"));
+    }
 }
