@@ -431,6 +431,33 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         Cv2.ImWrite(filePath, img);
     }
 
+    /// <summary>
+    /// Debug visualization with the mask overlaid on the source image.
+    /// </summary>
+    private static void SaveDebugMaskOverlay(Mat src, Mat mask, string debugPath, string name)
+    {
+        using var vis = src.Clone();
+
+        using var scaledMask = mask.Width != src.Width || mask.Height != src.Height
+            ? new Mat()
+            : mask.Clone();
+
+        if (mask.Width != src.Width || mask.Height != src.Height)
+            Cv2.Resize(mask, scaledMask, src.Size(), 0, 0, InterpolationFlags.Nearest);
+
+        // green overlay on masked region
+        using var overlay = new Mat(src.Size(), src.Type(), new Scalar(0, 180, 0));
+        overlay.CopyTo(vis, scaledMask);
+        Cv2.AddWeighted(src, 0.6, vis, 0.4, 0, vis);
+
+        double coverage = Cv2.CountNonZero(scaledMask) / (double)(src.Width * src.Height);
+        Cv2.PutText(vis, $"Coverage: {coverage:P0}", new Point(10, 30),
+            HersheyFonts.HersheySimplex, 0.8, new Scalar(0, 255, 255), 2);
+
+        var filePath = Path.Combine(debugPath, $"{name}.png");
+        Cv2.ImWrite(filePath, vis);
+    }
+
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.RemoveDocumentBackground);
