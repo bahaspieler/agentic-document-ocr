@@ -55,4 +55,11 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         return Store.SaveBytes(pngBytes, "png",
             new Dictionary<string, string> { ["source"] = "test_textured" }, "TEXTDOC001");
     }
+
+    private static void AssertPixelIsWhiteish(Vec3b pixel, string location)
+    {
+        bool isWhiteish = pixel.Item0 >= 220 && pixel.Item1 >= 220 && pixel.Item2 >= 220;
+        Assert.IsTrue(isWhiteish,
+            $"Pixel at {location} should be white-ish but was ({pixel.Item0}, {pixel.Item1}, {pixel.Item2})");
+    }
 }
