@@ -79,6 +79,33 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         return dst;
     }
 
+    /// <summary>
+    /// Scales a mask generated at reduced resolution back to original image dimensions.
+    /// </summary>
+    private static Mat ScaleMaskToOriginal(Mat smallMask, int origW, int origH)
+    {
+        if (smallMask.Width == origW && smallMask.Height == origH)
+            return smallMask;
+
+        var fullMask = new Mat();
+        Cv2.Resize(smallMask, fullMask, new Size(origW, origH), 0, 0, InterpolationFlags.Nearest);
+        smallMask.Dispose();
+
+        // re-binarize after resize to ensure clean 0/255 values
+        Cv2.Threshold(fullMask, fullMask, 127, 255, ThresholdTypes.Binary);
+        return fullMask;
+    }
+
+    /// <summary>
+    /// Applies the mask to produce a white-background output (no feathering).
+    /// </summary>
+    private static Mat ApplyMaskOnWhite(Mat src, Mat mask, bool isFeathered)
+    {
+        var output = new Mat(src.Size(), src.Type(), Scalar.White);
+        src.CopyTo(output, mask);
+        return output;
+    }
+
     private string PrepareDebugFolder(string imageReference)
     {
         var storagePath = Path.GetDirectoryName(_store.GetImagePath(imageReference)) ?? ".";
