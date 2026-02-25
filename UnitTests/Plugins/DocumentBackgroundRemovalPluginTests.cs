@@ -35,4 +35,24 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         return Store.SaveBytes(pngBytes, "png",
             new Dictionary<string, string> { ["source"] = "test_desk_doc" }, "DESKDOC001");
     }
+
+    /// <summary>
+    /// Creates an image of a white document on a gray textured surface.
+    /// </summary>
+    private string CreateDocumentOnTexturedBackground()
+    {
+        using var img = new Mat(400, 300, MatType.CV_8UC3, new Scalar(120, 115, 110));
+
+        // add noise to simulate texture
+        using var noise = new Mat(400, 300, MatType.CV_8UC3);
+        Cv2.Randn(noise, new Scalar(0, 0, 0), new Scalar(15, 15, 15));
+        Cv2.Add(img, noise, img);
+
+        // white document
+        Cv2.Rectangle(img, new Rect(35, 45, 230, 310), new Scalar(245, 245, 245), -1);
+
+        Cv2.ImEncode(".png", img, out var pngBytes);
+        return Store.SaveBytes(pngBytes, "png",
+            new Dictionary<string, string> { ["source"] = "test_textured" }, "TEXTDOC001");
+    }
 }
