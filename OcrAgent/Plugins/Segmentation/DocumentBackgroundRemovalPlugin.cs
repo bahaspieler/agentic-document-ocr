@@ -176,6 +176,63 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         return ScaleMaskToOriginal(mask, src.Width, src.Height);
     }
+    
+    /// <summary>
+    /// Generates a document mask using Otsu thresholding on grayscale.
+    /// </summary>
+    private Mat? GenerateOtsuPaperMask(Mat src, string sensitivity, string? debugPath)
+    {
+        using var resized = ResizeForProcessing(src, 900, out var scale);
+        using var normalized = NormalizeForSegmentation(resized);
+
+        using var blurred = new Mat();
+        Cv2.GaussianBlur(normalized, blurred, new Size(5, 5), 0);
+
+        using var bin = new Mat();
+        Cv2.Threshold(blurred, bin, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+        int kSize = sensitivity == "aggressive" ? 17 : 21;
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(kSize, kSize));
+        Cv2.MorphologyEx(bin, bin, MorphTypes.Close, k, iterations: 2);
+        Cv2.MorphologyEx(bin, bin, MorphTypes.Open, k, iterations: 1);
+
+        Cv2.FindContours(bin, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return null;
+
+        var mask = FillLargestContour(contours, resized.Width, resized.Height);
+        if (mask == null) return null;
+
+        return ScaleMaskToOriginal(mask, src.Width, src.Height);
+    }
+
+    /// <summary>
+    /// Generates a document mask using HSV color space segmentation.
+    /// </summary>
+    private Mat? GenerateHsvLightRegionMask(Mat src, string sensitivity, string? debugPath)
+    {
+        using var resized = ResizeForProcessing(src, 900, out var scale);
+
+        using var hsv = new Mat();
+        Cv2.CvtColor(resized, hsv, ColorConversionCodes.BGR2HSV);
+
+        int sMax = sensitivity == "aggressive" ? 120 : 85;
+        int vMin = sensitivity == "conservative" ? 185 : 165;
+
+        using var regionMask = new Mat();
+        Cv2.InRange(hsv, new Scalar(0, 0, vMin), new Scalar(180, sMax, 255), regionMask);
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(19, 19));
+        Cv2.MorphologyEx(regionMask, regionMask, MorphTypes.Close, k, iterations: 2);
+        Cv2.MorphologyEx(regionMask, regionMask, MorphTypes.Open, k, iterations: 1);
+
+        Cv2.FindContours(regionMask, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        if (contours.Length == 0) return null;
+
+        var mask = FillLargestContour(contours, resized.Width, resized.Height);
+        if (mask == null) return null;
+
+        return ScaleMaskToOriginal(mask, src.Width, src.Height);
+    }
 
     /// <summary>
     /// Builds a binary mask by fitting a MinAreaRect to the largest contour
