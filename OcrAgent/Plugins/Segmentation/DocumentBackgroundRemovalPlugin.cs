@@ -246,6 +246,79 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     }
 
     /// <summary>
+    /// Cleans the mask: fill holes, morphological close, keep largest component.
+    /// </summary>
+    private static Mat CleanupMask(Mat rawMask, bool fillHoles, string? debugPath)
+    {
+        var mask = rawMask.Clone();
+
+        if (fillHoles)
+        {
+            using var inverted = new Mat();
+            Cv2.BitwiseNot(mask, inverted);
+            Cv2.FindContours(inverted, out var holeContours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            int h = mask.Rows, w = mask.Cols;
+            foreach (var contour in holeContours)
+            {
+                bool touchesBorder = contour.Any(p =>
+                    p.X <= 1 || p.Y <= 1 || p.X >= w - 2 || p.Y >= h - 2);
+                if (!touchesBorder)
+                    Cv2.DrawContours(mask, new[] { contour }, 0, Scalar.White, -1);
+            }
+        }
+
+        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
+        Cv2.MorphologyEx(mask, mask, MorphTypes.Close, k, iterations: 1);
+
+        KeepLargestComponent(mask);
+
+        if (debugPath != null)
+            SaveDebugImage(mask, debugPath, "50_cleaned_mask");
+
+        return mask;
+    }
+
+    /// <summary>
+    /// Keeps only the largest connected foreground component.
+    /// </summary>
+    private static void KeepLargestComponent(Mat mask)
+    {
+        var labels = new Mat();
+        var stats = new Mat();
+        var centroids = new Mat();
+        int numLabels = Cv2.ConnectedComponentsWithStats(mask, labels, stats, centroids);
+
+        if (numLabels <= 2) return; // 0=background, 1=largest component
+
+        int largestLabel = 1;
+        int largestArea = 0;
+        for (int i = 1; i < numLabels; i++)
+        {
+            int area = stats.At<int>(i, (int)ConnectedComponentsTypes.Area);
+            if (area > largestArea)
+            {
+                largestArea = area;
+                largestLabel = i;
+            }
+        }
+
+        mask.SetTo(Scalar.All(0));
+        for (int r = 0; r < labels.Rows; r++)
+        {
+            for (int c = 0; c < labels.Cols; c++)
+            {
+                if (labels.At<int>(r, c) == largestLabel)
+                    mask.Set(r, c, (byte)255);
+            }
+        }
+
+        labels.Dispose();
+        stats.Dispose();
+        centroids.Dispose();
+    }
+
+    /// <summary>
     /// Applies Gaussian blur to mask edges for smooth edges.
     /// </summary>
     private static Mat ApplyFeathering(Mat cleanedMask, int feather, string? debugPath)
