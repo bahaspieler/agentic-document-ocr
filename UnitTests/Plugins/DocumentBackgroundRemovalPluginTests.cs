@@ -43,6 +43,49 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
         using var maskImg = Cv2.ImRead(path, ImreadModes.Grayscale);
         Assert.IsFalse(maskImg.Empty());
     }
+    
+    [TestMethod]
+    public async Task RemoveBackground_OnWhite_HasWhiteBackground()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white", feather: 0);
+
+        var path = Store.GetImagePath(result);
+        using var img = Cv2.ImRead(path);
+
+        var topLeft = img.At<Vec3b>(0, 0);
+        var topRight = img.At<Vec3b>(0, img.Width - 1);
+        var bottomLeft = img.At<Vec3b>(img.Height - 1, 0);
+        var bottomRight = img.At<Vec3b>(img.Height - 1, img.Width - 1);
+
+        AssertPixelIsWhiteish(topLeft, "top-left");
+        AssertPixelIsWhiteish(topRight, "top-right");
+        AssertPixelIsWhiteish(bottomLeft, "bottom-left");
+        AssertPixelIsWhiteish(bottomRight, "bottom-right");
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_StoresMetadata()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white");
+
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual(docRef, meta["parent"]);
+        Assert.AreEqual("remove_background", meta["op"]);
+        Assert.AreEqual("on_white", meta["mode"]);
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"), "Should have detectionMethod");
+        var validMethods = new[] { "otsu", "hsv", "edges", "grabcut" };
+        bool hasValidMethod = validMethods.Any(m => meta["detectionMethod"].Contains(m));
+        Assert.IsTrue(hasValidMethod,
+            $"detectionMethod '{meta["detectionMethod"]}' should contain at least one valid method name");
+        Assert.IsTrue(meta.ContainsKey("maskCoverage"), "Should have maskCoverage");
+        Assert.IsTrue(meta.ContainsKey("confidence"), "Should have confidence");
+        Assert.IsTrue(meta.ContainsKey("feather"), "Should have feather");
+        Assert.IsTrue(meta.ContainsKey("fillHoles"), "Should have fillHoles");
+    }
 
     /// <summary>
     /// Creates an image of a white document on a dark desk-colored background.
