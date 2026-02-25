@@ -49,6 +49,30 @@ public sealed class InvertPluginTests : PluginTestBase
         Assert.AreEqual("True", meta["wasInverted"]);
     }
 
+    [TestMethod]
+    public async Task InvertImage_Smart_ProducesOutput()
+    {
+        var result = await _plugin.InvertImage(TestImageRef, "smart");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("smart", meta["mode"]);
+        Assert.IsTrue(meta.ContainsKey("darkPixelRatio"), "Smart mode should include darkPixelRatio");
+    }
+
+    [TestMethod]
+    public async Task InvertImage_Smart_DarkBackground_Inverts()
+    {
+        var darkRef = CreateDarkBackgroundImage();
+
+        var result = await _plugin.InvertImage(darkRef, "smart");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("True", meta["wasInverted"]);
+        Assert.IsTrue(meta.ContainsKey("darkPixelRatio"));
+    }
+
     private string CreateDarkBackgroundImage()
     {
         using var img = new Mat(200, 200, MatType.CV_8UC3, new Scalar(20, 20, 20));
