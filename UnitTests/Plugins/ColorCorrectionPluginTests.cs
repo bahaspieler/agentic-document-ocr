@@ -24,4 +24,14 @@ public sealed class ColorCorrectionPluginTests : PluginTestBase
         Assert.AreEqual("auto", meta["method"]);
         Assert.IsTrue(meta.ContainsKey("appliedMethod"));
     }
+    [TestMethod]
+    public async Task CorrectColor_GrayWorld_ProducesOutput()
+    {
+        var result = await _plugin.CorrectColor(TestImageRef, "gray_world");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("gray_world", meta["method"]);
+        Assert.AreEqual("gray_world", meta["appliedMethod"]);
+    }
 }
