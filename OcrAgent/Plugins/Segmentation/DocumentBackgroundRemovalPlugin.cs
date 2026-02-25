@@ -135,6 +135,34 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         
         return ScaleMaskToOriginal(mask, src.Width, src.Height);
     }
+    
+    /// <summary>
+    /// Divides grayscale by a heavy-blurred version.
+    /// Removes shadows and uneven lighting.
+    /// </summary>
+    private static Mat NormalizeForSegmentation(Mat bgr)
+    {
+        using var gray = new Mat();
+        Cv2.CvtColor(bgr, gray, ColorConversionCodes.BGR2GRAY);
+
+        using var blurHeavy = new Mat();
+        Cv2.GaussianBlur(gray, blurHeavy, new Size(51, 51), 0);
+
+        using var grayFloat = new Mat();
+        gray.ConvertTo(grayFloat, MatType.CV_32FC1);
+
+        using var blurFloat = new Mat();
+        blurHeavy.ConvertTo(blurFloat, MatType.CV_32FC1);
+        blurFloat.SetTo(new Scalar(1.0), blurFloat.LessThan(1));
+
+        using var divided = new Mat();
+        Cv2.Divide(grayFloat, blurFloat, divided, scale: 255.0);
+
+        var result = new Mat();
+        divided.ConvertTo(result, MatType.CV_8UC1);
+        Cv2.Normalize(result, result, 0, 255, NormTypes.MinMax);
+        return result;
+    }
 
     private static Mat ResizeForProcessing(Mat src, int maxSide, out double scale)
     {
