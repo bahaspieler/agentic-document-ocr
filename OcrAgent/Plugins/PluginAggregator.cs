@@ -30,9 +30,13 @@ public sealed class PluginAggregator
         RegisterPlugin(new Enhancement.ContrastPlugin(store));
         RegisterPlugin(new Enhancement.BrightnessPlugin(store));
         RegisterPlugin(new Enhancement.DenoisePlugin(store));
+        RegisterPlugin(new Enhancement.ColorCorrectionPlugin(store));
+        RegisterPlugin(new Enhancement.InvertPlugin(store));
         
         // Segmentation operations
         RegisterPlugin(new Segmentation.BinarizePlugin(store));
+        RegisterPlugin(new Segmentation.MorphologyPlugin(store));
+        RegisterPlugin(new Segmentation.DocumentBackgroundRemovalPlugin(store));
     }
 
     /// <summary>

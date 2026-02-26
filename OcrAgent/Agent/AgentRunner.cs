@@ -60,9 +60,13 @@ public sealed class AgentRunner
                 "7. EnhanceContrast(ref, method='auto'|'histogram'|'clahe') - Improve contrast\n" +
                 "8. AdjustBrightness(ref, start, end, step) - Adjust brightness\n" +
                 "9. DenoiseImage(ref, method='bilateral'|'median'|'nlm', strength?) - Remove noise\n" +
+                "10. CorrectColor(ref, method='auto'|'gray_world'|'white_patch'|'histogram_match') - Fix color casts from mobile captures\n" +
+                "11. InvertImage(ref, mode='auto'|'always'|'smart') - Invert colors for dark-background documents\n" +
                 
                 "SEGMENTATION:\n" +
-                "11. BinarizeImage(ref, method='otsu'|'adaptive_mean'|'adaptive_gaussian') - Convert to B&W\n\n" +
+                "12. BinarizeImage(ref, method='otsu'|'adaptive_mean'|'adaptive_gaussian') - Convert to B&W\n" +
+                "13. ApplyMorphology(ref, operation='close'|'open'|'erode'|'dilate'|'gradient', kernelSize?, iterations?) - Post-binarization cleanup\n" +
+                "14. RemoveDocumentBackground(ref, mode='on_white'|'mask_only', sensitivity?, feather?) - Remove desk/table background\n\n" +
                 "Always return the generated reference IDs to the user in numbered style.\n" +
                 "If required parameters are missing, ask a short follow-up question.",
             name: "OCR Preprocessing Agent",

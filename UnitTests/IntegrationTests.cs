@@ -44,7 +44,7 @@ public sealed class IntegrationTests
     {
         var tools = _aggregator.GetAllTools().ToList();
 
-        Assert.IsGreaterThanOrEqualTo(tools.Count, 6, $"Should have at least 6 tools registered, but found {tools.Count}");
+        Assert.IsGreaterThanOrEqualTo(tools.Count, 13, $"Should have at least 13 tools registered, but found {tools.Count}");
     }
 
     [TestMethod]
