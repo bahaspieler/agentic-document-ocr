@@ -1,40 +1,44 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OcrAgent.Inference;
 using OpenCvSharp;
 using System.Globalization;
 
 namespace OcrAgent.Plugins.Segmentation;
 
 /// <summary>
-/// Removes non-document background from images using multi-strategy
-/// mask generation.
+/// Removes non-document background from images using ML-based detection (U2NETP)
+/// with CV-based fallback strategies. U2NETP provides robust object detection. 
+/// If model is unavailable, it falls back to Otsu/HSV/edges/GrabCut.
 /// </summary>
 public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
+    private readonly U2NetpOnnxPredictor? _predictor;
 
     private const double MinMaskCoverage = 0.05;
     private const double MaxMaskCoverage = 0.98;
     private const string DebugFolderName = "bgremoval_debug";
 
-    public DocumentBackgroundRemovalPlugin(IImageStore store)
+    public DocumentBackgroundRemovalPlugin(IImageStore store, U2NetpOnnxPredictor? predictor = null)
     {
         _store = store;
+        _predictor = predictor;
     }
 
-    [Description("Removes non-document background, placing the document on a clean white canvas. Use for mobile captures with desk/table backgrounds.")]
+    [Description("Removes non-document background. Modes: 'on_white' (white canvas), 'mask_only' (binary mask), 'transparent' (RGBA with alpha channel).")]
     public Task<string> RemoveDocumentBackground(
         [Description("The reference number of the image to process.")] string imageReference,
-        [Description("Output mode: 'on_white' (document on white canvas) or 'mask_only' (binary mask).")] string mode = "on_white",
+        [Description("Output mode: 'on_white' (document on white), 'mask_only' (binary mask), or 'transparent' (RGBA PNG with alpha).")] string mode = "on_white",
         [Description("Detection sensitivity: 'auto', 'aggressive', 'conservative'.")] string sensitivity = "auto",
         [Description("Edge feather radius 0-10 for smooth transitions.")] int feather = 2,
         [Description("Fill holes inside the document mask to prevent text cutout.")] bool fillHoles = true,
         [Description("Enable debug mode to save intermediate mask images.")] bool debug = false)
     {
         mode = mode.ToLowerInvariant();
-        if (mode is not ("on_white" or "mask_only"))
-            throw new ArgumentException("mode must be 'on_white' or 'mask_only'");
+        if (mode is not ("on_white" or "mask_only" or "transparent"))
+            throw new ArgumentException("mode must be 'on_white', 'mask_only', or 'transparent'");
 
         sensitivity = sensitivity.ToLowerInvariant();
         if (sensitivity is not ("auto" or "aggressive" or "conservative"))
@@ -70,7 +74,14 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         {
             Cv2.ImEncode(".png", cleanedMask, out outputBytes);
         }
-        else
+        else if (mode == "transparent")
+        {
+            using var result = RenderTransparent(src, finalMask, feather > 0);
+            if (debugPath != null)
+                SaveDebugImage(result, debugPath, "70_output");
+            Cv2.ImEncode(".png", result, out outputBytes);
+        }
+        else // on_white
         {
             using var result = ApplyMaskOnWhite(src, finalMask, feather > 0);
             if (debugPath != null)
@@ -144,19 +155,81 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     }
     
     /// <summary>
-    /// Generates a document mask using multiple strategies.
+    /// Generates a document mask using 2-tier strategy.
+    /// Tier 1: U2NETP (ML-based) - used directly if high confidence and also refined with GrabCut if medium confidence.
+    /// Tier 2: CV based multi-strategy fallback (Otsu/HSV/edges/GrabCut) when U2NETP unavailable or low quality.
     /// </summary>
-    private (Mat? Mask, double Score, string Method) GenerateMasksMultiStrategy(
-        Mat src, string sensitivity, string? debugPath)
+    private (Mat? Mask, double Score, string Method) GenerateMasksMultiStrategy(Mat src, string sensitivity, string? debugPath)
     {
-        double contrastRatio = AnalyzeBackgroundContrast(src);
-        var candidates = new List<(Mat Mask, double Score, string Method)>();
-
         if (debugPath != null)
         {
             using var normVis = NormalizeForSegmentation(src);
             SaveDebugImage(normVis, debugPath, "05_normalized");
         }
+
+        // TIER 1: U2NETP
+        if (_predictor != null)
+        {
+            var u2netMask = GenerateU2NetpMask(src, debugPath);
+            if (u2netMask != null)
+            {
+                double contrastRatio = AnalyzeBackgroundContrast(src);
+                double score = CalculateMaskQuality(u2netMask, src.Width, src.Height, contrastRatio, "");
+                
+                if (debugPath != null)
+                    SaveDebugMaskOverlay(src, u2netMask, debugPath, $"08_u2netp_mask_q{score:F2}");
+
+                // High confidence: Use U2NETP directly
+                if (score >= 0.55)
+                {
+                    return (u2netMask, score, "u2netp");
+                }
+
+                // Medium confidence: Refine with GrabCut
+                if (score >= 0.35)
+                {
+                    var grabcutMask = GenerateGrabCutMask(src, sensitivity, debugPath, priorMask: u2netMask);
+                    if (grabcutMask != null)
+                    {
+                        double gcScore = CalculateMaskQuality(grabcutMask, src.Width, src.Height, contrastRatio, "");
+                        if (debugPath != null)
+                            SaveDebugMaskOverlay(src, grabcutMask, debugPath, $"30_grabcut_refined_q{gcScore:F2}");
+
+                        // Use refined mask if it is better
+                        if (gcScore > score)
+                        {
+                            u2netMask.Dispose();
+                            return (grabcutMask, gcScore, "u2netp+grabcut");
+                        }
+                        else
+                        {
+                            grabcutMask.Dispose();
+                            return (u2netMask, score, "u2netp");
+                        }
+                    }
+
+                    // GrabCut failed: use U2NETP
+                    return (u2netMask, score, "u2netp");
+                }
+
+                // Low confidence: U2NETP failed: fall through to CV
+                u2netMask.Dispose();
+            }
+        }
+
+        // TIER 2: CV based multi-strategy fallback
+        return RunCvMultiStrategyVoting(src, sensitivity, debugPath);
+    }
+
+    /// <summary>
+    /// Runs the CV based multi-strategy scoring.
+    /// Used as fallback when U2NETP is unavailable or produces low-quality mask.
+    /// </summary>
+    private (Mat? Mask, double Score, string Method) RunCvMultiStrategyVoting(
+        Mat src, string sensitivity, string? debugPath)
+    {
+        double contrastRatio = AnalyzeBackgroundContrast(src);
+        var candidates = new List<(Mat Mask, double Score, string Method)>();
 
         var otsuMask = GenerateOtsuPaperMask(src, sensitivity, debugPath);
         if (otsuMask != null)
@@ -538,7 +611,7 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         if (touchedCount == 4)
             score -= 0.15;
 
-        // contrast-aware scoring: low contrast means brightness methods might be unreliable
+        // Contrast-aware scoring for CV strategies
         if (contrastRatio < 0.25 && method is "edges")
             score += 0.15;
         else if (contrastRatio > 0.4 && method is "otsu" or "hsv")
@@ -762,6 +835,74 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         var filePath = Path.Combine(debugPath, $"{name}.png");
         Cv2.ImWrite(filePath, vis);
+    }
+
+    /// <summary>
+    /// Generates a document mask using U2NETP prediction.
+    /// </summary>
+    private Mat? GenerateU2NetpMask(Mat src, string? debugPath)
+    {
+        if (_predictor == null) return null;
+
+        try
+        {
+            using var probMask = _predictor.PredictProbabilityMask(src);
+
+            if (debugPath != null)
+            {
+                using var probVis = new Mat();
+                probMask.ConvertTo(probVis, MatType.CV_8UC1, 255.0);
+                SaveDebugImage(probVis, debugPath, "07_u2netp_prob");
+            }
+
+            return DocumentContourExtractor.ToBinaryMask(probMask);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Renders the image with a transparent background (RGBA).
+    /// Background pixels have alpha=0, foreground has alpha=255 (or feathered).
+    /// </summary>
+    private static Mat RenderTransparent(Mat src, Mat mask, bool isFeathered)
+    {
+        if (!isFeathered)
+        {
+            // hard-edged transparency
+            using var srcBgr = new Mat();
+            src.CopyTo(srcBgr);
+
+            using var alphaMask = new Mat();
+            mask.CopyTo(alphaMask);
+
+            var channels = new[] { srcBgr.Split()[0], srcBgr.Split()[1], srcBgr.Split()[2], alphaMask };
+            var rgbaOut = new Mat();
+            Cv2.Merge(channels, rgbaOut);
+
+            foreach (var ch in channels.Take(3))
+                ch.Dispose();
+
+            return rgbaOut;
+        }
+
+        // feathered transparency with alpha blending
+        using var bgrSrc = new Mat();
+        src.CopyTo(bgrSrc);
+
+        using var alphaChannel = new Mat();
+        mask.CopyTo(alphaChannel);
+
+        var bgrChannels = bgrSrc.Split();
+        var rgbaResult = new Mat();
+        Cv2.Merge(new[] { bgrChannels[0], bgrChannels[1], bgrChannels[2], alphaChannel }, rgbaResult);
+
+        foreach (var ch in bgrChannels)
+            ch.Dispose();
+
+        return rgbaResult;
     }
 
     public IEnumerable<AITool> GetAITools()
