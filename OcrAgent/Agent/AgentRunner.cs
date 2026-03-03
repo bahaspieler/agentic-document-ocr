@@ -66,7 +66,7 @@ public sealed class AgentRunner
                 "SEGMENTATION:\n" +
                 "12. BinarizeImage(ref, method='otsu'|'adaptive_mean'|'adaptive_gaussian') - Convert to B&W\n" +
                 "13. ApplyMorphology(ref, operation='close'|'open'|'erode'|'dilate'|'gradient', kernelSize?, iterations?) - Post-binarization cleanup\n" +
-                "14. RemoveDocumentBackground(ref, mode='on_white'|'mask_only', sensitivity?, feather?) - Remove desk/table background\n\n" +
+                "14. RemoveDocumentBackground(ref, mode='on_white'|'mask_only'|'transparent', sensitivity?, feather?) - Remove desk/table background. Use 'transparent' for RGBA PNG with alpha channel.\n\n" +
                 "Always return the generated reference IDs to the user in numbered style.\n" +
                 "If required parameters are missing, ask a short follow-up question.",
             name: "OCR Preprocessing Agent",

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OcrAgent.Inference;
 
 namespace OcrAgent.Plugins;
 
@@ -36,7 +37,9 @@ public sealed class PluginAggregator
         // Segmentation operations
         RegisterPlugin(new Segmentation.BinarizePlugin(store));
         RegisterPlugin(new Segmentation.MorphologyPlugin(store));
-        RegisterPlugin(new Segmentation.DocumentBackgroundRemovalPlugin(store));
+
+        var u2netPredictor = U2NetpOnnxPredictor.TryCreateDefault();
+        RegisterPlugin(new Segmentation.DocumentBackgroundRemovalPlugin(store, u2netPredictor));
     }
 
     /// <summary>
