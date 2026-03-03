@@ -117,6 +117,49 @@ public static class DocumentContourExtractor
         return true;
     }
 
+    /// <summary>
+    /// Converts a float probability mask to a binary 8U mask, not extracting a quad.
+    /// </summary>
+    public static Mat? ToBinaryMask(Mat probabilityMask32F)
+    {
+        if (probabilityMask32F.Empty() || probabilityMask32F.Type() != MatType.CV_32FC1)
+            return null;
+
+        int w = probabilityMask32F.Cols;
+        int h = probabilityMask32F.Rows;
+
+        using var mask8u = new Mat();
+        probabilityMask32F.ConvertTo(mask8u, MatType.CV_8UC1, 255.0);
+
+        using var blurred = new Mat();
+        Cv2.GaussianBlur(mask8u, blurred, new Size(5, 5), 0);
+
+        var result = new Mat();
+        Cv2.Threshold(blurred, result, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+        int k = Math.Clamp((int)Math.Round(Math.Min(w, h) * 0.02), 9, 41);
+        if (k % 2 == 0) k++;
+        using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(k, k));
+
+        Cv2.MorphologyEx(result, result, MorphTypes.Close, kernel, iterations: 2);
+        Cv2.MorphologyEx(result, result, MorphTypes.Open, kernel, iterations: 1);
+
+        if (!KeepLargestComponentInPlace(result))
+        {
+            result.Dispose();
+            return null;
+        }
+
+        double coverage = Cv2.CountNonZero(result) / (w * (double)h);
+        if (coverage < 0.05 || coverage > 0.98)
+        {
+            result.Dispose();
+            return null;
+        }
+
+        return result;
+    }
+
     private static bool KeepLargestComponentInPlace(Mat mask8u)
     {
         Cv2.FindContours(mask8u, out var contours, out _,
