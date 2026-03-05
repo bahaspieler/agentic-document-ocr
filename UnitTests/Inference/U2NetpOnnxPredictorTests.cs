@@ -33,4 +33,19 @@ public sealed class U2NetpOnnxPredictorTests
             // ignore cleanup failures
         }
     }
+    [TestMethod]
+    public void TryCreateDefault_WhenModelPresent_ReturnsPredictor()
+    {
+        var predictor = U2NetpOnnxPredictor.TryCreateDefault();
+        
+        if (predictor == null)
+        {
+            Assert.Inconclusive("U2NETP model not available - this is expected if model file is not present");
+            return;
+        }
+        
+        // If we get here, model is available
+        Assert.IsNotNull(predictor, "Should return predictor when model is present");
+        predictor.Dispose();
+    }
 }
