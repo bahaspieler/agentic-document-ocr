@@ -11,5 +11,26 @@ namespace UnitTests.Inference;
 [TestClass]
 public sealed class U2NetpOnnxPredictorTests
 {
-    
+    private string _tempDir = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), "OcrAgentU2NetTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        try
+        {
+            if (Directory.Exists(_tempDir))
+                Directory.Delete(_tempDir, recursive: true);
+        }
+        catch
+        {
+            // ignore cleanup failures
+        }
+    }    
 }
