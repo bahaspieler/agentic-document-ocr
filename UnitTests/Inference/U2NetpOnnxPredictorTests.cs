@@ -32,5 +32,5 @@ public sealed class U2NetpOnnxPredictorTests
         {
             // ignore cleanup failures
         }
-    }    
+    }
 }
