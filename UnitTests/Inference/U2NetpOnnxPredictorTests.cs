@@ -48,4 +48,18 @@ public sealed class U2NetpOnnxPredictorTests
         Assert.IsNotNull(predictor, "Should return predictor when model is present");
         predictor.Dispose();
     }
+    [TestMethod]
+    public void FromModelPath_WhenPathEmpty_ThrowsArgumentException()
+    {
+        bool thrown = false;
+        try
+        {
+            U2NetpOnnxPredictor.FromModelPath("");
+        }
+        catch (ArgumentException)
+        {
+            thrown = true;
+        }
+        Assert.IsTrue(thrown, "Should throw ArgumentException for empty path");
+    }
 }
