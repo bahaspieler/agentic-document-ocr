@@ -223,5 +223,26 @@ public sealed class SftpImageStore : IImageStore, IDisposable
 
         ValidateReference(parentReference);
 
+        try
+        {
+            await ExecuteWithRetryAsync(async client =>
+            {
+                var debugPath = $"{NormalizeBasePath()}/{debugFolderName}/{parentReference}/{filename}";
+                var debugDir = Path.GetDirectoryName(debugPath)!.Replace("\\", "/");
+
+                EnsureRemoteDirectoryExists(client, debugDir);
+
+                using var stream = new MemoryStream(imageBytes);
+                await Task.Run(() => client.UploadFile(stream, debugPath, true));
+
+                return true;
+            });
+        }
+        catch (Exception)
+        {
+            // Debug image save failures are non-critical
+        }
+
+
 
     }
