@@ -124,8 +124,7 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     {
         ValidateReference(reference);
         reference = ImageReferenceGenerator.Normalize(reference);
-<<<<<<< HEAD
-=======
+
 
         try
         {
@@ -161,7 +160,7 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
->>>>>>> 72946252 (feat(sftp): implement GetImagePathAsync with extension discovery)
+
 
         try
         {
@@ -180,6 +179,11 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                         break;
                     }
                 }
+     public IDictionary<string, string> GetMetadata(string reference)
+    {
+        return GetMetadataAsync(reference).GetAwaiter().GetResult();
+    }
 
 
-            }
+
+}
