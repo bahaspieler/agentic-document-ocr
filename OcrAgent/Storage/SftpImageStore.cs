@@ -82,4 +82,19 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         reference = ImageReferenceGenerator.Normalize(reference);
         ValidateReference(reference);
 
-    }
+        try
+        {
+            await ExecuteWithRetryAsync(async client =>
+            {
+                var remotePath = GetRemotePath(reference, extension);
+
+                if (await Task.Run(() => client.Exists(remotePath)))
+                    throw new InvalidOperationException($"Reference already exists: {reference}");
+
+                EnsureRemoteDirectoryExists(client, Path.GetDirectoryName(remotePath)!.Replace("\\", "/"));
+
+                using var stream = new MemoryStream(bytes);
+                await Task.Run(() => client.UploadFile(stream, remotePath, true));
+
+
+            }
