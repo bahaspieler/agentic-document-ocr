@@ -315,6 +315,24 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    private async Task SaveMetadataAsync(SftpClient client, string reference, IDictionary<string, string> metadata)
+    {
+        var metaPath = GetMetadataPath(reference);
+        var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
+        var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+
+        using var stream = new MemoryStream(bytes);
+        await Task.Run(() => client.UploadFile(stream, metaPath, true));
+    }
+
+    private string NormalizeBasePath()
+    {
+        var basePath = _config.RemoteBasePath?.Trim().TrimEnd('/').Replace("\\", "/");
+        if (string.IsNullOrEmpty(basePath)) basePath = "/";
+        if (!basePath.StartsWith('/')) basePath = "/" + basePath;
+        return basePath;
+    }
+
 
 
 }
