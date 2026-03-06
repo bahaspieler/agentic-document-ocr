@@ -285,6 +285,36 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         return Math.Min(delay, _config.Retry.MaxDelayMs);
     }
 
+    private void EnsureRemoteDirectoryExists(SftpClient client, string remotePath)
+    {
+        if (string.IsNullOrWhiteSpace(remotePath)) return;
+
+        remotePath = remotePath.Replace("\\", "/").TrimEnd('/');
+        if (remotePath == "" || remotePath == "/") return;
+
+        if (client.Exists(remotePath)) return;
+
+        var parts = remotePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var currentPath = "";
+
+        foreach (var part in parts)
+        {
+            currentPath += "/" + part;
+            try
+            {
+                if (!client.Exists(currentPath))
+                {
+                    client.CreateDirectory(currentPath);
+                }
+            }
+            catch (SftpPermissionDeniedException)
+            {
+                if (!client.Exists(currentPath))
+                    throw;
+            }
+        }
+    }
+
 
 
 }
