@@ -72,6 +72,14 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     {
         return SaveBytesAsync(bytes, extension, metadata, desiredReference).GetAwaiter().GetResult();
     }
+    public async Task<string> SaveBytesAsync(byte[] bytes, string extension,
+        IDictionary<string, string>? metadata = null, string? desiredReference = null)
+    {
+        if (bytes == null || bytes.Length == 0)
+            throw new ArgumentException("Bytes cannot be null or empty", nameof(bytes));
 
+        var reference = desiredReference ?? ImageReferenceGenerator.NewRef();
+        reference = ImageReferenceGenerator.Normalize(reference);
+        ValidateReference(reference);
 
-}
+    }
