@@ -333,6 +333,25 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         return basePath;
     }
 
+    private string GetRemotePath(string reference, string extension)
+    {
+        return $"{NormalizeBasePath()}/{reference}.{extension}";
+    }
+
+    private string GetMetadataPath(string reference)
+    {
+        return $"{NormalizeBasePath()}/{reference}.json";
+    }
+
+    private void ValidateReference(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            throw new ArgumentException("Reference cannot be null or whitespace", nameof(reference));
+
+        if (reference.Contains("..") || reference.Contains("/") || reference.Contains("\\"))
+            throw new SecurityException($"Invalid reference: potential directory traversal - {reference}");
+    }
+
 
 
 }
