@@ -243,6 +243,32 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             // Debug image save failures are non-critical
         }
 
-
-
     }
+
+    private async Task<T> ExecuteWithRetryAsync<T>(Func<SftpClient, Task<T>> operation)
+    {
+        int attempt = 0;
+        Exception? lastException = null;
+
+        while (attempt <= _config.Retry.MaxRetries)
+        {
+            try
+            {
+                return await _connectionPool.ExecuteAsync(operation);
+            }
+            catch (Exception ex) when (IsRetryableException(ex) && attempt < _config.Retry.MaxRetries)
+            {
+                lastException = ex;
+                attempt++;
+
+                var delay = CalculateBackoffDelay(attempt);
+                await Task.Delay(delay);
+            }
+        }
+
+        throw lastException ?? new InvalidOperationException("Operation failed with no exception captured");
+    }
+
+
+
+}
