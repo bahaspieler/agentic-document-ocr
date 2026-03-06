@@ -19,10 +19,12 @@ public sealed class SftpImageStore : IImageStore, IDisposable
 
         _connectionPool = new SftpConnectionPool(config);
     }
+
     public bool Exists(string reference)
     {
         return ExistsAsync(reference).GetAwaiter().GetResult();
     }
+
     public async Task<bool> ExistsAsync(string reference)
     {
         ValidateReference(reference);
@@ -48,10 +50,12 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             throw;
         }
     }
+
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
         return SaveFromFileAsync(filePath, desiredReference).GetAwaiter().GetResult();
     }
+
     public async Task<string> SaveFromFileAsync(string filePath, string? desiredReference = null)
     {
         if (!File.Exists(filePath))
@@ -67,11 +71,13 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             ["originalPath"] = filePath
         }, desiredReference);
     }
+
     public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null,
         string? desiredReference = null)
     {
         return SaveBytesAsync(bytes, extension, metadata, desiredReference).GetAwaiter().GetResult();
     }
+
     public async Task<string> SaveBytesAsync(byte[] bytes, string extension,
         IDictionary<string, string>? metadata = null, string? desiredReference = null)
     {
@@ -125,7 +131,6 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         ValidateReference(reference);
         reference = ImageReferenceGenerator.Normalize(reference);
 
-
         try
         {
             return await ExecuteWithRetryAsync(async client =>
@@ -143,6 +148,7 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                         break;
                     }
                 }
+
                 if (remotePath == null)
                     throw new FileNotFoundException($"No stored image found for reference: {reference}");
 
@@ -160,29 +166,11 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
-
-
-        try
-        {
-            return await ExecuteWithRetryAsync(async client =>
-            {
-                string? remotePath = null;
-                string? foundExtension = null;
-
-                foreach (var ext in _supportedExtensions)
-                {
-                    var path = GetRemotePath(reference, ext);
-                    if (await Task.Run(() => client.Exists(path)))
-                    {
-                        remotePath = path;
-                        foundExtension = ext;
-                        break;
-                    }
-                }
-     public IDictionary<string, string> GetMetadata(string reference)
+    public IDictionary<string, string> GetMetadata(string reference)
     {
         return GetMetadataAsync(reference).GetAwaiter().GetResult();
     }
+
     public async Task<IDictionary<string, string>> GetMetadataAsync(string reference)
     {
         ValidateReference(reference);
@@ -214,7 +202,6 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
-
     public async Task SaveDebugImageAsync(string parentReference, string debugFolderName,
         string filename, byte[] imageBytes)
     {
@@ -242,7 +229,6 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         {
             // Debug image save failures are non-critical
         }
-
     }
 
     private async Task<T> ExecuteWithRetryAsync<T>(Func<SftpClient, Task<T>> operation)
@@ -352,7 +338,6 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             throw new SecurityException($"Invalid reference: potential directory traversal - {reference}");
     }
 
-
     public void Dispose()
     {
         if (_disposed) return;
@@ -360,6 +345,4 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         _disposed = true;
         _connectionPool?.Dispose();
     }
-
-
 }
