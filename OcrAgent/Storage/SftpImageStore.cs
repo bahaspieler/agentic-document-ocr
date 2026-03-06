@@ -353,5 +353,13 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     }
 
 
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _disposed = true;
+        _connectionPool?.Dispose();
+    }
+
 
 }
