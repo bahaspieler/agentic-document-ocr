@@ -124,6 +124,44 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     {
         ValidateReference(reference);
         reference = ImageReferenceGenerator.Normalize(reference);
+<<<<<<< HEAD
+=======
+
+        try
+        {
+            return await ExecuteWithRetryAsync(async client =>
+            {
+                string? remotePath = null;
+                string? foundExtension = null;
+
+                foreach (var ext in _supportedExtensions)
+                {
+                    var path = GetRemotePath(reference, ext);
+                    if (await Task.Run(() => client.Exists(path)))
+                    {
+                        remotePath = path;
+                        foundExtension = ext;
+                        break;
+                    }
+                }
+                if (remotePath == null)
+                    throw new FileNotFoundException($"No stored image found for reference: {reference}");
+
+                var tempPath = Path.Combine(Path.GetTempPath(), $"{reference}.{foundExtension}");
+
+                using var fileStream = File.Create(tempPath);
+                await Task.Run(() => client.DownloadFile(remotePath, fileStream));
+
+                return tempPath;
+            });
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+>>>>>>> 72946252 (feat(sftp): implement GetImagePathAsync with extension discovery)
 
         try
         {
