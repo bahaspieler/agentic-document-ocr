@@ -269,6 +269,22 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         throw lastException ?? new InvalidOperationException("Operation failed with no exception captured");
     }
 
+    private bool IsRetryableException(Exception ex)
+    {
+        var exceptionTypeName = ex.GetType().Name;
+
+        if (_config.Retry.RetryableExceptions.Contains(exceptionTypeName))
+            return true;
+
+        return ex is SshConnectionException or SshOperationTimeoutException or SftpPathNotFoundException;
+    }
+
+    private int CalculateBackoffDelay(int attempt)
+    {
+        var delay = (int)(_config.Retry.InitialDelayMs * Math.Pow(_config.Retry.BackoffMultiplier, attempt - 1));
+        return Math.Min(delay, _config.Retry.MaxDelayMs);
+    }
+
 
 
 }
