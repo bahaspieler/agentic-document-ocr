@@ -120,5 +120,28 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         return GetImagePathAsync(reference).GetAwaiter().GetResult();
     }
 
+    public async Task<string> GetImagePathAsync(string reference)
+    {
+        ValidateReference(reference);
+        reference = ImageReferenceGenerator.Normalize(reference);
 
-}
+        try
+        {
+            return await ExecuteWithRetryAsync(async client =>
+            {
+                string? remotePath = null;
+                string? foundExtension = null;
+
+                foreach (var ext in _supportedExtensions)
+                {
+                    var path = GetRemotePath(reference, ext);
+                    if (await Task.Run(() => client.Exists(path)))
+                    {
+                        remotePath = path;
+                        foundExtension = ext;
+                        break;
+                    }
+                }
+
+
+            }
