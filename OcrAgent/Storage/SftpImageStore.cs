@@ -212,6 +212,16 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         {
             return new Dictionary<string, string>();
         }
+    }
+
+
+    public async Task SaveDebugImageAsync(string parentReference, string debugFolderName,
+        string filename, byte[] imageBytes)
+    {
+        if (!_config.Behavior.EnableDebugFolders)
+            return;
+
+        ValidateReference(parentReference);
 
 
     }
