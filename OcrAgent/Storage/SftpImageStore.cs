@@ -96,5 +96,24 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                 using var stream = new MemoryStream(bytes);
                 await Task.Run(() => client.UploadFile(stream, remotePath, true));
 
+                var meta = metadata ?? new Dictionary<string, string>();
+                meta["reference"] = reference;
+                meta["extension"] = extension;
+                meta["createdUtc"] = DateTime.UtcNow.ToString("O");
+                meta["sizeBytes"] = bytes.Length.ToString();
 
-            }
+                await SaveMetadataAsync(client, reference, meta);
+
+                return true;
+            });
+
+            return reference;
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+
+}
