@@ -183,7 +183,35 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     {
         return GetMetadataAsync(reference).GetAwaiter().GetResult();
     }
+    public async Task<IDictionary<string, string>> GetMetadataAsync(string reference)
+    {
+        ValidateReference(reference);
+        reference = ImageReferenceGenerator.Normalize(reference);
+
+        try
+        {
+            return await ExecuteWithRetryAsync(async client =>
+            {
+                var metaPath = GetMetadataPath(reference);
+
+                if (!await Task.Run(() => client.Exists(metaPath)))
+                    return new Dictionary<string, string>();
+
+                using var stream = new MemoryStream();
+                await Task.Run(() => client.DownloadFile(metaPath, stream));
+                stream.Position = 0;
+
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync();
+
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                    ?? new Dictionary<string, string>();
+            });
+        }
+        catch (Exception)
+        {
+            return new Dictionary<string, string>();
+        }
 
 
-
-}
+    }
