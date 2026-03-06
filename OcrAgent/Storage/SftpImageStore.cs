@@ -52,5 +52,12 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     {
         return SaveFromFileAsync(filePath, desiredReference).GetAwaiter().GetResult();
     }
+    public async Task<string> SaveFromFileAsync(string filePath, string? desiredReference = null)
+    {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"File not found: {filePath}");
 
-}
+        var ext = Path.GetExtension(filePath).TrimStart('.').ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(ext)) ext = "png";
+
+    }
