@@ -67,5 +67,11 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             ["originalPath"] = filePath
         }, desiredReference);
     }
+    public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null,
+        string? desiredReference = null)
+    {
+        return SaveBytesAsync(bytes, extension, metadata, desiredReference).GetAwaiter().GetResult();
+    }
+
 
 }
