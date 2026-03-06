@@ -60,4 +60,12 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         var ext = Path.GetExtension(filePath).TrimStart('.').ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(ext)) ext = "png";
 
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        return await SaveBytesAsync(bytes, ext, new Dictionary<string, string>
+        {
+            ["source"] = "file",
+            ["originalPath"] = filePath
+        }, desiredReference);
     }
+
+}
