@@ -115,5 +115,10 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    public string GetImagePath(string reference)
+    {
+        return GetImagePathAsync(reference).GetAwaiter().GetResult();
+    }
+
 
 }
