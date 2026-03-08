@@ -61,4 +61,31 @@ public sealed class DocumentContourExtractorTests
         Assert.IsTrue(coverage > 0.1 && coverage < 0.98, $"Coverage should be reasonable, got {coverage}");
         Assert.IsTrue(confidence > 0.0 && confidence <= 1.0, $"Confidence should be in [0,1], got {confidence}");
     }
+
+    [TestMethod]
+    public void TryExtractDocument_WithTooSmallRegion_ReturnsFalse()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+        Cv2.Rectangle(probMask, new Rect(150, 140, 10, 10), new Scalar(0.9), -1);
+
+        bool result = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var docMask, out var quad, out var coverage, out var confidence);
+        using var maskOwned = docMask;
+
+        Assert.IsFalse(result, "Should reject too-small regions");
+        Assert.AreEqual(0, quad.Length, "Quad should be empty on failure");
+        Assert.AreEqual(0.0, confidence, "Confidence should be 0 on failure");
+    }
+
+    [TestMethod]
+    public void TryExtractDocument_WithFullImageMask_ReturnsFalse()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.95));
+
+        bool result = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var docMask, out var quad, out var coverage, out var confidence);
+        using var maskOwned = docMask;
+
+        Assert.IsFalse(result, "Should reject full-image masks");
+    }
 }
