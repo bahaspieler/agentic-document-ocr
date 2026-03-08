@@ -108,4 +108,23 @@ public sealed class DocumentContourExtractorTests
 
         Assert.IsNull(result, "Should return null for wrong type");
     }
+
+    [TestMethod]
+    public void ToBinaryMask_WithValidProbMask_ReturnsBinaryMask()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+        Cv2.Rectangle(probMask, new Rect(50, 50, 200, 250), new Scalar(0.85), -1);
+
+        using var binaryMask = DocumentContourExtractor.ToBinaryMask(probMask);
+
+        Assert.IsNotNull(binaryMask, "Binary mask should not be null");
+        Assert.IsFalse(binaryMask.Empty(), "Binary mask should not be empty");
+        Assert.AreEqual(MatType.CV_8UC1, binaryMask.Type(), "Should be 8-bit mask");
+        Assert.AreEqual(probMask.Width, binaryMask.Width, "Width should match");
+        Assert.AreEqual(probMask.Height, binaryMask.Height, "Height should match");
+
+        Cv2.MinMaxLoc(binaryMask, out double minVal, out double maxVal);
+        Assert.AreEqual(0.0, minVal, "Should have background (0)");
+        Assert.AreEqual(255.0, maxVal, "Should have foreground (255)");
+    }
 }
