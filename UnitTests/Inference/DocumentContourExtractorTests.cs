@@ -42,4 +42,23 @@ public sealed class DocumentContourExtractorTests
         }
         Assert.IsTrue(thrown, "Should throw ArgumentException for wrong type");
     }
+
+    [TestMethod]
+    public void TryExtractDocument_WithValidMask_ReturnsTrue()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+        Cv2.Rectangle(probMask, new Rect(50, 50, 200, 250), new Scalar(0.9), -1);
+
+        bool result = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var docMask, out var quad, out var coverage, out var confidence);
+        using var maskOwned = docMask;
+
+        Assert.IsTrue(result, "Should successfully extract document");
+        Assert.IsNotNull(docMask, "Document mask should not be null");
+        Assert.IsFalse(docMask.Empty(), "Document mask should not be empty");
+        Assert.AreEqual(MatType.CV_8UC1, docMask.Type(), "Document mask should be 8-bit");
+        Assert.AreEqual(4, quad.Length, "Quad should have 4 corners");
+        Assert.IsTrue(coverage > 0.1 && coverage < 0.98, $"Coverage should be reasonable, got {coverage}");
+        Assert.IsTrue(confidence > 0.0 && confidence <= 1.0, $"Confidence should be in [0,1], got {confidence}");
+    }
 }
