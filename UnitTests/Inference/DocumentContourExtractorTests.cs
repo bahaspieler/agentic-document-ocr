@@ -88,4 +88,24 @@ public sealed class DocumentContourExtractorTests
 
         Assert.IsFalse(result, "Should reject full-image masks");
     }
+
+    [TestMethod]
+    public void ToBinaryMask_WithEmptyMask_ReturnsNull()
+    {
+        using var emptyMask = new Mat();
+
+        var result = DocumentContourExtractor.ToBinaryMask(emptyMask);
+
+        Assert.IsNull(result, "Should return null for empty mask");
+    }
+
+    [TestMethod]
+    public void ToBinaryMask_WithWrongType_ReturnsNull()
+    {
+        using var wrongType = new Mat(100, 100, MatType.CV_8UC1);
+
+        var result = DocumentContourExtractor.ToBinaryMask(wrongType);
+
+        Assert.IsNull(result, "Should return null for wrong type");
+    }
 }
