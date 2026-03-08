@@ -78,4 +78,16 @@ public sealed class U2NetpOnnxPredictorTests
         }
         Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing files");
     }
+    {
+        var predictor = U2NetpOnnxPredictor.TryCreateDefault();
+        if (predictor == null)
+        {
+            Assert.Inconclusive("U2NETP model not available, skipping test");
+            return;
+        }
+
+        using var emptyMat = new Mat();
+        
+        bool thrown = false;
+    }
 }
