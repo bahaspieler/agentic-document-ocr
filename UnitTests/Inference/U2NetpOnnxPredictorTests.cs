@@ -103,4 +103,26 @@ public sealed class U2NetpOnnxPredictorTests
         predictor.Dispose();
         Assert.IsTrue(thrown, "Should throw ArgumentException for empty image");
     }
+    [TestMethod]
+    public void PredictProbabilityMask_WithValidImage_ReturnsValidMask()
+    {
+        var predictor = U2NetpOnnxPredictor.TryCreateDefault();
+        if (predictor == null)
+        {
+            Assert.Inconclusive("U2NETP model not available, skipping test");
+            return;
+        }
+
+        // Create a simple test image (white document on dark background)
+        using var testImg = new Mat(400, 300, MatType.CV_8UC3, new Scalar(40, 40, 40));
+        Cv2.Rectangle(testImg, new Rect(50, 50, 200, 200), new Scalar(250, 250, 250), -1);
+
+        using var mask = predictor.PredictProbabilityMask(testImg);
+
+        Assert.IsNotNull(mask, "Mask should not be null");
+        Assert.IsFalse(mask.Empty(), "Mask should not be empty");
+        Assert.AreEqual(MatType.CV_32FC1, mask.Type(), "Mask should be float single-channel");
+        Assert.AreEqual(testImg.Width, mask.Width, "Mask width should match input");
+        Assert.AreEqual(testImg.Height, mask.Height, "Mask height should match input");
+    }
 }
