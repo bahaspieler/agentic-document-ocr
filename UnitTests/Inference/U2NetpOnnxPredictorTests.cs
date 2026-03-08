@@ -78,6 +78,8 @@ public sealed class U2NetpOnnxPredictorTests
         }
         Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing files");
     }
+    [TestMethod]
+    public void PredictProbabilityMask_WhenImageEmpty_ThrowsArgumentException()
     {
         var predictor = U2NetpOnnxPredictor.TryCreateDefault();
         if (predictor == null)
@@ -89,5 +91,16 @@ public sealed class U2NetpOnnxPredictorTests
         using var emptyMat = new Mat();
         
         bool thrown = false;
+        try
+        {
+            predictor.PredictProbabilityMask(emptyMat);
+        }
+        catch (ArgumentException)
+        {
+            thrown = true;
+        }
+        
+        predictor.Dispose();
+        Assert.IsTrue(thrown, "Should throw ArgumentException for empty image");
     }
 }
