@@ -124,5 +124,12 @@ public sealed class U2NetpOnnxPredictorTests
         Assert.AreEqual(MatType.CV_32FC1, mask.Type(), "Mask should be float single-channel");
         Assert.AreEqual(testImg.Width, mask.Width, "Mask width should match input");
         Assert.AreEqual(testImg.Height, mask.Height, "Mask height should match input");
+
+        // Verify values are in [0,1] range
+        Cv2.MinMaxLoc(mask, out double minVal, out double maxVal);
+        Assert.IsTrue(minVal >= 0.0 && minVal <= 1.0, $"Min value should be in [0,1], got {minVal}");
+        Assert.IsTrue(maxVal >= 0.0 && maxVal <= 1.0, $"Max value should be in [0,1], got {maxVal}");
+
+        predictor.Dispose();
     }
 }
