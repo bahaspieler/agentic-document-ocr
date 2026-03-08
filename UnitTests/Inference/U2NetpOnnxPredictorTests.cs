@@ -62,4 +62,20 @@ public sealed class U2NetpOnnxPredictorTests
         }
         Assert.IsTrue(thrown, "Should throw ArgumentException for empty path");
     }
+    [TestMethod]
+    public void FromModelPath_WhenFileNotFound_ThrowsFileNotFoundException()
+    {
+        var nonExistentPath = Path.Combine(_tempDir, "nonexistent.onnx");
+        
+        bool thrown = false;
+        try
+        {
+            U2NetpOnnxPredictor.FromModelPath(nonExistentPath);
+        }
+        catch (FileNotFoundException)
+        {
+            thrown = true;
+        }
+        Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing files");
+    }
 }
