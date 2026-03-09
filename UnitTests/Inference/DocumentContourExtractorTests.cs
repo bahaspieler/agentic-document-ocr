@@ -160,4 +160,14 @@ public sealed class DocumentContourExtractorTests
 
         Assert.AreEqual(5.0, distance, 0.001, "Distance should be 5 (3-4-5 triangle)");
     }
+
+    [TestMethod]
+    public void Dist_WithSamePoint_ReturnsZero()
+    {
+        var p = new Point2f(100, 100);
+
+        double distance = DocumentContourExtractor.Dist(p, p);
+
+        Assert.AreEqual(0.0, distance, 0.001, "Distance to same point should be 0");
+    }
 }
