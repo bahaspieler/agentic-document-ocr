@@ -127,4 +127,26 @@ public sealed class DocumentContourExtractorTests
         Assert.AreEqual(0.0, minVal, "Should have background (0)");
         Assert.AreEqual(255.0, maxVal, "Should have foreground (255)");
     }
+
+    [TestMethod]
+    public void OrderCorners_ReturnsCorrectOrder()
+    {
+        var corners = new[]
+        {
+            new Point2f(100, 100),
+            new Point2f(200, 100),
+            new Point2f(200, 200),
+            new Point2f(100, 200)
+        };
+
+        var shuffled = new[] { corners[2], corners[0], corners[3], corners[1] };
+
+        var ordered = DocumentContourExtractor.OrderCorners(shuffled);
+
+        Assert.AreEqual(4, ordered.Length);
+        Assert.IsTrue(ordered[0].X < ordered[1].X, "TL should be left of TR");
+        Assert.IsTrue(ordered[0].Y < ordered[3].Y, "TL should be above BL");
+        Assert.IsTrue(ordered[1].X > ordered[0].X, "TR should be right of TL");
+        Assert.IsTrue(ordered[2].X > ordered[3].X, "BR should be right of BL");
+    }
 }
