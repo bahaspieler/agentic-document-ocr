@@ -149,4 +149,15 @@ public sealed class DocumentContourExtractorTests
         Assert.IsTrue(ordered[1].X > ordered[0].X, "TR should be right of TL");
         Assert.IsTrue(ordered[2].X > ordered[3].X, "BR should be right of BL");
     }
+
+    [TestMethod]
+    public void Dist_CalculatesCorrectDistance()
+    {
+        var p1 = new Point2f(0, 0);
+        var p2 = new Point2f(3, 4);
+
+        double distance = DocumentContourExtractor.Dist(p1, p2);
+
+        Assert.AreEqual(5.0, distance, 0.001, "Distance should be 5 (3-4-5 triangle)");
+    }
 }
