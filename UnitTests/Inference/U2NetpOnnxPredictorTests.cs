@@ -133,6 +133,7 @@ public sealed class U2NetpOnnxPredictorTests
         predictor.Dispose();
     }
     [TestMethod]
+    [TestMethod]
     public void PredictProbabilityMask_OutputDimensions_MatchInput()
     {
         var predictor = U2NetpOnnxPredictor.TryCreateDefault();
@@ -148,5 +149,16 @@ public sealed class U2NetpOnnxPredictorTests
             (width: 800, height: 600),
             (width: 1024, height: 768)
         };
+
+        foreach (var (width, height) in testSizes)
+        {
+            using var testImg = new Mat(height, width, MatType.CV_8UC3, new Scalar(128, 128, 128));
+            using var mask = predictor.PredictProbabilityMask(testImg);
+
+            Assert.AreEqual(width, mask.Width, $"Mask width should match input for {width}x{height}");
+            Assert.AreEqual(height, mask.Height, $"Mask height should match input for {width}x{height}");
+        }
+
+        predictor.Dispose();
     }
 }
