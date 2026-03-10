@@ -133,7 +133,6 @@ public sealed class U2NetpOnnxPredictorTests
         predictor.Dispose();
     }
     [TestMethod]
-    [TestMethod]
     public void PredictProbabilityMask_OutputDimensions_MatchInput()
     {
         var predictor = U2NetpOnnxPredictor.TryCreateDefault();
@@ -160,5 +159,18 @@ public sealed class U2NetpOnnxPredictorTests
         }
 
         predictor.Dispose();
+    }
+    [TestMethod]
+    public void Dispose_CanBeCalledMultipleTimes()
+    {
+        var predictor = U2NetpOnnxPredictor.TryCreateDefault();
+        if (predictor == null)
+        {
+            Assert.Inconclusive("U2NETP model not available, skipping test");
+            return;
+        }
+
+        predictor.Dispose();
+        predictor.Dispose(); // Should not throw
     }
 }
