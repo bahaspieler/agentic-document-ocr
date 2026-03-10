@@ -170,4 +170,23 @@ public sealed class DocumentContourExtractorTests
 
         Assert.AreEqual(0.0, distance, 0.001, "Distance to same point should be 0");
     }
+
+    [TestMethod]
+    public void TryExtractDocument_QuadCornersAreOrdered()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+        Cv2.Rectangle(probMask, new Rect(50, 60, 180, 240), new Scalar(0.9), -1);
+
+        bool result = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var docMask, out var quad, out _, out _);
+        using var maskOwned = docMask;
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(4, quad.Length);
+
+        Assert.IsTrue(quad[0].X < quad[1].X, "TL should be left of TR");
+        Assert.IsTrue(quad[0].Y < quad[3].Y, "TL should be above BL");
+        Assert.IsTrue(quad[1].Y < quad[2].Y, "TR should be above BR");
+        Assert.IsTrue(quad[2].X > quad[3].X, "BR should be right of BL");
+    }
 }
