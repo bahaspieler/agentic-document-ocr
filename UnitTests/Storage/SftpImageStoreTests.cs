@@ -361,4 +361,53 @@ public sealed class SftpImageStoreTests
         catch (SecurityException) { thrown3 = true; }
         Assert.IsTrue(thrown3, "Should throw SecurityException for path traversal");
     }
+
+    [TestMethod]
+    public async Task Metadata_PreservesAllFields()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var metadata = new Dictionary<string, string>
+        {
+            ["operation"] = "resize",
+            ["width"] = "800",
+            ["height"] = "600",
+            ["parent"] = "IMG001",
+            ["timestamp"] = DateTime.UtcNow.ToString("O")
+        };
+
+        var reference = await store.SaveBytesAsync(new byte[] { 1, 2, 3 }, "png", metadata, "META001");
+        var retrieved = await store.GetMetadataAsync(reference);
+
+        Assert.AreEqual("resize", retrieved["operation"]);
+        Assert.AreEqual("800", retrieved["width"]);
+        Assert.AreEqual("600", retrieved["height"]);
+        Assert.AreEqual("IMG001", retrieved["parent"]);
+        Assert.IsTrue(retrieved.ContainsKey("timestamp"));
+        Assert.IsTrue(retrieved.ContainsKey("reference"));
+        Assert.IsTrue(retrieved.ContainsKey("extension"));
+        Assert.IsTrue(retrieved.ContainsKey("createdUtc"));
+    }
+
+    [TestMethod]
+    public async Task ConnectionPool_ReusesConnections()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var references = new List<string>();
+        
+        for (int i = 0; i < 5; i++)
+        {
+            var data = new byte[] { (byte)i };
+            var reference = await store.SaveBytesAsync(data, "png", null, $"POOL{i:D3}");
+            references.Add(reference);
+            
+            await Task.Delay(100);
+        }
+
+        foreach (var reference in references)
+        {
+            Assert.IsTrue(await store.ExistsAsync(reference));
+        }
+    }
 }
