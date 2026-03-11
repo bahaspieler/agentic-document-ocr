@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OcrAgent.Plugins.Geometric;
+using OcrAgent.Inference;
 using OpenCvSharp;
 
 namespace UnitTests.Plugins;
@@ -8,11 +9,19 @@ namespace UnitTests.Plugins;
 public sealed class PerspectivePluginTests : PluginTestBase
 {
     private PerspectivePlugin _plugin = null!;
+    private static U2NetpOnnxPredictor? _sharedPredictor;
+    private static bool _predictorChecked;
 
     [TestInitialize]
     public void Setup()
     {
-        _plugin = new PerspectivePlugin(Store);
+        if (!_predictorChecked)
+        {
+            _sharedPredictor = U2NetpOnnxPredictor.TryCreateDefault();
+            _predictorChecked = true;
+        }
+
+        _plugin = new PerspectivePlugin(Store, _sharedPredictor);
     }
 
     [TestMethod]
@@ -377,11 +386,11 @@ public sealed class PerspectivePluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("perspective_correct", meta["op"]);
         Assert.IsTrue(meta.ContainsKey("detectionMethod"));
-        // full-frame docs should either return "full_frame_aligned" or "already_aligned"
         var method = meta["detectionMethod"];
         Assert.IsTrue(
             method == "full_frame_aligned" || method == "already_aligned" || 
-            method.Contains("otsu") || method.Contains("edges") || method.Contains("grabcut"),
+            method.Contains("otsu") || method.Contains("edges") || 
+            method.Contains("grabcut") || method.Contains("u2netp"),
             $"Unexpected detection method: {method}");
     }
 
@@ -513,6 +522,7 @@ public sealed class PerspectivePluginTests : PluginTestBase
         var validMethods = new[]
         {
             "edges", "otsu_segmentation", "hsv_light_segmentation", "grabcut",
+            "u2netp", "u2netp+grabcut",
             "already_aligned", "full_frame_aligned", "fallback_image_bounds"
         };
         
@@ -530,11 +540,11 @@ public sealed class PerspectivePluginTests : PluginTestBase
         AssertImageValid(result);
         var meta = Store.GetMetadata(result);
         
-        // for document on dark background, should detect using one of the segmentation methods
         var method = meta["detectionMethod"];
         Assert.IsTrue(
             method.Contains("otsu") || method.Contains("grabcut") || 
-            method.Contains("hsv") || method.Contains("edges"),
+            method.Contains("hsv") || method.Contains("edges") ||
+            method.Contains("u2netp"),
             $"Expected segmentation method for document on dark background, got: {method}");
     }
 
@@ -646,5 +656,38 @@ public sealed class PerspectivePluginTests : PluginTestBase
         {
             Assert.AreEqual("False", meta["enhanceEdges"]);
         }
+    }
+
+    // U2NETP Strategy Tests
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithoutPredictor_FallsBackToCvStrategy()
+    {
+        var cvOnlyPlugin = new PerspectivePlugin(Store, predictor: null);
+        var distortedRef = CreateDistortedDocument();
+
+        var result = await cvOnlyPlugin.CorrectPerspective(distortedRef, "aggressive");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        var method = meta["detectionMethod"];
+
+        Assert.DoesNotContain("u2netp",
+            method, $"Without predictor, method should not contain u2netp, got: {method}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithPredictor_ProducesValidOutput()
+    {
+        if (_sharedPredictor == null)
+            Assert.Inconclusive("U2NETP model not available, skipping ML-specific test");
+
+        var distortedRef = CreateDistortedDocument();
+        var result = await _plugin.CorrectPerspective(distortedRef, "aggressive");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"));
+        Assert.IsTrue(meta.ContainsKey("confidence"));
     }
 }
