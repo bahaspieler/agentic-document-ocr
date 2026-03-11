@@ -293,4 +293,51 @@ public sealed class SftpImageStoreTests
             Assert.IsTrue(await store.ExistsAsync(reference));
         }
     }
+    
+    [TestMethod]
+    public async Task MultipleExtensions_SaveAndRetrieve()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var extensions = new[] { "png", "jpg", "jpeg", "tif", "tiff", "bmp" };
+        
+        foreach (var ext in extensions)
+        {
+            var testData = new byte[] { 1, 2, 3, 4, 5 };
+            var reference = await store.SaveBytesAsync(testData, ext, null, $"EXT_{ext.ToUpper()}");
+            
+            Assert.IsTrue(await store.ExistsAsync(reference));
+            
+            var localPath = await store.GetImagePathAsync(reference);
+            Assert.IsTrue(localPath.EndsWith($".{ext}"));
+            File.Delete(localPath);
+        }
+    }
+
+    [TestMethod]
+    public async Task LargeFile_HandlesCorrectly()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        using var largeImage = new Mat(2000, 2000, MatType.CV_8UC3, new Scalar(100, 150, 200));
+        Cv2.ImEncode(".png", largeImage, out var largeBytes);
+        
+        Console.WriteLine($"Testing with {largeBytes.Length / 1024 / 1024.0:F2} MB file");
+
+        var sw = Stopwatch.StartNew();
+        var reference = await store.SaveBytesAsync(largeBytes, "png", null, "LARGE001");
+        sw.Stop();
+        
+        Console.WriteLine($"Upload took {sw.ElapsedMilliseconds}ms");
+
+        Assert.IsTrue(await store.ExistsAsync(reference));
+        
+        var localPath = await store.GetImagePathAsync(reference);
+        Assert.IsTrue(File.Exists(localPath));
+        
+        var fileInfo = new FileInfo(localPath);
+        Assert.IsTrue(fileInfo.Length > 1000000);
+        
+        File.Delete(localPath);
+    }
 }
