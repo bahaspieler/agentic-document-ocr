@@ -4,6 +4,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Inference;
 
+/// <summary>
+/// Tests for DocumentContourExtractor utility methods.
+/// </summary>
 [TestClass]
 public sealed class DocumentContourExtractorTests
 {
@@ -46,7 +49,10 @@ public sealed class DocumentContourExtractorTests
     [TestMethod]
     public void TryExtractDocument_WithValidMask_ReturnsTrue()
     {
+        // Create a probability mask with a clear rectangular foreground region
         using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+
+        // High probability rectangle in center (simulating document)
         Cv2.Rectangle(probMask, new Rect(50, 50, 200, 250), new Scalar(0.9), -1);
 
         bool result = DocumentContourExtractor.TryExtractDocument(
@@ -66,6 +72,8 @@ public sealed class DocumentContourExtractorTests
     public void TryExtractDocument_WithTooSmallRegion_ReturnsFalse()
     {
         using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+
+        // Very small region (below minAreaPercent threshold)
         Cv2.Rectangle(probMask, new Rect(150, 140, 10, 10), new Scalar(0.9), -1);
 
         bool result = DocumentContourExtractor.TryExtractDocument(
@@ -80,6 +88,7 @@ public sealed class DocumentContourExtractorTests
     [TestMethod]
     public void TryExtractDocument_WithFullImageMask_ReturnsFalse()
     {
+        // Full-image mask (above maxAreaPercent threshold)
         using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.95));
 
         bool result = DocumentContourExtractor.TryExtractDocument(
@@ -123,6 +132,7 @@ public sealed class DocumentContourExtractorTests
         Assert.AreEqual(probMask.Width, binaryMask.Width, "Width should match");
         Assert.AreEqual(probMask.Height, binaryMask.Height, "Height should match");
 
+        // Verify it contains both 0 and 255 values
         Cv2.MinMaxLoc(binaryMask, out double minVal, out double maxVal);
         Assert.AreEqual(0.0, minVal, "Should have background (0)");
         Assert.AreEqual(255.0, maxVal, "Should have foreground (255)");
@@ -131,19 +141,21 @@ public sealed class DocumentContourExtractorTests
     [TestMethod]
     public void OrderCorners_ReturnsCorrectOrder()
     {
+        // Create corners in random order
         var corners = new[]
         {
-            new Point2f(100, 100),
-            new Point2f(200, 100),
-            new Point2f(200, 200),
-            new Point2f(100, 200)
+            new Point2f(100, 100), // TL
+            new Point2f(200, 100), // TR
+            new Point2f(200, 200), // BR
+            new Point2f(100, 200)  // BL
         };
 
-        var shuffled = new[] { corners[2], corners[0], corners[3], corners[1] };
+        var shuffled = new[] { corners[2], corners[0], corners[3], corners[1] }; // BR, TL, BL, TR
 
         var ordered = DocumentContourExtractor.OrderCorners(shuffled);
 
         Assert.AreEqual(4, ordered.Length);
+        // Should be TL, TR, BR, BL
         Assert.IsTrue(ordered[0].X < ordered[1].X, "TL should be left of TR");
         Assert.IsTrue(ordered[0].Y < ordered[3].Y, "TL should be above BL");
         Assert.IsTrue(ordered[1].X > ordered[0].X, "TR should be right of TL");
@@ -184,6 +196,7 @@ public sealed class DocumentContourExtractorTests
         Assert.IsTrue(result);
         Assert.AreEqual(4, quad.Length);
 
+        // Verify ordering: TL, TR, BR, BL
         Assert.IsTrue(quad[0].X < quad[1].X, "TL should be left of TR");
         Assert.IsTrue(quad[0].Y < quad[3].Y, "TL should be above BL");
         Assert.IsTrue(quad[1].Y < quad[2].Y, "TR should be above BR");
@@ -194,13 +207,17 @@ public sealed class DocumentContourExtractorTests
     public void TryExtractDocument_CustomAreaThresholds_AreRespected()
     {
         using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+
+        // Create a region that covers 15% of image
         Cv2.Rectangle(probMask, new Rect(50, 50, 150, 120), new Scalar(0.9), -1);
 
+        // Should pass with default thresholds (8% min, 98% max)
         bool result1 = DocumentContourExtractor.TryExtractDocument(
             probMask, out var mask1, out _, out _, out _, minAreaPercent: 8, maxAreaPercent: 98);
         using var m1 = mask1;
         Assert.IsTrue(result1, "Should pass with default thresholds");
 
+        // Should fail with stricter min threshold
         bool result2 = DocumentContourExtractor.TryExtractDocument(
             probMask, out var mask2, out _, out _, out _, minAreaPercent: 20, maxAreaPercent: 98);
         using var m2 = mask2;
