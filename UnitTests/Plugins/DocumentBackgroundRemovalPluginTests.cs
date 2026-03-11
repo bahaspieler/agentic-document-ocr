@@ -118,6 +118,95 @@ public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
     }
 
     [TestMethod]
+    public async Task RemoveBackground_TransparentMode_ProducesRgbaOutput()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "transparent", feather: 0);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("transparent", meta["mode"]);
+
+        var path = Store.GetImagePath(result);
+        using var img = Cv2.ImRead(path, ImreadModes.Unchanged);
+        Assert.IsFalse(img.Empty());
+        Assert.AreEqual(4, img.Channels(), "Transparent mode should produce 4-channel RGBA image");
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_TransparentMode_HasTransparentBackground()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "transparent", feather: 0);
+
+        var path = Store.GetImagePath(result);
+        using var img = Cv2.ImRead(path, ImreadModes.Unchanged);
+        
+        Assert.AreEqual(4, img.Channels(), "Should be RGBA");
+
+        // Check corner pixels - alpha channel should be 0 (transparent)
+        var topLeft = img.At<Vec4b>(0, 0);
+        var topRight = img.At<Vec4b>(0, img.Width - 1);
+
+        Assert.IsTrue(topLeft.Item3 < 50, "Top-left corner should have low alpha (transparent background)");
+        Assert.IsTrue(topRight.Item3 < 50, "Top-right corner should have low alpha (transparent background)");
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_TieredStrategy_RecordsCorrectMethod()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "on_white");
+
+        var meta = Store.GetMetadata(result);
+        Assert.IsTrue(meta.ContainsKey("detectionMethod"), "Should have detectionMethod");
+        
+        // Method should be either U2NETP-based or CV-based
+        var method = meta["detectionMethod"];
+        bool isValidMethod = 
+            method.Contains("u2netp") || 
+            method.Contains("otsu") || 
+            method.Contains("hsv") || 
+            method.Contains("edges") || 
+            method.Contains("grabcut");
+        
+        Assert.IsTrue(isValidMethod, $"Method '{method}' should be valid strategy name");
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_WithFeather_TransparentMode_WorksCorrectly()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+
+        var result = await _plugin.RemoveDocumentBackground(docRef, "transparent", feather: 3);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("transparent", meta["mode"]);
+        Assert.AreEqual("3", meta["feather"]);
+    }
+
+    [TestMethod]
+    public async Task RemoveBackground_DifferentSensitivities_ProduceValidOutput()
+    {
+        var docRef = CreateDocumentOnDeskImage();
+        var sensitivities = new[] { "auto", "aggressive", "conservative" };
+
+        foreach (var sensitivity in sensitivities)
+        {
+            var result = await _plugin.RemoveDocumentBackground(docRef, "on_white", sensitivity: sensitivity);
+            
+            AssertImageValid(result);
+            var meta = Store.GetMetadata(result);
+            Assert.IsTrue(meta.ContainsKey("maskCoverage"), 
+                $"Should have maskCoverage for sensitivity '{sensitivity}'");
+        }
+    }
+
+    [TestMethod]
     public async Task RemoveBackground_DebugMode_CreatesDebugFolder()
     {
         var docRef = CreateDocumentOnDeskImage();
