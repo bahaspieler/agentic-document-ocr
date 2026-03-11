@@ -249,4 +249,48 @@ public sealed class SftpImageStoreTests
         }
         Assert.IsTrue(thrown, "Should throw FileNotFoundException for non-existent reference");
     }
+    
+    [TestMethod]
+    public async Task SaveDebugImage_CreatesDebugFolder()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var parentBytes = new byte[] { 1, 2, 3 };
+        var parentRef = await store.SaveBytesAsync(parentBytes, "png", null, "PARENT001");
+
+        using var debugImage = new Mat(50, 50, MatType.CV_8UC3, Scalar.Red);
+        Cv2.ImEncode(".png", debugImage, out var debugBytes);
+
+        await store.SaveDebugImageAsync(parentRef, "test_debug", "debug_01.png", debugBytes);
+
+        Assert.IsTrue(await store.ExistsAsync(parentRef));
+    }
+    
+    [TestMethod]
+    public async Task ConcurrentOperations_HandleCorrectly()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var tasks = new List<Task<string>>();
+        
+        for (int i = 0; i < 10; i++)
+        {
+            var index = i;
+            tasks.Add(Task.Run(async () =>
+            {
+                var data = new byte[] { (byte)index, (byte)(index + 1), (byte)(index + 2) };
+                return await store.SaveBytesAsync(data, "png", null, $"CONCURRENT{index:D3}");
+            }));
+        }
+
+        var references = await Task.WhenAll(tasks);
+
+        Assert.AreEqual(10, references.Length);
+        Assert.AreEqual(10, references.Distinct().Count());
+
+        foreach (var reference in references)
+        {
+            Assert.IsTrue(await store.ExistsAsync(reference));
+        }
+    }
 }
