@@ -690,4 +690,54 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Assert.IsTrue(meta.ContainsKey("detectionMethod"));
         Assert.IsTrue(meta.ContainsKey("confidence"));
     }
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithPredictor_DocumentOnDarkBg_DetectsDocument()
+    {
+        if (_sharedPredictor == null)
+            Assert.Inconclusive("U2NETP model not available, skipping ML-specific test");
+
+        var darkBgRef = CreateDocumentOnDarkBackground();
+        var result = await _plugin.CorrectPerspective(darkBgRef, "aggressive");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        var method = meta["detectionMethod"];
+
+        Assert.IsTrue(
+            method.Contains("u2netp") || method.Contains("otsu") ||
+            method.Contains("grabcut") || method.Contains("edges") ||
+            method.Contains("hsv"),
+            $"Expected valid detection method for dark background, got: {method}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithPredictor_DebugMode_SavesDebugImages()
+    {
+        if (_sharedPredictor == null)
+            Assert.Inconclusive("U2NETP model not available, skipping ML-specific test");
+
+        var distortedRef = CreateDistortedDocument();
+        var result = await _plugin.CorrectPerspective(distortedRef, "aggressive", debug: true);
+
+        AssertImageValid(result);
+
+        var debugFolderPath = Path.Combine(TempRoot, "perspective_debug", distortedRef);
+        Assert.IsTrue(Directory.Exists(debugFolderPath), "Debug folder should exist");
+
+        var debugFiles = Directory.GetFiles(debugFolderPath, "*.png");
+        Assert.IsGreaterThanOrEqualTo(2,
+            debugFiles.Length, $"Debug folder should contain multiple debug images, found {debugFiles.Length}");
+
+        var meta = Store.GetMetadata(result);
+        var method = meta["detectionMethod"];
+
+        if (method.Contains("u2netp"))
+        {
+            var hasU2NetpDebug = debugFiles.Any(f =>
+                Path.GetFileName(f).Contains("u2netp"));
+            Assert.IsTrue(hasU2NetpDebug,
+                "When U2NETP wins, debug folder should contain U2NETP debug images");
+        }
+    }
 }
