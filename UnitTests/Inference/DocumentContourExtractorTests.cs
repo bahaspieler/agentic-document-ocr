@@ -189,4 +189,21 @@ public sealed class DocumentContourExtractorTests
         Assert.IsTrue(quad[1].Y < quad[2].Y, "TR should be above BR");
         Assert.IsTrue(quad[2].X > quad[3].X, "BR should be right of BL");
     }
+
+    [TestMethod]
+    public void TryExtractDocument_CustomAreaThresholds_AreRespected()
+    {
+        using var probMask = new Mat(400, 300, MatType.CV_32FC1, new Scalar(0.0));
+        Cv2.Rectangle(probMask, new Rect(50, 50, 150, 120), new Scalar(0.9), -1);
+
+        bool result1 = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var mask1, out _, out _, out _, minAreaPercent: 8, maxAreaPercent: 98);
+        using var m1 = mask1;
+        Assert.IsTrue(result1, "Should pass with default thresholds");
+
+        bool result2 = DocumentContourExtractor.TryExtractDocument(
+            probMask, out var mask2, out _, out _, out _, minAreaPercent: 20, maxAreaPercent: 98);
+        using var m2 = mask2;
+        Assert.IsFalse(result2, "Should fail with min threshold above coverage");
+    }
 }
