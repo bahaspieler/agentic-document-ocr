@@ -100,4 +100,81 @@ public sealed class SftpImageStoreTests
         
         return null;
     }
+    
+    [TestInitialize]
+    public void Setup()
+    {
+        _config = new SftpStorageConfig
+        {
+            Host = "localhost",
+            Port = 2222,
+            Username = "ocragent",
+            AuthenticationMethod = "password",
+            Password = "password",
+            RemoteBasePath = "/upload/ocr_test_" + Guid.NewGuid().ToString("N").Substring(0, 8),
+            ConnectionPool = new ConnectionPoolConfig
+            {
+                MinConnections = 1,
+                MaxConnections = 5,
+                ConnectionIdleTimeout = 60,
+                KeepAliveInterval = 30,
+                EnableHealthChecks = false
+            },
+            Retry = new RetryConfig
+            {
+                MaxRetries = 2,
+                InitialDelayMs = 100,
+                MaxDelayMs = 1000,
+                BackoffMultiplier = 2.0
+            },
+            Timeouts = new TimeoutsConfig
+            {
+                ConnectionTimeout = 30,
+                OperationTimeout = 60,
+                UploadTimeout = 120
+            },
+            Behavior = new BehaviorConfig
+            {
+                CreateRemoteDirectoryIfNotExists = true,
+                UseCompression = true,
+                BufferSize = 32768,
+                EnableDebugFolders = true
+            }
+        };
+
+    }
+    
+    [TestMethod]
+    public async Task SaveBytes_CreatesFileAndMetadata()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+        var metadata = new Dictionary<string, string> { ["test"] = "value" };
+
+        var reference = await store.SaveBytesAsync(testData, "png", metadata, "TEST001");
+
+        Assert.AreEqual("TEST001", reference);
+        Assert.IsTrue(await store.ExistsAsync(reference));
+        
+        var retrievedMeta = await store.GetMetadataAsync(reference);
+        Assert.AreEqual("value", retrievedMeta["test"]);
+        Assert.AreEqual("TEST001", retrievedMeta["reference"]);
+        Assert.AreEqual("png", retrievedMeta["extension"]);
+    }
+
+    [TestMethod]
+    public async Task SaveBytes_WithRandomReference_GeneratesUniqueReference()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+
+        var ref1 = await store.SaveBytesAsync(testData, "png");
+        var ref2 = await store.SaveBytesAsync(testData, "png");
+
+        Assert.AreNotEqual(ref1, ref2);
+        Assert.IsTrue(await store.ExistsAsync(ref1));
+        Assert.IsTrue(await store.ExistsAsync(ref2));
+    }
 }
