@@ -21,10 +21,12 @@ public sealed class PluginAggregator
         
         // Register all plugins here
         
+        var u2netPredictor = U2NetpOnnxPredictor.TryCreateDefault();
+
         // Geometric transformations
         RegisterPlugin(new Geometric.ZoomInPlugin(store));
         RegisterPlugin(new Geometric.RotatePlugin(store));
-        RegisterPlugin(new Geometric.PerspectivePlugin(store));  // Apply before deskew
+        RegisterPlugin(new Geometric.PerspectivePlugin(store, u2netPredictor));
         RegisterPlugin(new Geometric.DeskewPlugin(store));
         
         // Enhancement operations
@@ -37,8 +39,6 @@ public sealed class PluginAggregator
         // Segmentation operations
         RegisterPlugin(new Segmentation.BinarizePlugin(store));
         RegisterPlugin(new Segmentation.MorphologyPlugin(store));
-
-        var u2netPredictor = U2NetpOnnxPredictor.TryCreateDefault();
         RegisterPlugin(new Segmentation.DocumentBackgroundRemovalPlugin(store, u2netPredictor));
     }
 
