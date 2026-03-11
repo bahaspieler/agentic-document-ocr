@@ -201,4 +201,52 @@ public sealed class SftpImageStoreTests
         
         File.Delete(localPath);
     }
+    
+    [TestMethod]
+    public async Task Exists_ReturnsFalseForNonExistentReference()
+    {
+        using var store = new SftpImageStore(_config);
+
+        var exists = await store.ExistsAsync("NONEXISTENT999");
+
+        Assert.IsFalse(exists);
+    }
+
+    [TestMethod]
+    public async Task SaveBytes_DuplicateReference_ThrowsException()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        var testData = new byte[] { 1, 2, 3 };
+
+        await store.SaveBytesAsync(testData, "png", null, "DUP001");
+
+        bool thrown = false;
+        try
+        {
+            await store.SaveBytesAsync(testData, "png", null, "DUP001");
+        }
+        catch (InvalidOperationException)
+        {
+            thrown = true;
+        }
+        Assert.IsTrue(thrown, "Should throw InvalidOperationException for duplicate reference");
+    }
+
+    [TestMethod]
+    public async Task GetImagePath_NonExistentReference_ThrowsException()
+    {
+        using var store = new SftpImageStore(_config);
+
+        bool thrown = false;
+        try
+        {
+            await store.GetImagePathAsync("NOTFOUND999");
+        }
+        catch (FileNotFoundException)
+        {
+            thrown = true;
+        }
+        Assert.IsTrue(thrown, "Should throw FileNotFoundException for non-existent reference");
+    }
 }
