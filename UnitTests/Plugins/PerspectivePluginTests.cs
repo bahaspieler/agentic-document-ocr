@@ -760,4 +760,45 @@ public sealed class PerspectivePluginTests : PluginTestBase
         Assert.IsTrue(validCvMethods.Contains(meta["detectionMethod"]),
             $"CV-only plugin should produce CV method, got: {meta["detectionMethod"]}");
     }
+
+    [TestMethod]
+    public async Task CorrectPerspective_WithPredictor_ConfidenceInRange()
+    {
+        if (_sharedPredictor == null)
+            Assert.Inconclusive("U2NETP model not available, skipping ML-specific test");
+
+        var darkBgRef = CreateDocumentOnDarkBackground();
+        var result = await _plugin.CorrectPerspective(darkBgRef);
+
+        var meta = Store.GetMetadata(result);
+        var confidenceStr = meta["confidence"];
+
+        if (!double.TryParse(confidenceStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var confidence))
+        {
+            double.TryParse(confidenceStr, out confidence);
+        }
+
+        Assert.IsTrue(confidence >= 0.0 && confidence <= 1.0,
+            $"Confidence should be between 0.0 and 1.0, got: {confidence}");
+    }
+
+    [TestMethod]
+    public async Task CorrectPerspective_TieredStrategy_BothPluginsProduceValidResults()
+    {
+        var cvOnlyPlugin = new PerspectivePlugin(Store, predictor: null);
+        var distortedRef = CreateDistortedDocument();
+
+        var cvResult = await cvOnlyPlugin.CorrectPerspective(distortedRef, "aggressive");
+        AssertImageValid(cvResult);
+
+        var tieredResult = await _plugin.CorrectPerspective(distortedRef, "aggressive");
+        AssertImageValid(tieredResult);
+
+        var cvMeta = Store.GetMetadata(cvResult);
+        var tieredMeta = Store.GetMetadata(tieredResult);
+
+        Assert.AreEqual("perspective_correct", cvMeta["op"]);
+        Assert.AreEqual("perspective_correct", tieredMeta["op"]);
+    }
 }
