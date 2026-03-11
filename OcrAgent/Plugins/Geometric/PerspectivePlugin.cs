@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
+using OcrAgent.Inference;
 using OpenCvSharp;
 using System.Globalization;
 
@@ -8,19 +9,22 @@ namespace OcrAgent.Plugins.Geometric;
 
 /// <summary>
 /// Auto perspective correction for documents/receipts.
+/// Uses ML-based detection (U2NETP) as primary strategy with CV-based fallback.
 /// </summary>
 public sealed class PerspectivePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
+    private readonly U2NetpOnnxPredictor? _predictor;
 
     private const int MaxSearchContours = 15;
     private const double MinAreaRatio = 0.10;
     private const double MaxAreaRatio = 0.995;
     private const string DebugFolderName = "perspective_debug";
 
-    public PerspectivePlugin(IImageStore store)
+    public PerspectivePlugin(IImageStore store, U2NetpOnnxPredictor? predictor = null)
     {
         _store = store;
+        _predictor = predictor;
     }
 
     [Description("Auto-detects document boundaries and corrects perspective distortion. Returns corrected image reference.")]
@@ -215,7 +219,11 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    // Detection method - multiple strategies (edge + otsu + hsv + grabcut)
+    /// <summary>
+    /// Detects document corners using 2-tier strategy.
+    /// Tier 1: U2NETP (ML-based) - used directly if high confidence, refined with GrabCut if medium confidence.
+    /// Tier 2: CV-based multi-strategy fallback (edges/Otsu/HSV/GrabCut) when U2NETP unavailable or low quality.
+    /// </summary>
     private (Point2f[]? Corners, double Confidence, string Method) DetectCornersMultiStrategy(
         Mat src,
         string sensitivity,
@@ -223,7 +231,69 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         string? debugPath = null,
         bool isFullFrame = false)
     {
-        // run all strategies and store results
+        // TIER 1: U2NETP
+        if (_predictor != null)
+        {
+            var u2net = TryDetectByU2Netp(src, debugPath);
+            if (u2net.Corners is { Length: 4 })
+            {
+                double quality = CalculateDetectionQuality(u2net.Corners, src.Width, src.Height);
+
+                // High confidence: use U2NETP directly
+                if (u2net.Confidence >= 0.60)
+                {
+                    if (debugPath != null)
+                        SaveDebugImageWithQuad(src, u2net.Corners, debugPath, $"90_winner_u2netp_q{quality:F2}", u2net.Confidence);
+                    return u2net;
+                }
+
+                // Medium confidence: refine with GrabCut using U2NETP mask as prior
+                if (u2net.Confidence >= 0.35)
+                {
+                    var u2netMask = GenerateU2NetpMask(src, debugPath);
+                    if (u2netMask != null)
+                    {
+                        using (u2netMask)
+                        {
+                            var refined = TryDetectByGrabCut(src, sensitivity, debugPath, isFullFrame, priorMask: u2netMask);
+                            if (refined.Corners is { Length: 4 })
+                            {
+                                double refinedQuality = CalculateDetectionQuality(refined.Corners, src.Width, src.Height);
+                                double u2netScore = u2net.Confidence * 0.4 + quality * 0.6;
+                                double refinedScore = refined.Confidence * 0.4 + refinedQuality * 0.6;
+
+                                if (refinedScore > u2netScore)
+                                {
+                                    if (debugPath != null)
+                                        SaveDebugImageWithQuad(src, refined.Corners, debugPath, $"90_winner_u2netp_grabcut_q{refinedQuality:F2}", refined.Confidence);
+                                    return (refined.Corners, refined.Confidence, "u2netp+grabcut");
+                                }
+                            }
+                        }
+                    }
+
+                    if (debugPath != null)
+                        SaveDebugImageWithQuad(src, u2net.Corners, debugPath, $"90_winner_u2netp_q{quality:F2}", u2net.Confidence);
+                    return u2net;
+                }
+            }
+        }
+
+        // TIER 2: CV-based multi-strategy fallback
+        return RunCvMultiStrategyDetection(src, sensitivity, enhanceEdges, debugPath, isFullFrame);
+    }
+
+    /// <summary>
+    /// Runs the CV-based multi-strategy corner detection.
+    /// Used as fallback when U2NETP is unavailable or produces low-quality results.
+    /// </summary>
+    private (Point2f[]? Corners, double Confidence, string Method) RunCvMultiStrategyDetection(
+        Mat src,
+        string sensitivity,
+        bool enhanceEdges,
+        string? debugPath = null,
+        bool isFullFrame = false)
+    {
         var candidates = new List<(Point2f[]? Corners, double Confidence, string Method, double Quality)>();
 
         // edge-based
@@ -269,7 +339,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         if (candidates.Count == 0)
             return (null, 0.0, "none");
 
-        // pick the best by confidence
+        // pick the best by confidence + quality
         var best = candidates
             .OrderByDescending(c => c.Confidence * 0.4 + c.Quality * 0.6)
             .First();
@@ -322,6 +392,74 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             quality += 0.25 * (1.0 - distortion);
 
         return Math.Max(0.0, Math.Min(1.0, quality));
+    }
+
+    /// <summary>
+    /// Generates a document quad using U2NETP prediction and DocumentContourExtractor.
+    /// </summary>
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByU2Netp(
+        Mat src,
+        string? debugPath = null)
+    {
+        if (_predictor == null) return (null, 0.0, "u2netp_unavailable");
+
+        try
+        {
+            using var probMask = _predictor.PredictProbabilityMask(src);
+
+            if (debugPath != null)
+            {
+                using var probVis = new Mat();
+                probMask.ConvertTo(probVis, MatType.CV_8UC1, 255.0);
+                SaveDebugImage(probVis, debugPath, "05_u2netp_prob");
+            }
+
+            bool found = DocumentContourExtractor.TryExtractDocument(
+                probMask,
+                out var docMask,
+                out var quadCorners,
+                out var maskCoverage,
+                out var confidence);
+
+            using (docMask)
+            {
+                if (!found || quadCorners.Length != 4)
+                    return (null, 0.0, "u2netp_no_quad");
+
+                if (debugPath != null)
+                {
+                    SaveDebugImage(docMask, debugPath, $"06_u2netp_mask_c{confidence:F2}");
+                    SaveDebugImageWithQuad(src, quadCorners, debugPath, $"07_u2netp_quad_c{confidence:F2}", confidence);
+                }
+
+                if (!IsReasonableQuad(quadCorners, src.Width, src.Height))
+                    return (null, 0.0, "u2netp_bad_quad");
+
+                return (quadCorners, confidence, "u2netp");
+            }
+        }
+        catch
+        {
+            return (null, 0.0, "u2netp_error");
+        }
+    }
+
+    /// <summary>
+    /// Generates a document mask using U2NETP for use as GrabCut prior.
+    /// </summary>
+    private Mat? GenerateU2NetpMask(Mat src, string? debugPath)
+    {
+        if (_predictor == null) return null;
+
+        try
+        {
+            using var probMask = _predictor.PredictProbabilityMask(src);
+            return DocumentContourExtractor.ToBinaryMask(probMask);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private (Point2f[]? Corners, double Confidence, string Method) TryDetectByEdges(
@@ -501,8 +639,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
 
     /// <summary>
     /// Foreground segmentation with GrabCut.
+    /// Accepts optional priorMask from U2NETP for mask-initialized GrabCut.
     /// </summary>
-    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity, string? debugPath = null, bool isFullFrame = false)
+    private (Point2f[]? Corners, double Confidence, string Method) TryDetectByGrabCut(Mat src, string sensitivity, string? debugPath = null, bool isFullFrame = false, Mat? priorMask = null)
     {
         using var resized = ResizeForDetection(src, 900, out var scale);
 
@@ -510,7 +649,6 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var bgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
         using var fgdModel = new Mat(1, 65, MatType.CV_64FC1, Scalar.All(0));
 
-        // smaller margin for full-frame documents
         double m = isFullFrame ? 0.01 : (sensitivity == "aggressive" ? 0.03 : 0.05);
         int x = (int)(resized.Cols * m);
         int y = (int)(resized.Rows * m);
@@ -522,10 +660,26 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         {
             using var rectVis = resized.Clone();
             Cv2.Rectangle(rectVis, rect, new Scalar(0, 255, 0), 2);
-            SaveDebugImage(rectVis, debugPath, "41_grabcut_init_rect");
+            SaveDebugImage(rectVis, debugPath, priorMask != null ? "41_grabcut_u2netp_init" : "41_grabcut_init_rect");
         }
 
-        Cv2.GrabCut(resized, mask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithRect);
+        if (priorMask != null)
+        {
+            using var scaledPrior = new Mat();
+            Cv2.Resize(priorMask, scaledPrior, resized.Size(), 0, 0, InterpolationFlags.Nearest);
+
+            mask.SetTo(new Scalar(2)); // GC_PR_BGD
+            for (int r = 0; r < mask.Rows; r++)
+                for (int c = 0; c < mask.Cols; c++)
+                    if (scaledPrior.At<byte>(r, c) > 127)
+                        mask.Set(r, c, (byte)3); // GC_PR_FGD
+
+            Cv2.GrabCut(resized, mask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithMask);
+        }
+        else
+        {
+            Cv2.GrabCut(resized, mask, rect, bgdModel, fgdModel, 5, GrabCutModes.InitWithRect);
+        }
 
         // foreground mask
         using var fg = new Mat();
