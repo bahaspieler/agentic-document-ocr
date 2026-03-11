@@ -740,4 +740,24 @@ public sealed class PerspectivePluginTests : PluginTestBase
                 "When U2NETP wins, debug folder should contain U2NETP debug images");
         }
     }
+
+    [TestMethod]
+    public async Task CorrectPerspective_CvFallback_MatchesCvOnlyBehavior()
+    {
+        var cvOnlyPlugin = new PerspectivePlugin(Store, predictor: null);
+
+        var result = await cvOnlyPlugin.CorrectPerspective(TestImageRef);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+
+        var validCvMethods = new[]
+        {
+            "edges", "otsu_segmentation", "hsv_light_segmentation", "grabcut",
+            "already_aligned", "full_frame_aligned", "fallback_image_bounds"
+        };
+
+        Assert.IsTrue(validCvMethods.Contains(meta["detectionMethod"]),
+            $"CV-only plugin should produce CV method, got: {meta["detectionMethod"]}");
+    }
 }
