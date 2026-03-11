@@ -177,4 +177,28 @@ public sealed class SftpImageStoreTests
         Assert.IsTrue(await store.ExistsAsync(ref1));
         Assert.IsTrue(await store.ExistsAsync(ref2));
     }
+    
+    [TestMethod]
+    public async Task GetImagePath_DownloadsFileToTemp()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        using var testImage = new Mat(100, 100, MatType.CV_8UC3, Scalar.White);
+        Cv2.ImEncode(".png", testImage, out var imageBytes);
+
+        var reference = await store.SaveBytesAsync(imageBytes, "png", null, "TESTIMG001");
+        
+        var localPath = await store.GetImagePathAsync(reference);
+
+        Assert.IsTrue(File.Exists(localPath));
+        Assert.IsTrue(localPath.Contains("TESTIMG001"));
+        Assert.IsTrue(localPath.EndsWith(".png"));
+        
+        using var loadedImage = Cv2.ImRead(localPath);
+        Assert.IsFalse(loadedImage.Empty());
+        Assert.AreEqual(100, loadedImage.Width);
+        Assert.AreEqual(100, loadedImage.Height);
+        
+        File.Delete(localPath);
+    }
 }
