@@ -340,4 +340,25 @@ public sealed class SftpImageStoreTests
         
         File.Delete(localPath);
     }
+    
+    [TestMethod]
+    public void InvalidReference_WithDirectoryTraversal_ThrowsSecurityException()
+    {
+        using var store = new SftpImageStore(_config);
+        
+        bool thrown1 = false;
+        try { store.Exists("../../../etc/passwd"); }
+        catch (SecurityException) { thrown1 = true; }
+        Assert.IsTrue(thrown1, "Should throw SecurityException for path traversal");
+        
+        bool thrown2 = false;
+        try { store.Exists("..\\..\\windows\\system32"); }
+        catch (SecurityException) { thrown2 = true; }
+        Assert.IsTrue(thrown2, "Should throw SecurityException for path traversal");
+        
+        bool thrown3 = false;
+        try { store.Exists("test/../../../dangerous"); }
+        catch (SecurityException) { thrown3 = true; }
+        Assert.IsTrue(thrown3, "Should throw SecurityException for path traversal");
+    }
 }
