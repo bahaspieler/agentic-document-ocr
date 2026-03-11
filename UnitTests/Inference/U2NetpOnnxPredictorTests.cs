@@ -33,6 +33,7 @@ public sealed class U2NetpOnnxPredictorTests
             // ignore cleanup failures
         }
     }
+
     [TestMethod]
     public void TryCreateDefault_WhenModelPresent_ReturnsPredictor()
     {
@@ -48,6 +49,7 @@ public sealed class U2NetpOnnxPredictorTests
         Assert.IsNotNull(predictor, "Should return predictor when model is present");
         predictor.Dispose();
     }
+
     [TestMethod]
     public void FromModelPath_WhenPathEmpty_ThrowsArgumentException()
     {
@@ -62,6 +64,7 @@ public sealed class U2NetpOnnxPredictorTests
         }
         Assert.IsTrue(thrown, "Should throw ArgumentException for empty path");
     }
+
     [TestMethod]
     public void FromModelPath_WhenFileNotFound_ThrowsFileNotFoundException()
     {
@@ -76,8 +79,9 @@ public sealed class U2NetpOnnxPredictorTests
         {
             thrown = true;
         }
-        Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing files");
+        Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing file");
     }
+
     [TestMethod]
     public void PredictProbabilityMask_WhenImageEmpty_ThrowsArgumentException()
     {
@@ -103,6 +107,7 @@ public sealed class U2NetpOnnxPredictorTests
         predictor.Dispose();
         Assert.IsTrue(thrown, "Should throw ArgumentException for empty image");
     }
+
     [TestMethod]
     public void PredictProbabilityMask_WithValidImage_ReturnsValidMask()
     {
@@ -132,6 +137,7 @@ public sealed class U2NetpOnnxPredictorTests
 
         predictor.Dispose();
     }
+
     [TestMethod]
     public void PredictProbabilityMask_OutputDimensions_MatchInput()
     {
@@ -160,6 +166,7 @@ public sealed class U2NetpOnnxPredictorTests
 
         predictor.Dispose();
     }
+
     [TestMethod]
     public void Dispose_CanBeCalledMultipleTimes()
     {
@@ -172,5 +179,12 @@ public sealed class U2NetpOnnxPredictorTests
 
         predictor.Dispose();
         predictor.Dispose(); // Should not throw
+    }
+
+    [TestMethod]
+    public void InputSize_IsCorrect()
+    {
+        Assert.AreEqual(320, U2NetpOnnxPredictor.InputSize, 
+            "InputSize should be 320 (U2NETP expects 320x320)");
     }
 }
