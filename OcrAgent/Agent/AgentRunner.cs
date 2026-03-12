@@ -1,7 +1,6 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
-using OpenAI.Chat;
 using System.ClientModel;
 
 namespace OcrAgent.Agent;
@@ -17,7 +16,7 @@ public sealed class AgentRunner
 
     public async Task RunConversationLoopAsync()
     {
-        var thread = _agent.GetNewThread();
+        var session = await _agent.CreateSessionAsync();
 
         while (true)
         {
@@ -29,9 +28,9 @@ public sealed class AgentRunner
                 userInput.Trim().Equals("exit", StringComparison.OrdinalIgnoreCase))
                 break;
 
-            await foreach (var update in _agent.RunStreamingAsync(userInput, thread))
+            await foreach (var update in _agent.RunStreamingAsync(userInput, session))
             {
-                Console.Write(update);
+                Console.Write(update.Text);
             }
         }
     }
@@ -43,7 +42,7 @@ public sealed class AgentRunner
         var client = new OpenAIClient(new ApiKeyCredential(apiKey));
         var chatClient = client.GetChatClient(deployment);
 
-        return chatClient.CreateAIAgent(
+        return chatClient.AsIChatClient().AsAIAgent(
             instructions:
                 "You are an OCR Preprocessing Agent that helps improve document images before OCR extraction.\n\n" +
                 "You will analyze the user prompt and map their demand to the available list of tools and utilize them\n\n" +
@@ -67,6 +66,12 @@ public sealed class AgentRunner
                 "12. BinarizeImage(ref, method='otsu'|'adaptive_mean'|'adaptive_gaussian') - Convert to B&W\n" +
                 "13. ApplyMorphology(ref, operation='close'|'open'|'erode'|'dilate'|'gradient', kernelSize?, iterations?) - Post-binarization cleanup\n" +
                 "14. RemoveDocumentBackground(ref, mode='on_white'|'mask_only'|'transparent', sensitivity?, feather?) - Remove desk/table background. Use 'transparent' for RGBA PNG with alpha channel.\n\n" +
+
+                "WORKFLOWS:\n" +
+                "15. ListWorkflows() - Show available preprocessing workflows\n" +
+                "16. RunWorkflow(workflowId, imageRef, overridesJson?) - Run a predefined workflow on an image\n\n" +
+                "When the user asks to process a receipt or run a workflow, use RunWorkflow.\n" +
+                "When the user asks what workflows are available, use ListWorkflows.\n" +
                 "Always return the generated reference IDs to the user in numbered style.\n" +
                 "If required parameters are missing, ask a short follow-up question.",
             name: "OCR Preprocessing Agent",

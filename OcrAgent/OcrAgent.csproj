@@ -8,8 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.260108.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.260108.1" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.0.0-rc4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.2" />
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
@@ -32,6 +37,10 @@
     <ItemGroup>
         <None Include="Assets\Models\u2netp.onnx" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets\Models\u2netp.onnx')" />
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="Workflows\Definitions\*.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>
