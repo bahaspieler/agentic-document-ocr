@@ -1,0 +1,52 @@
+{
+  "id": "receipt_preprocess_v1",
+  "name": "Receipt Preprocessing",
+  "version": "1.0.0",
+  "description": "Standard preprocessing pipeline for receipt images: perspective correction, deskew, contrast enhancement, denoising, binarization, and morphological cleanup.",
+  "tags": ["receipt", "preprocessing"],
+  "budget": { "maxVariants": 12 },
+  "steps": [
+    {
+      "id": "perspective",
+      "type": "tool",
+      "tool": "CorrectPerspective",
+      "args": { "sensitivity": "auto", "marginPercent": 2, "enhanceEdges": true },
+      "description": "Fix perspective distortion from angled mobile captures"
+    },
+    {
+      "id": "deskew",
+      "type": "tool",
+      "tool": "DeskewImage",
+      "args": { "method": "hough", "maxAngle": 15, "preserveSize": true },
+      "description": "Correct document skew/tilt"
+    },
+    {
+      "id": "contrast",
+      "type": "tool",
+      "tool": "EnhanceContrast",
+      "args": { "method": "clahe" },
+      "description": "Improve text-background contrast"
+    },
+    {
+      "id": "denoise",
+      "type": "tool",
+      "tool": "DenoiseImage",
+      "args": { "method": "bilateral", "strength": "low" },
+      "description": "Remove noise while preserving text edges"
+    },
+    {
+      "id": "binarize",
+      "type": "tool",
+      "tool": "BinarizeImage",
+      "args": { "method": "adaptive_gaussian", "blockSize": 15, "constant": 4 },
+      "description": "Convert to binary for OCR"
+    },
+    {
+      "id": "morphology",
+      "type": "tool",
+      "tool": "ApplyMorphology",
+      "args": { "operation": "close", "kernelSize": 3, "iterations": 1 },
+      "description": "Close small gaps in character strokes"
+    }
+  ]
+}
