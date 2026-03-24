@@ -19,4 +19,20 @@ public class WorkflowCompilerTests
         }
         return registry;
     }
+    private static WorkflowDefinition CreateDefinition(params (string id, string tool, bool enabled)[] steps)
+    {
+        return new WorkflowDefinition
+        {
+            Id = "test_workflow",
+            Name = "Test",
+            Steps = steps.Select(s => new WorkflowStep
+            {
+                Id = s.id,
+                Type = "tool",
+                Tool = s.tool,
+                Enabled = s.enabled,
+                Args = new Dictionary<string, object?>()
+            }).ToList()
+        };
+    }
 }
