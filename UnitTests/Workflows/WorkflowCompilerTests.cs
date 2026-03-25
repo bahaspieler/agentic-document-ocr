@@ -90,4 +90,41 @@ public class WorkflowCompilerTests
 
         Assert.IsNotNull(workflow);
     }
+
+    [TestMethod]
+    public void Compile_OverrideMergesArgs()
+    {
+        var registry = CreateRegistryWithTools("ToolA");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = new WorkflowDefinition
+        {
+            Id = "test",
+            Name = "Test",
+            Steps = new List<WorkflowStep>
+            {
+                new()
+                {
+                    Id = "s1",
+                    Type = "tool",
+                    Tool = "ToolA",
+                    Enabled = true,
+                    Args = new Dictionary<string, object?> { ["method"] = "default", ["strength"] = "low" }
+                }
+            }
+        };
+
+        var overrides = new WorkflowOverrides
+        {
+            Steps = new Dictionary<string, StepOverride>
+            {
+                ["s1"] = new StepOverride
+                {
+                    Args = new Dictionary<string, object?> { ["strength"] = "high" }
+                }
+            }
+        };
+
+        var (workflow, _) = compiler.Compile(definition, overrides, new WorkflowContext());
+        Assert.IsNotNull(workflow);
+    }
 }
