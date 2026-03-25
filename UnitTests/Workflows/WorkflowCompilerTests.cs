@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.AI;
+﻿using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 using OcrAgent.Workflows.Engine;
 using OcrAgent.Workflows.Model;
 
@@ -19,6 +20,7 @@ public class WorkflowCompilerTests
         }
         return registry;
     }
+
     private static WorkflowDefinition CreateDefinition(params (string id, string tool, bool enabled)[] steps)
     {
         return new WorkflowDefinition
@@ -34,5 +36,21 @@ public class WorkflowCompilerTests
                 Args = new Dictionary<string, object?>()
             }).ToList()
         };
+    }
+
+    [TestMethod]
+    public void Compile_ThreeStepWorkflow_DoesNotThrow()
+    {
+        var registry = CreateRegistryWithTools("ToolA", "ToolB", "ToolC");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(
+            ("s1", "ToolA", true),
+            ("s2", "ToolB", true),
+            ("s3", "ToolC", true));
+
+        var (workflow, stepCount) = compiler.Compile(definition, null, new WorkflowContext());
+
+        Assert.IsNotNull(workflow);
+        Assert.AreEqual(3, stepCount);
     }
 }
