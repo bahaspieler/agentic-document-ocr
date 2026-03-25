@@ -53,4 +53,20 @@ public class WorkflowCompilerTests
         Assert.IsNotNull(workflow);
         Assert.AreEqual(3, stepCount);
     }
+
+
+    [TestMethod]
+    public void Compile_DisabledStepIsExcluded()
+    {
+        var registry = CreateRegistryWithTools("ToolA", "ToolB");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(
+            ("s1", "ToolA", true),
+            ("s2", "ToolB", false));
+
+        var (workflow, stepCount) = compiler.Compile(definition, null, new WorkflowContext());
+
+        Assert.IsNotNull(workflow);
+        Assert.AreEqual(1, stepCount);
+    }
 }
