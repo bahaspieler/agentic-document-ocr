@@ -142,4 +142,25 @@ public class WorkflowCompilerTests
         Assert.IsNotNull(workflow);
         Assert.AreEqual(1, stepCount);
     }
+
+    [TestMethod]
+    public void Compile_AllToolsUnavailable_ThrowsInvalidOperation()
+    {
+        var registry = CreateRegistryWithTools("ToolA");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(("s1", "NonExistentTool", true));
+        bool thrown = false;
+
+        try
+        {
+            compiler.Compile(definition, null, new WorkflowContext());
+        }
+        catch (InvalidOperationException ex)
+        {
+            thrown = true;
+            Assert.IsTrue(ex.Message.Contains("no steps with available tools"));
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException when all tools unavailable");
+    }
 }
