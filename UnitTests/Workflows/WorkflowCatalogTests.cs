@@ -32,4 +32,14 @@ public class WorkflowCatalogTests
         """;
         File.WriteAllText(Path.Combine(_tempDir, filename), json);
     }
+     [TestMethod]
+    public void Constructor_LoadsDefinitionsFromDirectory()
+    {
+        WriteDefinition("wf1.json", "wf1", "Workflow 1", "First");
+        WriteDefinition("wf2.json", "wf2", "Workflow 2", "Second");
+
+        var catalog = new WorkflowCatalog(_tempDir);
+
+        Assert.AreEqual(2, catalog.Count);
+    }
 }
