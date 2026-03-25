@@ -212,4 +212,36 @@ public class WorkflowCompilerTests
 
         Assert.IsTrue(thrown, "Expected InvalidOperationException when all steps disabled");
     }
+
+    [TestMethod]
+    public void Compile_PassthroughAndOutputsSteps_DoesNotThrow()
+    {
+        var registry = CreateRegistryWithTools("Analyze", "Process");
+        var compiler = new WorkflowCompiler(registry);
+
+        var definition = new WorkflowDefinition
+        {
+            Id = "ctx_test",
+            Name = "Context Test",
+            Steps = new List<WorkflowStep>
+            {
+                new()
+                {
+                    Id = "s1", Type = "tool", Tool = "Analyze", Enabled = true,
+                    Passthrough = true,
+                    Outputs = new Dictionary<string, string> { ["profile"] = "$result" },
+                    Args = new Dictionary<string, object?>()
+                },
+                new()
+                {
+                    Id = "s2", Type = "tool", Tool = "Process", Enabled = true,
+                    Args = new Dictionary<string, object?> { ["profile"] = "$context.profile" }
+                }
+            }
+        };
+
+        var (workflow, stepCount) = compiler.Compile(definition, null, new WorkflowContext());
+        Assert.IsNotNull(workflow);
+        Assert.AreEqual(2, stepCount);
+    }
 }
