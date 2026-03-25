@@ -163,4 +163,27 @@ public class WorkflowCompilerTests
 
         Assert.IsTrue(thrown, "Expected InvalidOperationException when all tools unavailable");
     }
+
+
+    [TestMethod]
+    public void Compile_NoEnabledSteps_ThrowsInvalidOperation()
+    {
+        var registry = CreateRegistryWithTools("ToolA");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(("s1", "ToolA", false));
+        bool thrown = false;
+
+        try
+        {
+            compiler.Compile(definition, null, new WorkflowContext());
+        }
+        catch (InvalidOperationException ex)
+        {
+            thrown = true;
+            Assert.IsTrue(ex.Message.Contains("no enabled steps"));
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException for no enabled steps");
+    }
+
 }
