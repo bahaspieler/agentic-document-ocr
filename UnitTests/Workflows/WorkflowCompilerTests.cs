@@ -69,4 +69,25 @@ public class WorkflowCompilerTests
         Assert.IsNotNull(workflow);
         Assert.AreEqual(1, stepCount);
     }
+    [TestMethod]
+    public void Compile_OverrideDisablesStep()
+    {
+        var registry = CreateRegistryWithTools("ToolA", "ToolB");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(
+            ("s1", "ToolA", true),
+            ("s2", "ToolB", true));
+
+        var overrides = new WorkflowOverrides
+        {
+            Steps = new Dictionary<string, StepOverride>
+            {
+                ["s2"] = new StepOverride { Enabled = false }
+            }
+        };
+
+        var (workflow, _) = compiler.Compile(definition, overrides, new WorkflowContext());
+
+        Assert.IsNotNull(workflow);
+    }
 }
