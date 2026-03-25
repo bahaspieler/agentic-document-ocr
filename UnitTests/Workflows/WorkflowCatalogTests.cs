@@ -42,4 +42,11 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual(2, catalog.Count);
     }
+    [TestMethod]
+    public void Constructor_NonExistentDirectory_CreatesEmptyCatalog()
+    {
+        var catalog = new WorkflowCatalog("/nonexistent/path/xyz");
+
+        Assert.AreEqual(0, catalog.Count);
+    }
 }
