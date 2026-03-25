@@ -20,4 +20,16 @@ public class WorkflowCatalogTests
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
+    private void WriteDefinition(string filename, string id, string name, string description)
+    {
+        var json = $$"""
+        {
+          "id": "{{id}}",
+          "name": "{{name}}",
+          "description": "{{description}}",
+          "steps": []
+        }
+        """;
+        File.WriteAllText(Path.Combine(_tempDir, filename), json);
+    }
 }
