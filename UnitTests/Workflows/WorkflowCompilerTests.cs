@@ -185,5 +185,31 @@ public class WorkflowCompilerTests
 
         Assert.IsTrue(thrown, "Expected InvalidOperationException for no enabled steps");
     }
+    [TestMethod]
+    public void Compile_AllStepsDisabledByOverride_ThrowsInvalidOperation()
+    {
+        var registry = CreateRegistryWithTools("ToolA");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(("s1", "ToolA", true));
 
+        var overrides = new WorkflowOverrides
+        {
+            Steps = new Dictionary<string, StepOverride>
+            {
+                ["s1"] = new StepOverride { Enabled = false }
+            }
+        };
+
+        bool thrown = false;
+        try
+        {
+            compiler.Compile(definition, overrides, new WorkflowContext());
+        }
+        catch (InvalidOperationException)
+        {
+            thrown = true;
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException when all steps disabled");
+    }
 }
