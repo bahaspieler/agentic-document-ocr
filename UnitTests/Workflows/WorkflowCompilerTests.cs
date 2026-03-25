@@ -127,4 +127,19 @@ public class WorkflowCompilerTests
         var (workflow, _) = compiler.Compile(definition, overrides, new WorkflowContext());
         Assert.IsNotNull(workflow);
     }
+
+    [TestMethod]
+    public void Compile_UnavailableTool_SkipsStepAndCompiles()
+    {
+        var registry = CreateRegistryWithTools("ToolA");
+        var compiler = new WorkflowCompiler(registry);
+        var definition = CreateDefinition(
+            ("s1", "ToolA", true),
+            ("s2", "NonExistentTool", true));
+
+        var (workflow, stepCount) = compiler.Compile(definition, null, new WorkflowContext());
+
+        Assert.IsNotNull(workflow);
+        Assert.AreEqual(1, stepCount);
+    }
 }
