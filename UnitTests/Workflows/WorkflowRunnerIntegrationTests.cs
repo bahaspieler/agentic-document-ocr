@@ -108,4 +108,26 @@ public class WorkflowRunnerIntegrationTests
         Assert.AreEqual("ToolY", secondTrace.ToolName);
         Assert.IsTrue(secondTrace.Success);
     }
+
+    [TestMethod]
+    public async Task RunAsync_InvalidWorkflowId_ThrowsOrFails()
+    {
+        var registry = CreatePassthroughRegistry("Tool1");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        bool thrown = false;
+
+        try
+        {
+            await runner.RunAsync("nonexistent_workflow", "REF001");
+        }
+        catch (InvalidOperationException)
+        {
+            thrown = true;
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException for unknown workflow");
+    }
 }
