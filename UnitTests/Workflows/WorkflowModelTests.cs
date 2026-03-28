@@ -37,5 +37,18 @@ public class WorkflowModelTests
           ]
         }
         """;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var def = JsonSerializer.Deserialize<WorkflowDefinition>(json, options)!;
+
+        Assert.AreEqual("test_workflow", def.Id);
+        Assert.AreEqual("Test Workflow", def.Name);
+        Assert.AreEqual("2.0.0", def.Version);
+        Assert.AreEqual("A test workflow", def.Description);
+        Assert.AreEqual(2, def.Tags.Length);
+        Assert.AreEqual(5, def.Budget.MaxVariants);
+        Assert.AreEqual(30000, def.Budget.TimeLimitMs);
+        Assert.AreEqual(2, def.Steps.Count);
+        Assert.AreEqual("SomeTool", def.Steps[0].Tool);
+        Assert.IsFalse(def.Steps[1].Enabled);
     }
 }
