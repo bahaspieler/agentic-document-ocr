@@ -80,4 +80,32 @@ public class WorkflowRunnerIntegrationTests
         Assert.AreEqual(2, result.Trace.Count);
         Assert.IsTrue(result.TotalDurationMs >= 0);
     }
+
+    [TestMethod]
+    public async Task RunAsync_TraceEntries_HaveCorrectData()
+    {
+        WriteDefinition("trace_test", ("step1", "ToolX"), ("step2", "ToolY"));
+
+        var registry = CreatePassthroughRegistry("ToolX", "ToolY");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var result = await runner.RunAsync("trace_test", "IMG_123");
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.AreEqual(2, result.Trace.Count);
+
+        var firstTrace = result.Trace[0];
+        Assert.AreEqual("step1", firstTrace.StepId);
+        Assert.AreEqual("ToolX", firstTrace.ToolName);
+        Assert.AreEqual("IMG_123", firstTrace.InputRef);
+        Assert.IsTrue(firstTrace.Success);
+        Assert.IsTrue(firstTrace.DurationMs >= 0);
+
+        var secondTrace = result.Trace[1];
+        Assert.AreEqual("step2", secondTrace.StepId);
+        Assert.AreEqual("ToolY", secondTrace.ToolName);
+        Assert.IsTrue(secondTrace.Success);
+    }
 }
