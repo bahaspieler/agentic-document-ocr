@@ -60,4 +60,24 @@ public class WorkflowRunnerIntegrationTests
         var json = JsonSerializer.Serialize(def);
         File.WriteAllText(Path.Combine(_tempDir, $"{id}.json"), json);
     }
+
+    [TestMethod]
+    public async Task RunAsync_SimpleWorkflow_Succeeds()
+    {
+        WriteDefinition("simple_test", ("s1", "StepA"), ("s2", "StepB"));
+
+        var registry = CreatePassthroughRegistry("StepA", "StepB");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var result = await runner.RunAsync("simple_test", "REF001");
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.AreEqual("simple_test", result.WorkflowId);
+        Assert.AreEqual("REF001", result.InputImageRef);
+        Assert.IsTrue(result.OutputImageRef.Length > 0, "OutputImageRef should not be empty");
+        Assert.AreEqual(2, result.Trace.Count);
+        Assert.IsTrue(result.TotalDurationMs >= 0);
+    }
 }
