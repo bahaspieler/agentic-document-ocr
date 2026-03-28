@@ -70,4 +70,22 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual("MyWorkflow", def.Id);
     }
+    [TestMethod]
+    public void Get_UnknownId_ThrowsInvalidOperation()
+    {
+        var catalog = new WorkflowCatalog(_tempDir);
+        bool thrown = false;
+
+        try
+        {
+            catalog.Get("nonexistent");
+        }
+        catch (InvalidOperationException ex)
+        {
+            thrown = true;
+            Assert.IsTrue(ex.Message.Contains("nonexistent"));
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException for unknown workflow ID");
+    }
 }
