@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using OcrAgent.Workflows.Engine;
+using OcrAgent.Workflows.Model;
 
 namespace UnitTests.Workflows;
 
@@ -36,5 +38,26 @@ public class WorkflowRunnerIntegrationTests
         }
 
         return registry;
+    }
+
+    private void WriteDefinition(string id, params (string stepId, string tool)[] steps)
+    {
+        var def = new WorkflowDefinition
+        {
+            Id = id,
+            Name = $"Test {id}",
+            Description = $"Test workflow {id}",
+            Steps = steps.Select(s => new WorkflowStep
+            {
+                Id = s.stepId,
+                Type = "tool",
+                Tool = s.tool,
+                Enabled = true,
+                Args = new Dictionary<string, object?>()
+            }).ToList()
+        };
+
+        var json = JsonSerializer.Serialize(def);
+        File.WriteAllText(Path.Combine(_tempDir, $"{id}.json"), json);
     }
 }
