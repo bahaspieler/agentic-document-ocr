@@ -130,4 +130,37 @@ public class WorkflowRunnerIntegrationTests
 
         Assert.IsTrue(thrown, "Expected InvalidOperationException for unknown workflow");
     }
+
+    [TestMethod]
+    public async Task RunAsync_WithOverrides_DisablesStep()
+    {
+        var def = new WorkflowDefinition
+        {
+            Id = "override_test",
+            Name = "Override Test",
+            Steps = new List<WorkflowStep>
+            {
+                new() { Id = "s1", Type = "tool", Tool = "ToolA", Enabled = true, Args = new() },
+                new() { Id = "s2", Type = "tool", Tool = "ToolB", Enabled = true, Args = new() },
+                new() { Id = "s3", Type = "tool", Tool = "ToolC", Enabled = true, Args = new() }
+            }
+        };
+
+        File.WriteAllText(
+            Path.Combine(_tempDir, "override_test.json"),
+            JsonSerializer.Serialize(def));
+
+        var registry = CreatePassthroughRegistry("ToolA", "ToolB", "ToolC");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var overridesJson = """{ "steps": { "s2": { "enabled": false } } }""";
+        var result = await runner.RunAsync("override_test", "REF001", overridesJson);
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.AreEqual(2, result.Trace.Count);
+        Assert.IsFalse(result.Trace.Any(t => t.ToolName == "ToolB"),
+            "ToolB should have been disabled by override");
+    }
 }
