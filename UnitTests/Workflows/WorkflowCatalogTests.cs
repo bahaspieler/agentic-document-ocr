@@ -20,6 +20,7 @@ public class WorkflowCatalogTests
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
     }
+
     private void WriteDefinition(string filename, string id, string name, string description)
     {
         var json = $$"""
@@ -32,7 +33,8 @@ public class WorkflowCatalogTests
         """;
         File.WriteAllText(Path.Combine(_tempDir, filename), json);
     }
-     [TestMethod]
+
+    [TestMethod]
     public void Constructor_LoadsDefinitionsFromDirectory()
     {
         WriteDefinition("wf1.json", "wf1", "Workflow 1", "First");
@@ -42,6 +44,7 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual(2, catalog.Count);
     }
+
     [TestMethod]
     public void Constructor_NonExistentDirectory_CreatesEmptyCatalog()
     {
@@ -49,7 +52,8 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual(0, catalog.Count);
     }
-     [TestMethod]
+
+    [TestMethod]
     public void Get_ExistingId_ReturnsDefinition()
     {
         WriteDefinition("test.json", "my_workflow", "My Workflow", "Test desc");
@@ -60,6 +64,7 @@ public class WorkflowCatalogTests
         Assert.AreEqual("my_workflow", def.Id);
         Assert.AreEqual("My Workflow", def.Name);
     }
+
     [TestMethod]
     public void Get_IsCaseInsensitive()
     {
@@ -70,6 +75,7 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual("MyWorkflow", def.Id);
     }
+
     [TestMethod]
     public void Get_UnknownId_ThrowsInvalidOperation()
     {
@@ -87,5 +93,30 @@ public class WorkflowCatalogTests
         }
 
         Assert.IsTrue(thrown, "Expected InvalidOperationException for unknown workflow ID");
+    }
+
+    [TestMethod]
+    public void List_ReturnsAllEntries()
+    {
+        WriteDefinition("a.json", "alpha", "Alpha", "First");
+        WriteDefinition("b.json", "beta", "Beta", "Second");
+
+        var catalog = new WorkflowCatalog(_tempDir);
+        var list = catalog.List().ToList();
+
+        Assert.AreEqual(2, list.Count);
+        Assert.IsTrue(list.Any(w => w.Id == "alpha"));
+        Assert.IsTrue(list.Any(w => w.Id == "beta"));
+    }
+
+    [TestMethod]
+    public void Constructor_SkipsFilesWithEmptyId()
+    {
+        var json = """{ "id": "", "name": "Empty ID", "steps": [] }""";
+        File.WriteAllText(Path.Combine(_tempDir, "empty.json"), json);
+
+        var catalog = new WorkflowCatalog(_tempDir);
+
+        Assert.AreEqual(0, catalog.Count);
     }
 }
