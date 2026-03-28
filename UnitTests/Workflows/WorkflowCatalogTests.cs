@@ -49,4 +49,15 @@ public class WorkflowCatalogTests
 
         Assert.AreEqual(0, catalog.Count);
     }
+     [TestMethod]
+    public void Get_ExistingId_ReturnsDefinition()
+    {
+        WriteDefinition("test.json", "my_workflow", "My Workflow", "Test desc");
+
+        var catalog = new WorkflowCatalog(_tempDir);
+        var def = catalog.Get("my_workflow");
+
+        Assert.AreEqual("my_workflow", def.Id);
+        Assert.AreEqual("My Workflow", def.Name);
+    }
 }
