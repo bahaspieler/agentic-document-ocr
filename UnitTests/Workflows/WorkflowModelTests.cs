@@ -51,4 +51,26 @@ public class WorkflowModelTests
         Assert.AreEqual("SomeTool", def.Steps[0].Tool);
         Assert.IsFalse(def.Steps[1].Enabled);
     }
+    [TestMethod]
+    public void WorkflowDefinition_Serialization_PreservesFields()
+    {
+        var def = new WorkflowDefinition
+        {
+            Id = "roundtrip",
+            Name = "Roundtrip Test",
+            Steps = new List<WorkflowStep>
+            {
+                new() { Id = "s1", Tool = "T1", Args = new Dictionary<string, object?> { ["key"] = "val" } }
+            }
+        };
+
+        var json = JsonSerializer.Serialize(def);
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var restored = JsonSerializer.Deserialize<WorkflowDefinition>(json, options)!;
+
+        Assert.AreEqual(def.Id, restored.Id);
+        Assert.AreEqual(def.Name, restored.Name);
+        Assert.AreEqual(1, restored.Steps.Count);
+        Assert.AreEqual("T1", restored.Steps[0].Tool);
+    }
 }
