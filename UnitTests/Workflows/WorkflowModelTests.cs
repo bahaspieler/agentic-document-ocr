@@ -93,4 +93,59 @@ public class WorkflowModelTests
         Assert.AreEqual(false, overrides.Steps["step1"].Enabled);
         Assert.IsNotNull(overrides.Steps["step2"].Args);
     }
+    [TestMethod]
+    public void WorkflowRunResult_DefaultValues()
+    {
+        var result = new WorkflowRunResult();
+
+        Assert.AreEqual("", result.WorkflowId);
+        Assert.AreEqual("", result.OutputImageRef);
+        Assert.IsFalse(result.Success);
+        Assert.IsNotNull(result.Trace);
+        Assert.AreEqual(0, result.Trace.Count);
+    }
+
+    [TestMethod]
+    public void StepTraceEntry_DefaultValues()
+    {
+        var entry = new StepTraceEntry();
+
+        Assert.AreEqual("", entry.StepId);
+        Assert.AreEqual("", entry.ToolName);
+        Assert.IsNotNull(entry.Args);
+        Assert.IsFalse(entry.Success);
+    }
+    [TestMethod]
+    public void WorkflowStep_Passthrough_DefaultFalse()
+    {
+        var step = new WorkflowStep();
+        Assert.IsFalse(step.Passthrough);
+    }
+
+    [TestMethod]
+    public void WorkflowStep_Outputs_DefaultNull()
+    {
+        var step = new WorkflowStep();
+        Assert.IsNull(step.Outputs);
+    }
+
+    [TestMethod]
+    public void WorkflowStep_Passthrough_Deserialization()
+    {
+        var json = """
+        {
+          "id": "assess",
+          "tool": "AssessQuality",
+          "passthrough": true,
+          "outputs": { "qualityProfile": "$result" }
+        }
+        """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var step = JsonSerializer.Deserialize<WorkflowStep>(json, options)!;
+
+        Assert.IsTrue(step.Passthrough);
+        Assert.IsNotNull(step.Outputs);
+        Assert.AreEqual("$result", step.Outputs["qualityProfile"]);
+    }
 }
