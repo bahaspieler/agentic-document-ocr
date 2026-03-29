@@ -73,4 +73,24 @@ public class WorkflowModelTests
         Assert.AreEqual(1, restored.Steps.Count);
         Assert.AreEqual("T1", restored.Steps[0].Tool);
     }
+    [TestMethod]
+    public void WorkflowOverrides_Deserialization()
+    {
+        var json = """
+        {
+          "steps": {
+            "step1": { "enabled": false },
+            "step2": { "args": { "method": "custom" } }
+          }
+        }
+        """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var overrides = JsonSerializer.Deserialize<WorkflowOverrides>(json, options)!;
+
+        Assert.IsNotNull(overrides.Steps);
+        Assert.AreEqual(2, overrides.Steps.Count);
+        Assert.AreEqual(false, overrides.Steps["step1"].Enabled);
+        Assert.IsNotNull(overrides.Steps["step2"].Args);
+    }
 }
