@@ -37,6 +37,7 @@ public class WorkflowModelTests
           ]
         }
         """;
+
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var def = JsonSerializer.Deserialize<WorkflowDefinition>(json, options)!;
 
@@ -51,6 +52,7 @@ public class WorkflowModelTests
         Assert.AreEqual("SomeTool", def.Steps[0].Tool);
         Assert.IsFalse(def.Steps[1].Enabled);
     }
+
     [TestMethod]
     public void WorkflowDefinition_Serialization_PreservesFields()
     {
@@ -73,6 +75,7 @@ public class WorkflowModelTests
         Assert.AreEqual(1, restored.Steps.Count);
         Assert.AreEqual("T1", restored.Steps[0].Tool);
     }
+
     [TestMethod]
     public void WorkflowOverrides_Deserialization()
     {
@@ -93,6 +96,7 @@ public class WorkflowModelTests
         Assert.AreEqual(false, overrides.Steps["step1"].Enabled);
         Assert.IsNotNull(overrides.Steps["step2"].Args);
     }
+
     [TestMethod]
     public void WorkflowRunResult_DefaultValues()
     {
@@ -115,6 +119,7 @@ public class WorkflowModelTests
         Assert.IsNotNull(entry.Args);
         Assert.IsFalse(entry.Success);
     }
+
     [TestMethod]
     public void WorkflowStep_Passthrough_DefaultFalse()
     {
@@ -147,5 +152,32 @@ public class WorkflowModelTests
         Assert.IsTrue(step.Passthrough);
         Assert.IsNotNull(step.Outputs);
         Assert.AreEqual("$result", step.Outputs["qualityProfile"]);
+    }
+
+    [TestMethod]
+    public void WorkflowStep_ContextReference_InArgs()
+    {
+        var json = """
+        {
+          "id": "denoise",
+          "tool": "DenoiseImage",
+          "args": { "method": "auto", "qualityProfile": "$context.qualityProfile" }
+        }
+        """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var step = JsonSerializer.Deserialize<WorkflowStep>(json, options)!;
+
+        Assert.AreEqual("$context.qualityProfile", step.Args["qualityProfile"]?.ToString());
+    }
+
+    [TestMethod]
+    public void WorkflowRunResult_HasContextAndFinalOutput()
+    {
+        var result = new WorkflowRunResult();
+
+        Assert.IsNull(result.FinalOutput);
+        Assert.IsNotNull(result.Context);
+        Assert.AreEqual(0, result.Context.Count);
     }
 }
