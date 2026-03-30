@@ -27,9 +27,9 @@ public sealed class WorkflowTool
     }
 
     [Description("Runs a predefined preprocessing workflow on an image. " +
-                 "Returns the final processed image reference and execution trace.")]
+                 "Returns the final processed image reference, execution trace, and any output data (e.g. OCR results).")]
     public async Task<string> RunWorkflow(
-        [Description("The workflow ID (e.g., 'receipt_preprocess_v1').")] string workflowId,
+        [Description("The workflow ID (e.g., 'receipt_extract_v3').")] string workflowId,
         [Description("The image reference to process.")] string imageReference,
         [Description("Optional JSON overrides to customize step parameters or disable steps.")] string? overridesJson = null)
     {
@@ -39,10 +39,26 @@ public sealed class WorkflowTool
             return $"Workflow failed: {result.Error}";
 
         var summary = $"Workflow '{result.WorkflowId}' completed in {result.TotalDurationMs}ms.\n" +
-                      $"Output: {result.OutputImageRef}\n" +
+                      $"Run ID: {result.RunId}\n" +
+                      $"Output directory: {result.OutputDirectory}\n" +
+                      $"Output image: {result.OutputImageRef}\n" +
                       $"Steps executed: {result.Trace.Count}\n" +
                       string.Join("\n", result.Trace.Select(t =>
-                          $"  - {t.ToolName}: {t.InputRef} -> {t.OutputRef} ({t.DurationMs}ms)"));
+                          $"  - {t.ToolName}: {t.InputRef} -> {t.OutputRef} ({t.DurationMs}ms)" +
+                          (t.Success ? "" : $" [FAILED: {t.Error}]")));
+
+        if (!string.IsNullOrEmpty(result.FinalOutput) && result.FinalOutput != result.OutputImageRef)
+            summary += $"\n\nFinal output data:\n{result.FinalOutput}";
+
+        if (result.Context.Count > 0)
+        {
+            summary += "\n\nWorkflow context:";
+            foreach (var (key, value) in result.Context)
+            {
+                var display = value.Length > 200 ? value[..200] + "..." : value;
+                summary += $"\n  {key}: {display}";
+            }
+        }
 
         return summary;
     }
