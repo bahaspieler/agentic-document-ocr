@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Text.Json;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
@@ -18,14 +19,26 @@ public sealed class ContrastPlugin : IImageProcessingTool
         _store = store;
     }
 
-    [Description("Enhances the contrast of the given image using the specified method. Returns the reference of the generated image.")]
+    [Description("Enhances the contrast of the given image. 'auto_lab' applies LAB-based CLAHE with highlight protection (recommended for documents). Returns the reference of the generated image, or the input reference unchanged if contrast is already adequate.")]
     public Task<string> EnhanceContrast(
         [Description("The reference number of the image to enhance.")] string imageReference,
-        [Description("The contrast enhancement method: 'auto' (normalize to 0-255), 'histogram' (histogram equalization), or 'clahe' (adaptive).")] string method = "auto")
+        [Description("The contrast enhancement method: 'auto' (normalize to 0-255), 'histogram' (histogram equalization), 'clahe' (adaptive), or 'auto_lab' (LAB CLAHE with highlight protection).")] string method = "auto",
+        [Description("Optional quality profile JSON from AssessQuality. When provided with 'auto_lab', skips if contrast is already adequate.")] string? qualityProfile = null)
     {
         method = method.ToLowerInvariant();
-        if (method != "auto" && method != "histogram" && method != "clahe")
-            throw new ArgumentException("method must be 'auto', 'histogram', or 'clahe'");
+        if (method != "auto" && method != "histogram" && method != "clahe" && method != "auto_lab")
+            throw new ArgumentException("method must be 'auto', 'histogram', 'clahe', or 'auto_lab'");
+
+        if (method == "auto_lab" && !string.IsNullOrEmpty(qualityProfile))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(qualityProfile);
+                if (doc.RootElement.TryGetProperty("contrast", out var c) && c.GetDouble() > 55)
+                    return Task.FromResult(imageReference);
+            }
+            catch { }
+        }
 
         var inputPath = _store.GetImagePath(imageReference);
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
@@ -48,6 +61,9 @@ public sealed class ContrastPlugin : IImageProcessingTool
             case "clahe":
                 ApplyCLAHE(src, enhanced);
                 break;
+            case "auto_lab":
+                ApplyAutoLabCLAHE(src, enhanced);
+                break;
         }
 
         Cv2.ImEncode(".png", enhanced, out var pngBytes);
@@ -66,7 +82,7 @@ public sealed class ContrastPlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    private void ApplyAutoContrast(Mat src, Mat dst)
+    private static void ApplyAutoContrast(Mat src, Mat dst)
     {
         // Convert to grayscale for min/max
         using var gray = new Mat();
@@ -81,7 +97,7 @@ public sealed class ContrastPlugin : IImageProcessingTool
         src.ConvertTo(dst, MatType.CV_8UC3, alpha, beta);
     }
 
-    private void ApplyHistogramEqualization(Mat src, Mat dst)
+    private static void ApplyHistogramEqualization(Mat src, Mat dst)
     {
         // Convert to YCrCb
         using var ycrcb = new Mat();
@@ -105,29 +121,36 @@ public sealed class ContrastPlugin : IImageProcessingTool
             ch.Dispose();
     }
 
-    private void ApplyCLAHE(Mat src, Mat dst)
+    private static void ApplyCLAHE(Mat src, Mat dst)
     {
         // Convert to LAB
         using var lab = new Mat();
         Cv2.CvtColor(src, lab, ColorConversionCodes.BGR2Lab);
+        var channels = Cv2.Split(lab);
+        using var clahe = Cv2.CreateCLAHE(clipLimit: 2.0, tileGridSize: new Size(8, 8));
+        clahe.Apply(channels[0], channels[0]);
+        using var merged = new Mat();
+        Cv2.Merge(channels, merged);
+        Cv2.CvtColor(merged, dst, ColorConversionCodes.Lab2BGR);
+        foreach (var ch in channels) ch.Dispose();
+    }
 
-        // Split channels
+    private static void ApplyAutoLabCLAHE(Mat src, Mat dst)
+    {
+        using var lab = new Mat();
+        Cv2.CvtColor(src, lab, ColorConversionCodes.BGR2Lab);
         var channels = Cv2.Split(lab);
 
-        // Apply CLAHE to L channel
+        // Clamp L channel at 240 to prevent burning thin text
+        Cv2.Min(channels[0], 240, channels[0]);
+
         using var clahe = Cv2.CreateCLAHE(clipLimit: 2.0, tileGridSize: new Size(8, 8));
         clahe.Apply(channels[0], channels[0]);
 
-        // Merge back
         using var merged = new Mat();
         Cv2.Merge(channels, merged);
-
-        // Convert back to BGR
         Cv2.CvtColor(merged, dst, ColorConversionCodes.Lab2BGR);
-
-        // Clean up channels
-        foreach (var ch in channels)
-            ch.Dispose();
+        foreach (var ch in channels) ch.Dispose();
     }
 
     public IEnumerable<AITool> GetAITools()
