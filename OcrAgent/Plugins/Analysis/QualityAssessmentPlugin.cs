@@ -32,6 +32,10 @@ public sealed class QualityAssessmentPlugin : IImageProcessingTool
         string noiseLevel = CategorizeNoise(noiseSigma);
         double meanBrightness = ComputeMeanBrightness(src);
         double contrast = ComputeContrast(gray);
+        double illuminationUniformity = ComputeIlluminationUniformity(gray);
+        bool isDarkBackground = meanBrightness < 127 && ComputeDarkPixelRatio(gray) > 0.60;
+        double estimatedSkewDeg = EstimateSkew(gray);
+        bool resolutionAdequate = Math.Min(src.Width, src.Height) >= 1000;
 
         var profile = new
         {
@@ -41,6 +45,10 @@ public sealed class QualityAssessmentPlugin : IImageProcessingTool
             noiseSigma = Math.Round(noiseSigma, 2),
             meanBrightness = Math.Round(meanBrightness, 1),
             contrast = Math.Round(contrast, 1),
+            illuminationUniformity = Math.Round(illuminationUniformity, 3),
+            isDarkBackground,
+            estimatedSkewDeg = Math.Round(estimatedSkewDeg, 2),
+            resolutionAdequate,
             dimensions = $"{src.Width}x{src.Height}"
         };
 
@@ -99,6 +107,67 @@ public sealed class QualityAssessmentPlugin : IImageProcessingTool
     {
         Cv2.MeanStdDev(gray, out _, out var stddev);
         return stddev[0];
+    }
+
+    private static double ComputeIlluminationUniformity(Mat gray)
+    {
+        const int gridSize = 4;
+        int blockH = gray.Rows / gridSize;
+        int blockW = gray.Cols / gridSize;
+        if (blockH < 1 || blockW < 1) return 1.0;
+
+        var blockMeans = new List<double>();
+        for (int gy = 0; gy < gridSize; gy++)
+        {
+            for (int gx = 0; gx < gridSize; gx++)
+            {
+                var roi = new Rect(gx * blockW, gy * blockH, blockW, blockH);
+                using var block = new Mat(gray, roi);
+                var mean = Cv2.Mean(block);
+                blockMeans.Add(mean[0]);
+            }
+        }
+
+        double avg = blockMeans.Average();
+        if (avg < 1e-6) return 1.0;
+        double variance = blockMeans.Sum(m => (m - avg) * (m - avg)) / blockMeans.Count;
+        double cv = Math.Sqrt(variance) / avg;
+
+        return Math.Clamp(1.0 - cv, 0.0, 1.0);
+    }
+
+    private static double ComputeDarkPixelRatio(Mat gray)
+    {
+        int total = gray.Rows * gray.Cols;
+        if (total == 0) return 0;
+
+        int dark = 0;
+        for (int y = 0; y < gray.Rows; y++)
+            for (int x = 0; x < gray.Cols; x++)
+                if (gray.At<byte>(y, x) < 127) dark++;
+
+        return (double)dark / total;
+    }
+
+    private static double EstimateSkew(Mat gray)
+    {
+        using var edges = new Mat();
+        Cv2.Canny(gray, edges, 50, 150);
+
+        var lines = Cv2.HoughLinesP(edges, 1, Math.PI / 180, 100, 100, 10);
+        if (lines.Length == 0) return 0.0;
+
+        var angles = new List<double>();
+        foreach (var line in lines)
+        {
+            double angle = Math.Atan2(line.P2.Y - line.P1.Y, line.P2.X - line.P1.X) * 180 / Math.PI;
+            if (Math.Abs(angle) < 45)
+                angles.Add(angle);
+        }
+
+        if (angles.Count == 0) return 0.0;
+        angles.Sort();
+        return angles[angles.Count / 2];
     }
 
     public IEnumerable<AITool> GetAITools()
