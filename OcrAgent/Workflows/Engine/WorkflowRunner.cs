@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Agents.AI.Workflows;
+using OcrAgent.Storage;
 using OcrAgent.Workflows.Events;
 using OcrAgent.Workflows.Model;
 
@@ -10,11 +12,13 @@ public sealed class WorkflowRunner
 {
     private readonly WorkflowCatalog _catalog;
     private readonly WorkflowCompiler _compiler;
+    private readonly IImageStore? _store;
 
-    public WorkflowRunner(WorkflowCatalog catalog, WorkflowCompiler compiler)
+    public WorkflowRunner(WorkflowCatalog catalog, WorkflowCompiler compiler, IImageStore? store = null)
     {
         _catalog = catalog;
         _compiler = compiler;
+        _store = store;
     }
 
     public async Task<WorkflowRunResult> RunAsync(
@@ -26,21 +30,40 @@ public sealed class WorkflowRunner
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             : null;
 
-        var workflow = _compiler.Compile(definition, overrides);
+        var runId = Guid.CreateVersion7().ToString("D");
+        var subdirectory = $"wf_{definition.Id}/{runId}";
 
         var result = new WorkflowRunResult
         {
             WorkflowId = definition.Id,
             Version = definition.Version,
             InputImageRef = imageRef,
+            RunId = runId,
+            OutputDirectory = subdirectory,
         };
 
         var totalSw = Stopwatch.StartNew();
-        int stepCount = definition.Steps.Count(s => s.Enabled);
         int completed = 0;
 
+        _store?.SetActiveSubdirectory(subdirectory);
         try
         {
+            var context = new WorkflowContext();
+
+            context.Set("workflowId", definition.Id);
+            context.Set("runId", runId);
+
+            if (overrides?.InitialContext != null)
+            {
+                foreach (var (key, value) in overrides.InitialContext)
+                    context.Set(key, value);
+            }
+
+            if (definition.Budget?.MaxVariants > 0)
+                context.Set("maxVariants", definition.Budget.MaxVariants.ToString());
+
+            var (workflow, stepCount) = _compiler.Compile(definition, overrides, context);
+
             var run = await InProcessExecution.RunStreamingAsync(workflow, imageRef);
 
             await foreach (var evt in run.WatchStreamAsync())
@@ -65,7 +88,7 @@ public sealed class WorkflowRunner
                         break;
 
                     case WorkflowOutputEvent output:
-                        result.OutputImageRef = output.Data?.ToString() ?? "";
+                        result.FinalOutput = output.Data?.ToString() ?? "";
                         break;
 
                     case WorkflowErrorEvent error:
@@ -74,12 +97,23 @@ public sealed class WorkflowRunner
                 }
             }
 
+            // Determine OutputImageRef from last non-passthrough step trace
+            var lastImageStep = result.Trace.LastOrDefault(t => t.Success && t.OutputRef != t.InputRef);
+            result.OutputImageRef = lastImageStep?.OutputRef
+                                    ?? result.Trace.LastOrDefault(t => t.Success)?.OutputRef
+                                    ?? "";
+
+            result.Context = new Dictionary<string, string>(context.GetAll());
             result.Success = string.IsNullOrEmpty(result.Error);
         }
         catch (Exception ex)
         {
             result.Success = false;
             result.Error = ex.Message;
+        }
+        finally
+        {
+            _store?.SetActiveSubdirectory(null);
         }
 
         totalSw.Stop();
