@@ -26,6 +26,17 @@ public sealed class IlluminationNormalizePlugin : IImageProcessingTool
             throw new ArgumentException("kernelSize must be an odd number >= 3");
         strength = Math.Clamp(strength, 0.0, 1.0);
 
+        if (!string.IsNullOrEmpty(qualityProfile))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(qualityProfile);
+                if (doc.RootElement.TryGetProperty("illuminationUniformity", out var u) && u.GetDouble() > 0.90)
+                    return Task.FromResult(imageReference);
+            }
+            catch { }
+        }
+
         var inputPath = _store.GetImagePath(imageReference);
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
         if (src.Empty())
@@ -66,8 +77,16 @@ public sealed class IlluminationNormalizePlugin : IImageProcessingTool
 
         Cv2.ImEncode(".png", output, out var pngBytes);
 
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "illumination_normalize",
+            ["kernelSize"] = kernelSize.ToString(),
+            ["strength"] = strength.ToString("F2")
+        };
+
         var desiredRef = PluginHelpers.MakeUniqueRef(_store, $"{imageReference}_illum_norm");
-        var newRef = _store.SaveBytes(pngBytes, "png", new Dictionary<string, string>(), desiredRef);
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
     }
 
