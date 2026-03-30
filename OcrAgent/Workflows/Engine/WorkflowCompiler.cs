@@ -13,31 +13,54 @@ public sealed class WorkflowCompiler
         _registry = registry;
     }
 
-    public Workflow Compile(WorkflowDefinition definition, WorkflowOverrides? overrides = null)
+    public (Workflow Workflow, int StepCount) Compile(
+        WorkflowDefinition definition, WorkflowOverrides? overrides, WorkflowContext context)
     {
         var enabledSteps = GetEnabledSteps(definition, overrides);
         if (enabledSteps.Count == 0)
             throw new InvalidOperationException($"Workflow '{definition.Id}' has no enabled steps.");
 
+        var availableSteps = new List<WorkflowStep>();
         foreach (var step in enabledSteps)
         {
             if (step.Type == "tool" && !_registry.HasTool(step.Tool))
-                throw new InvalidOperationException(
-                    $"Step '{step.Id}' references unknown tool '{step.Tool}'.");
+            {
+                Console.WriteLine($"  [WARN] Skipping step '{step.Id}': tool '{step.Tool}' is not available.");
+                continue;
+            }
+            if (step.Type == "branch" && (step.Branches == null || step.Branches.Count == 0))
+            {
+                Console.WriteLine($"  [WARN] Skipping branch step '{step.Id}': no branches defined.");
+                continue;
+            }
+            availableSteps.Add(step);
         }
 
-        var executors = new List<ToolStepExecutor>();
-        for (int i = 0; i < enabledSteps.Count; i++)
+        if (availableSteps.Count == 0)
+            throw new InvalidOperationException($"Workflow '{definition.Id}' has no steps with available tools.");
+
+        var executors = new List<Executor>();
+        for (int i = 0; i < availableSteps.Count; i++)
         {
-            var step = enabledSteps[i];
+            var step = availableSteps[i];
             var args = MergeArgs(step.Args, overrides?.Steps?.GetValueOrDefault(step.Id)?.Args);
 
-            executors.Add(new ToolStepExecutor(
-                executorId: $"Step_{i}_{step.Tool}",
-                stepId: step.Id,
-                toolName: step.Tool,
-                defaultArgs: args,
-                registry: _registry));
+            if (step.Type == "branch")
+            {
+                executors.Add(BuildBranchExecutor(i, step, overrides, context));
+            }
+            else
+            {
+                executors.Add(new ToolStepExecutor(
+                    executorId: $"Step_{i}_{step.Tool}",
+                    stepId: step.Id,
+                    toolName: step.Tool,
+                    defaultArgs: args,
+                    registry: _registry,
+                    workflowContext: context,
+                    passthrough: step.Passthrough,
+                    outputs: step.Outputs));
+            }
         }
 
         var builder = new WorkflowBuilder(executors[0]);
@@ -47,7 +70,42 @@ public sealed class WorkflowCompiler
         }
         builder.WithOutputFrom(executors[^1]);
 
-        return builder.Build();
+        return (builder.Build(), availableSteps.Count);
+    }
+
+    private BranchDispatcherExecutor BuildBranchExecutor(
+        int stepIndex, WorkflowStep step, WorkflowOverrides? overrides, WorkflowContext context)
+    {
+        var conditionVar = step.Condition ?? "";
+        var branchSteps = new Dictionary<string, List<BranchDispatcherExecutor.BranchToolStep>>();
+
+        foreach (var (caseName, caseSteps) in step.Branches!)
+        {
+            var toolSteps = new List<BranchDispatcherExecutor.BranchToolStep>();
+            foreach (var branchStep in caseSteps)
+            {
+                if (!branchStep.Enabled) continue;
+                if (!_registry.HasTool(branchStep.Tool))
+                {
+                    Console.WriteLine($"  [WARN] Branch '{caseName}': tool '{branchStep.Tool}' not available, skipping.");
+                    continue;
+                }
+
+                var args = MergeArgs(branchStep.Args, overrides?.Steps?.GetValueOrDefault(branchStep.Id)?.Args);
+                toolSteps.Add(new BranchDispatcherExecutor.BranchToolStep(
+                    branchStep.Id, branchStep.Tool, args, branchStep.Passthrough, branchStep.Outputs));
+            }
+            if (toolSteps.Count > 0)
+                branchSteps[caseName] = toolSteps;
+        }
+
+        return new BranchDispatcherExecutor(
+            executorId: $"Step_{stepIndex}_branch_{step.Id}",
+            stepId: step.Id,
+            conditionVar: conditionVar,
+            branches: branchSteps,
+            registry: _registry,
+            workflowContext: context);
     }
 
     private static List<WorkflowStep> GetEnabledSteps(
