@@ -5,6 +5,7 @@ namespace OcrAgent.Storage;
 public sealed class LocalFileImageStore : IImageStore
 {
     private readonly string _root;
+    private string? _activeSubdirectory;
 
     public LocalFileImageStore(string rootFolder)
     {
@@ -12,15 +13,29 @@ public sealed class LocalFileImageStore : IImageStore
         Directory.CreateDirectory(_root);
     }
 
-    // resolves an existing file and throws if none exist.
+    public void SetActiveSubdirectory(string? subdirectory)
+    {
+        _activeSubdirectory = subdirectory;
+        if (subdirectory != null)
+            Directory.CreateDirectory(Path.Combine(_root, subdirectory));
+    }
+
+    public string? GetActiveSubdirectory() => _activeSubdirectory;
+
+    public string GetWriteDirectory() => ActiveRoot;
+
+    private string ActiveRoot => _activeSubdirectory != null
+        ? Path.Combine(_root, _activeSubdirectory)
+        : _root;
+
     public bool Exists(string reference)
     {
         reference = ImageReferenceGenerator.Normalize(reference);
 
         foreach (var ext in new[] { "png", "jpg", "jpeg", "tif", "tiff", "bmp" })
         {
-            var path = Path.Combine(_root, $"{reference}.{ext}");
-            if (File.Exists(path)) return true;
+            if (File.Exists(Path.Combine(ActiveRoot, $"{reference}.{ext}"))) return true;
+            if (_activeSubdirectory != null && File.Exists(Path.Combine(_root, $"{reference}.{ext}"))) return true;
         }
 
         return false;
@@ -41,23 +56,25 @@ public sealed class LocalFileImageStore : IImageStore
             ["originalPath"] = filePath
         }, desiredReference);
     }
+
     public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null, string? desiredReference = null)
     {
         var reference = desiredReference ?? ImageReferenceGenerator.NewRef();
         reference = ImageReferenceGenerator.Normalize(reference);
 
-        var imagePath = GetImagePath(reference, extension);
+        var imagePath = Path.Combine(ActiveRoot, $"{reference}.{extension}");
         if (File.Exists(imagePath))
             throw new InvalidOperationException($"Reference already exists: {reference}");
 
         File.WriteAllBytes(imagePath, bytes);
 
-        // sidecar metadata
-        var metaPath = GetMetaPath(reference);
+        var metaPath = Path.Combine(ActiveRoot, $"{reference}.json");
         var meta = metadata ?? new Dictionary<string, string>();
         meta["reference"] = reference;
         meta["extension"] = extension;
         meta["createdUtc"] = DateTime.UtcNow.ToString("O");
+        if (_activeSubdirectory != null)
+            meta["workflowDir"] = _activeSubdirectory;
 
         File.WriteAllText(metaPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
 
@@ -68,14 +85,16 @@ public sealed class LocalFileImageStore : IImageStore
 
     public IDictionary<string, string> GetMetadata(string reference)
     {
-        var metaPath = GetMetaPath(reference);
+        reference = ImageReferenceGenerator.Normalize(reference);
+
+        var metaPath = Path.Combine(ActiveRoot, $"{reference}.json");
+        if (!File.Exists(metaPath) && _activeSubdirectory != null)
+            metaPath = Path.Combine(_root, $"{reference}.json");
         if (!File.Exists(metaPath)) return new Dictionary<string, string>();
 
         var json = File.ReadAllText(metaPath);
         return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
     }
-
-    //  helpers
 
     private string ResolveExistingImagePath(string reference)
     {
@@ -83,16 +102,19 @@ public sealed class LocalFileImageStore : IImageStore
 
         foreach (var ext in new[] { "png", "jpg", "jpeg", "tif", "tiff", "bmp" })
         {
-            var path = GetImagePath(reference, ext);
+            var path = Path.Combine(ActiveRoot, $"{reference}.{ext}");
             if (File.Exists(path)) return path;
+        }
+
+        if (_activeSubdirectory != null)
+        {
+            foreach (var ext in new[] { "png", "jpg", "jpeg", "tif", "tiff", "bmp" })
+            {
+                var path = Path.Combine(_root, $"{reference}.{ext}");
+                if (File.Exists(path)) return path;
+            }
         }
 
         throw new FileNotFoundException($"No stored image found for reference: {reference}");
     }
-
-    private string GetImagePath(string reference, string extension)
-        => Path.Combine(_root, $"{reference}.{extension}");
-
-    private string GetMetaPath(string reference)
-        => Path.Combine(_root, $"{reference}.json");
 }

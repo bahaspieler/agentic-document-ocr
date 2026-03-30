@@ -1,4 +1,4 @@
-﻿using System.Security;
+using System.Security;
 using System.Text.Json;
 using Renci.SshNet;
 using Renci.SshNet.Common;
@@ -10,6 +10,7 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     private readonly SftpStorageConfig _config;
     private readonly SftpConnectionPool _connectionPool;
     private readonly string[] _supportedExtensions = { "png", "jpg", "jpeg", "tif", "tiff", "bmp" };
+    private string? _activeSubdirectory;
     private bool _disposed = false;
 
     public SftpImageStore(SftpStorageConfig config)
@@ -38,10 +39,19 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                 {
                     var remotePath = GetRemotePath(reference, ext);
                     if (await Task.Run(() => client.Exists(remotePath)))
-                    {
                         return true;
+                }
+
+                if (_activeSubdirectory != null)
+                {
+                    foreach (var ext in _supportedExtensions)
+                    {
+                        var rootPath = $"{NormalizeBasePath()}/{reference}.{ext}";
+                        if (await Task.Run(() => client.Exists(rootPath)))
+                            return true;
                     }
                 }
+
                 return false;
             });
         }
@@ -107,6 +117,8 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                 meta["extension"] = extension;
                 meta["createdUtc"] = DateTime.UtcNow.ToString("O");
                 meta["sizeBytes"] = bytes.Length.ToString();
+                if (_activeSubdirectory != null)
+                    meta["workflowDir"] = _activeSubdirectory;
 
                 await SaveMetadataAsync(client, reference, meta);
 
@@ -149,6 +161,20 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                     }
                 }
 
+                if (remotePath == null && _activeSubdirectory != null)
+                {
+                    foreach (var ext in _supportedExtensions)
+                    {
+                        var rootPath = $"{NormalizeBasePath()}/{reference}.{ext}";
+                        if (await Task.Run(() => client.Exists(rootPath)))
+                        {
+                            remotePath = rootPath;
+                            foundExtension = ext;
+                            break;
+                        }
+                    }
+                }
+
                 if (remotePath == null)
                     throw new FileNotFoundException($"No stored image found for reference: {reference}");
 
@@ -183,7 +209,20 @@ public sealed class SftpImageStore : IImageStore, IDisposable
                 var metaPath = GetMetadataPath(reference);
 
                 if (!await Task.Run(() => client.Exists(metaPath)))
-                    return new Dictionary<string, string>();
+                {
+                    if (_activeSubdirectory != null)
+                    {
+                        var rootMetaPath = $"{NormalizeBasePath()}/{reference}.json";
+                        if (await Task.Run(() => client.Exists(rootMetaPath)))
+                            metaPath = rootMetaPath;
+                        else
+                            return new Dictionary<string, string>();
+                    }
+                    else
+                    {
+                        return new Dictionary<string, string>();
+                    }
+                }
 
                 using var stream = new MemoryStream();
                 await Task.Run(() => client.DownloadFile(metaPath, stream));
@@ -311,6 +350,15 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         await Task.Run(() => client.UploadFile(stream, metaPath, true));
     }
 
+    public void SetActiveSubdirectory(string? subdirectory)
+    {
+        _activeSubdirectory = subdirectory;
+    }
+
+    public string? GetActiveSubdirectory() => _activeSubdirectory;
+
+    public string GetWriteDirectory() => ActiveBasePath();
+
     private string NormalizeBasePath()
     {
         var basePath = _config.RemoteBasePath?.Trim().TrimEnd('/').Replace("\\", "/");
@@ -319,14 +367,20 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         return basePath;
     }
 
+    private string ActiveBasePath()
+    {
+        var basePath = NormalizeBasePath();
+        return _activeSubdirectory != null ? $"{basePath}/{_activeSubdirectory}" : basePath;
+    }
+
     private string GetRemotePath(string reference, string extension)
     {
-        return $"{NormalizeBasePath()}/{reference}.{extension}";
+        return $"{ActiveBasePath()}/{reference}.{extension}";
     }
 
     private string GetMetadataPath(string reference)
     {
-        return $"{NormalizeBasePath()}/{reference}.json";
+        return $"{ActiveBasePath()}/{reference}.json";
     }
 
     private void ValidateReference(string reference)
