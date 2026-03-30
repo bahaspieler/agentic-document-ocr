@@ -9,6 +9,9 @@ public sealed class WorkflowOverrides
 
     [JsonPropertyName("budget")]
     public WorkflowBudget? Budget { get; set; }
+
+    [JsonPropertyName("initialContext")]
+    public Dictionary<string, string>? InitialContext { get; set; }
 }
 
 public sealed class StepOverride
