@@ -1,9 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Threading.Tasks;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using OcrAgent.Storage;
+using OcrAgent.Plugins.Analysis;
 using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
@@ -21,19 +20,20 @@ public sealed class DenoisePlugin : IImageProcessingTool
         _store = store;
     }
 
-    [Description("Removes noise from the given image using the specified method. Returns the reference of the generated image.")]
+    [Description("Removes noise from the given image using the specified method. 'auto' analyzes the image and selects the best method/strength automatically, skipping if noise is negligible. Returns the reference of the generated image.")]
     public Task<string> DenoiseImage(
         [Description("The reference number of the image to denoise.")] string imageReference,
-        [Description("The denoising method: 'median', 'bilateral', or 'nlm' (Non-Local Means).")] string method = "bilateral",
-        [Description("The denoising strength: 'low' (3), 'medium' (5), or 'high' (7). For NLM, this is the filter strength.")] string strength = "medium")
+        [Description("The denoising method: 'auto' (recommended), 'median', 'bilateral', or 'nlm' (Non-Local Means).")] string method = "bilateral",
+        [Description("The denoising strength: 'low', 'medium', or 'high'. Ignored when method is 'auto'.")] string strength = "medium",
+        [Description("Optional quality profile JSON from AssessQuality. When provided in auto mode, uses pre-computed noise data instead of re-analyzing.")] string? qualityProfile = null)
     {
         method = method.ToLowerInvariant();
         strength = strength.ToLowerInvariant();
 
-        if (method != "median" && method != "bilateral" && method != "nlm")
-            throw new ArgumentException("method must be 'median', 'bilateral', or 'nlm'");
+        if (method != "auto" && method != "median" && method != "bilateral" && method != "nlm")
+            throw new ArgumentException("method must be 'auto', 'median', 'bilateral', or 'nlm'");
 
-        if (strength != "low" && strength != "medium" && strength != "high")
+        if (method != "auto" && strength != "low" && strength != "medium" && strength != "high")
             throw new ArgumentException("strength must be 'low', 'medium', or 'high'");
 
         var inputPath = _store.GetImagePath(imageReference);
@@ -42,18 +42,27 @@ public sealed class DenoisePlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 
-        using var denoised = new Mat();
+        if (method == "auto")
+        {
+            double sigma = GetNoiseSigma(src, qualityProfile);
 
+            if (sigma < 5)
+                return Task.FromResult(imageReference);
+
+            if (sigma < 15) { method = "bilateral"; strength = "low"; }
+            else if (sigma < 30) { method = "bilateral"; strength = "medium"; }
+            else { method = "nlm"; strength = "high"; }
+        }
+
+        using var denoised = new Mat();
         switch (method)
         {
             case "median":
                 ApplyMedianBlur(src, denoised, strength);
                 break;
-
             case "bilateral":
                 ApplyBilateralFilter(src, denoised, strength);
                 break;
-
             case "nlm":
                 ApplyNonLocalMeans(src, denoised, strength);
                 break;
@@ -71,63 +80,44 @@ public sealed class DenoisePlugin : IImageProcessingTool
 
         var baseRef = $"{imageReference}_denoise_{method}_{strength}";
         var desiredRef = PluginHelpers.MakeUniqueRef(_store, baseRef);
-
         var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
     }
 
-    private void ApplyMedianBlur(Mat src, Mat dst, string strength)
+    private static double GetNoiseSigma(Mat src, string? qualityProfile)
     {
-        int ksize = strength switch
+        if (!string.IsNullOrEmpty(qualityProfile))
         {
-            "low" => 3,
-            "medium" => 5,
-            "high" => 7,
-            _ => 5
-        };
+            try
+            {
+                using var doc = JsonDocument.Parse(qualityProfile);
+                if (doc.RootElement.TryGetProperty("noiseSigma", out var ns))
+                    return ns.GetDouble();
+            }
+            catch { }
+        }
 
+        using var gray = new Mat();
+        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+        return QualityAssessmentPlugin.EstimateNoiseSigma(gray);
+    }
+
+    private static void ApplyMedianBlur(Mat src, Mat dst, string strength)
+    {
+        int ksize = strength switch { "low" => 3, "high" => 7, _ => 5 };
         Cv2.MedianBlur(src, dst, ksize);
     }
 
-    private void ApplyBilateralFilter(Mat src, Mat dst, string strength)
+    private static void ApplyBilateralFilter(Mat src, Mat dst, string strength)
     {
-        int d = strength switch
-        {
-            "low" => 5,
-            "medium" => 9,
-            "high" => 15,
-            _ => 9
-        };
-
-        double sigmaColor = strength switch
-        {
-            "low" => 50,
-            "medium" => 75,
-            "high" => 100,
-            _ => 75
-        };
-
-        double sigmaSpace = strength switch
-        {
-            "low" => 50,
-            "medium" => 75,
-            "high" => 100,
-            _ => 75
-        };
-
-        Cv2.BilateralFilter(src, dst, d, sigmaColor, sigmaSpace);
+        int d = strength switch { "low" => 5, "high" => 15, _ => 9 };
+        double sigma = strength switch { "low" => 50, "high" => 100, _ => 75 };
+        Cv2.BilateralFilter(src, dst, d, sigma, sigma);
     }
 
-    private void ApplyNonLocalMeans(Mat src, Mat dst, string strength)
+    private static void ApplyNonLocalMeans(Mat src, Mat dst, string strength)
     {
-        float h = strength switch
-        {
-            "low" => 3.0f,
-            "medium" => 7.0f,
-            "high" => 10.0f,
-            _ => 7.0f
-        };
-
+        float h = strength switch { "low" => 3.0f, "high" => 10.0f, _ => 7.0f };
         Cv2.FastNlMeansDenoisingColored(src, dst, h, h, 7, 21);
     }
 
