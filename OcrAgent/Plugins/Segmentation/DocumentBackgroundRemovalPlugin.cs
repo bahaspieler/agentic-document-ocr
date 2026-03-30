@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Text.Json;
 using OcrAgent.Storage;
 using OcrAgent.Inference;
 using OpenCvSharp;
@@ -34,7 +35,8 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         [Description("Detection sensitivity: 'auto', 'aggressive', 'conservative'.")] string sensitivity = "auto",
         [Description("Edge feather radius 0-10 for smooth transitions.")] int feather = 2,
         [Description("Fill holes inside the document mask to prevent text cutout.")] bool fillHoles = true,
-        [Description("Enable debug mode to save intermediate mask images.")] bool debug = false)
+        [Description("Enable debug mode to save intermediate mask images.")] bool debug = false,
+        [Description("Optional contour data JSON from ExtractDocumentContours. If it contains a maskReference, loads the pre-computed mask instead of running detection.")] string? contourData = null)
     {
         mode = mode.ToLowerInvariant();
         if (mode is not ("on_white" or "mask_only" or "transparent"))
@@ -51,6 +53,23 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference}");
 
+        bool shouldSkip = ShouldSkipBackgroundRemoval(imageReference);
+        if (shouldSkip)
+        {
+            Console.WriteLine($"  [BgRemoval] Skipped: perspective already cropped to document");
+            var skipMeta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "remove_background",
+                ["skipped"] = "true",
+                ["skipReason"] = "perspective_already_cropped",
+            };
+            Cv2.ImEncode(".png", src, out var skipBytes);
+            var skipRef = PluginHelpers.MakeUniqueRef(_store, $"{imageReference}_bgremoval_skipped");
+            var savedRef = _store.SaveBytes(skipBytes, "png", skipMeta, skipRef);
+            return Task.FromResult(savedRef);
+        }
+
         string? debugPath = null;
         if (debug)
         {
@@ -58,7 +77,28 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             SaveDebugImage(src, debugPath, "00_input");
         }
 
-        var (winnerMask, winnerScore, winnerMethod) = GenerateMasksMultiStrategy(src, sensitivity, debugPath);
+        Mat? winnerMask = null;
+        double winnerScore;
+        string winnerMethod;
+
+        var precomputedMask = TryLoadPrecomputedMask(contourData);
+        if (precomputedMask != null)
+        {
+            using var resized = new Mat();
+            if (precomputedMask.Size() != src.Size())
+                Cv2.Resize(precomputedMask, resized, src.Size(), interpolation: InterpolationFlags.Nearest);
+            else
+                precomputedMask.CopyTo(resized);
+            precomputedMask.Dispose();
+
+            winnerMask = resized.Clone();
+            winnerScore = 0.90;
+            winnerMethod = "precomputed_contour_mask";
+        }
+        else
+        {
+            (winnerMask, winnerScore, winnerMethod) = GenerateMasksMultiStrategy(src, sensitivity, debugPath);
+        }
 
         if (winnerMask == null)
             throw new InvalidOperationException("No valid document mask could be generated from the image");
@@ -95,6 +135,7 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         {
             ["parent"] = imageReference,
             ["op"] = "remove_background",
+            ["skipped"] = "false",
             ["mode"] = mode,
             ["detectionMethod"] = winnerMethod,
             ["maskCoverage"] = coverage.ToString("F3", CultureInfo.InvariantCulture),
@@ -903,6 +944,63 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             ch.Dispose();
 
         return rgbaResult;
+    }
+
+    /// <summary>
+    /// Checks whether upstream perspective correction actually warped/cropped the document.
+    /// Only skips BG removal when perspective performed a real geometric warp.
+    /// If perspective merely detected corners but the image was "already aligned" or
+    /// "full_frame_aligned", the document may not fill the frame and BG removal is needed.
+    /// </summary>
+    private bool ShouldSkipBackgroundRemoval(string imageReference)
+    {
+        try
+        {
+            var meta = _store.GetMetadata(imageReference);
+            if (meta == null) return false;
+
+            if (meta.TryGetValue("op", out var op) && op == "perspective_correct")
+            {
+                // "already aligned" means perspective did NOT warp -- BG removal needed
+                if (meta.TryGetValue("note", out var note) &&
+                    (note.Contains("already aligned", StringComparison.OrdinalIgnoreCase) ||
+                     note.Contains("full_frame", StringComparison.OrdinalIgnoreCase)))
+                    return false;
+
+                if (meta.TryGetValue("detectionMethod", out var method) &&
+                    (method == "already_aligned" || method == "full_frame_aligned"))
+                    return false;
+
+                // Perspective actually performed a warp -- document fills the output
+                return true;
+            }
+
+            if (meta.TryGetValue("parent", out var parent) && !string.IsNullOrEmpty(parent))
+                return ShouldSkipBackgroundRemoval(parent);
+        }
+        catch { }
+
+        return false;
+    }
+
+    private Mat? TryLoadPrecomputedMask(string? contourData)
+    {
+        if (string.IsNullOrEmpty(contourData)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(contourData);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("found", out var found) || !found.GetBoolean()) return null;
+            if (!root.TryGetProperty("maskReference", out var maskRefEl)) return null;
+
+            var maskRef = maskRefEl.GetString();
+            if (string.IsNullOrEmpty(maskRef)) return null;
+
+            var maskPath = _store.GetImagePath(maskRef);
+            var mask = Cv2.ImRead(maskPath, ImreadModes.Grayscale);
+            return mask.Empty() ? null : mask;
+        }
+        catch { return null; }
     }
 
     public IEnumerable<AITool> GetAITools()
