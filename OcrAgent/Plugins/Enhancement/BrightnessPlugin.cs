@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Text.Json;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
@@ -68,8 +69,70 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         return Task.FromResult(string.Join(",", results));
     }
 
+    [Description("Automatically normalizes image brightness to the optimal range for OCR (~150 median luminance). Skips if brightness is already adequate. Returns the image reference (unchanged if skipped, or new reference if adjusted).")]
+    public Task<string> AutoAdjustBrightness(
+        [Description("The reference number of the image to adjust.")] string imageReference,
+        [Description("Optional quality profile JSON from AssessQuality. Uses pre-computed brightness data if available.")] string? qualityProfile = null)
+    {
+        var inputPath = _store.GetImagePath(imageReference);
+        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        if (src.Empty())
+            throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        double currentBrightness = GetMeanBrightness(src, qualityProfile);
+
+        if (currentBrightness >= 130 && currentBrightness <= 170)
+            return Task.FromResult(imageReference);
+
+        const double targetBrightness = 150.0;
+        double beta = targetBrightness - currentBrightness;
+
+        using var adjusted = new Mat();
+        src.ConvertTo(adjusted, MatType.CV_8UC3, 1.0, beta);
+
+        Cv2.ImEncode(".png", adjusted, out var pngBytes);
+        var meta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference,
+            ["op"] = "auto_brightness",
+            ["originalBrightness"] = currentBrightness.ToString("F1"),
+            ["adjustment"] = beta.ToString("F1")
+        };
+        var desiredRef = PluginHelpers.MakeUniqueRef(_store, $"{imageReference}_auto_brightness");
+        var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
+        return Task.FromResult(newRef);
+    }
+
+    private static double GetMeanBrightness(Mat src, string? qualityProfile)
+    {
+        if (!string.IsNullOrEmpty(qualityProfile))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(qualityProfile);
+                if (doc.RootElement.TryGetProperty("meanBrightness", out var mb))
+                    return mb.GetDouble();
+            }
+            catch { }
+        }
+
+        using var hsv = new Mat();
+        Cv2.CvtColor(src, hsv, ColorConversionCodes.BGR2HSV);
+        var channels = Cv2.Split(hsv);
+        try
+        {
+            var mean = Cv2.Mean(channels[2]);
+            return mean[0];
+        }
+        finally
+        {
+            foreach (var ch in channels) ch.Dispose();
+        }
+    }
+
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.AdjustBrightness);
+        yield return AIFunctionFactory.Create(this.AutoAdjustBrightness);
     }
 }
