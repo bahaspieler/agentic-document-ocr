@@ -104,6 +104,9 @@ public sealed class SftpImageStoreTests
     [TestInitialize]
     public void Setup()
     {
+        if (!IsSftpServerAvailable())
+            Assert.Inconclusive("SFTP server is not running. Start Docker with: docker-compose up -d (in docker/sftp/)");
+
         _config = new SftpStorageConfig
         {
             Host = "localhost",
@@ -141,7 +144,22 @@ public sealed class SftpImageStoreTests
                 EnableDebugFolders = true
             }
         };
+    }
 
+    private static bool IsSftpServerAvailable()
+    {
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            var result = client.BeginConnect("localhost", 2222, null, null);
+            var connected = result.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(2));
+            if (connected) client.EndConnect(result);
+            return connected;
+        }
+        catch
+        {
+            return false;
+        }
     }
     
     [TestMethod]
