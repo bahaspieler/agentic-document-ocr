@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -85,6 +85,81 @@ namespace UnitTests.Plugins.Enhancement
         }
 
         // --------------------
+        // Auto mode tests
+        // --------------------
+
+        [TestMethod]
+        public async Task DenoiseImage_Auto_SelectsMethodBasedOnNoise()
+        {
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
+
+            var inputRef = "img_noisy";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
+
+            using (var noisy = CreateNoisyImage(128, 128))
+            {
+                Cv2.ImWrite(inputPath, noisy);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+            var plugin = new DenoisePlugin(store);
+
+            var outRef = await plugin.DenoiseImage(inputRef, "auto");
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(outRef));
+            Assert.IsTrue(File.Exists(store.GetImagePath(outRef)));
+        }
+
+        [TestMethod]
+        public async Task DenoiseImage_Auto_WithQualityProfile_UsesPrecomputedNoise()
+        {
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
+
+            var inputRef = "img_noisy";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
+
+            using (var noisy = CreateNoisyImage(128, 128))
+            {
+                Cv2.ImWrite(inputPath, noisy);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+            var plugin = new DenoisePlugin(store);
+
+            var qualityProfile = """{"noiseSigma": 20.0}""";
+            var outRef = await plugin.DenoiseImage(inputRef, "auto", qualityProfile: qualityProfile);
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(outRef));
+            Assert.AreNotEqual(inputRef, outRef);
+        }
+
+        [TestMethod]
+        public async Task DenoiseImage_Auto_SkipsWhenNoiseNegligible()
+        {
+            using var temp = new TempFolder();
+            var store = new TestImageStore(temp.Path);
+
+            var inputRef = "img_clean";
+            var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
+
+            // Create a clean (no noise) image
+            using (var clean = new Mat(128, 128, MatType.CV_8UC3, Scalar.White))
+            {
+                Cv2.ImWrite(inputPath, clean);
+            }
+
+            store.RegisterExisting(inputRef, inputPath);
+            var plugin = new DenoisePlugin(store);
+
+            var qualityProfile = """{"noiseSigma": 2.0}""";
+            var outRef = await plugin.DenoiseImage(inputRef, "auto", qualityProfile: qualityProfile);
+
+            Assert.AreEqual(inputRef, outRef, "Should skip when noise is negligible");
+        }
+
+        // --------------------
         // Validation tests
         // --------------------
 
@@ -162,7 +237,7 @@ namespace UnitTests.Plugins.Enhancement
             var sum = Cv2.Sum(diff);
             var totalDiff = sum.Val0 + sum.Val1 + sum.Val2;
 
-            Assert.IsGreaterThan(totalDiff, 0.0, "Expected denoising to modify pixel values.");
+            Assert.IsGreaterThan(0.0, totalDiff, "Expected denoising to modify pixel values.");
         }
 
         // --------------------
@@ -267,6 +342,10 @@ namespace UnitTests.Plugins.Enhancement
                 _meta[finalRef] = metadata ?? new Dictionary<string, string>();
                 return finalRef;
             }
+
+            public void SetActiveSubdirectory(string? subdirectory) { }
+            public string? GetActiveSubdirectory() => null;
+            public string GetWriteDirectory() => _root;
         }
     }
 }

@@ -43,4 +43,38 @@ public sealed class BrightnessPluginTests : PluginTestBase
         Assert.AreEqual("50", meta["adjustment"]);
     }
 
+    [TestMethod]
+    public async Task AutoAdjustBrightness_ProducesOutput()
+    {
+        var result = await _plugin.AutoAdjustBrightness(TestImageRef);
+
+        Assert.IsFalse(string.IsNullOrEmpty(result));
+    }
+
+    [TestMethod]
+    public async Task AutoAdjustBrightness_SkipsWhenInRange()
+    {
+        var profile = """{"meanBrightness": 150.0}""";
+        var result = await _plugin.AutoAdjustBrightness(TestImageRef, qualityProfile: profile);
+
+        Assert.AreEqual(TestImageRef, result, "Should skip when brightness is already in optimal range");
+    }
+
+    [TestMethod]
+    public async Task AutoAdjustBrightness_AdjustsWhenTooLow()
+    {
+        var profile = """{"meanBrightness": 80.0}""";
+        var result = await _plugin.AutoAdjustBrightness(TestImageRef, qualityProfile: profile);
+
+        Assert.AreNotEqual(TestImageRef, result, "Should adjust when brightness is too low");
+    }
+
+    [TestMethod]
+    public async Task AutoAdjustBrightness_AdjustsWhenTooHigh()
+    {
+        var profile = """{"meanBrightness": 220.0}""";
+        var result = await _plugin.AutoAdjustBrightness(TestImageRef, qualityProfile: profile);
+
+        Assert.AreNotEqual(TestImageRef, result, "Should adjust when brightness is too high");
+    }
 }

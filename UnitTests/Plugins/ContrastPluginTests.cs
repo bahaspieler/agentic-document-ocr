@@ -54,4 +54,33 @@ public sealed class ContrastPluginTests : PluginTestBase
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("auto", meta["method"]);
     }
+
+    [TestMethod]
+    public async Task EnhanceContrast_AutoLab_ProducesOutput()
+    {
+        var result = await _plugin.EnhanceContrast(TestImageRef, "auto_lab");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("auto_lab", meta["method"]);
+    }
+
+    [TestMethod]
+    public async Task EnhanceContrast_AutoLab_SkipsWhenContrastAdequate()
+    {
+        var profile = """{"contrast": 60.0}""";
+        var result = await _plugin.EnhanceContrast(TestImageRef, "auto_lab", qualityProfile: profile);
+
+        Assert.AreEqual(TestImageRef, result, "Should skip when contrast > 55");
+    }
+
+    [TestMethod]
+    public async Task EnhanceContrast_AutoLab_ProcessesWhenContrastLow()
+    {
+        var profile = """{"contrast": 20.0}""";
+        var result = await _plugin.EnhanceContrast(TestImageRef, "auto_lab", qualityProfile: profile);
+
+        Assert.AreNotEqual(TestImageRef, result, "Should process when contrast is low");
+        AssertImageValid(result);
+    }
 }
