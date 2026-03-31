@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Geometric;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests RotatePlugin angle variants and stored outputs.
+/// </summary>
 [TestClass]
 public sealed class RotatePluginTests : PluginTestBase
 {

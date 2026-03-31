@@ -12,11 +12,15 @@ internal class Program
 {
     static async Task<int> Main(string[] args)
     {
-        // JSON appsettings, optional env-specific file, OCR_ env vars; .env loaded from cwd or parents.
-        var config = LoadConfiguration();
+        var (config, configBasePath) = LoadConfiguration();
         
         var storageConfig = config.GetSection("Storage").Get<StorageConfiguration>() 
             ?? new StorageConfiguration();
+
+        // Resolve relative storage paths against the config base (not cwd which may differ when double-clicking the binary).
+        if (!Path.IsPathRooted(storageConfig.Local.RootPath))
+            storageConfig.Local.RootPath = Path.GetFullPath(
+                Path.Combine(configBasePath, storageConfig.Local.RootPath));
 
         IImageStore store;
         try
@@ -58,18 +62,22 @@ internal class Program
         }
     }
 
-    private static IConfiguration LoadConfiguration()
+    private static (IConfiguration Config, string BasePath) LoadConfiguration()
     {
         LoadEnvFile();
-        
+
+        var basePath = File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json"))
+            ? Directory.GetCurrentDirectory()
+            : AppContext.BaseDirectory;
+
         var builder = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
+            .SetBasePath(basePath)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
             .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", 
                 optional: true, reloadOnChange: false)
             .AddEnvironmentVariables("OCR_");
 
-        return builder.Build();
+        return (builder.Build(), basePath);
     }
 
     private static void LoadEnvFile()

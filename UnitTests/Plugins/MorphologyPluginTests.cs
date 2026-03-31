@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Segmentation;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests MorphologyPlugin erode, dilate, and related operations.
+/// </summary>
 [TestClass]
 public sealed class MorphologyPluginTests : PluginTestBase
 {
@@ -125,6 +128,27 @@ public sealed class MorphologyPluginTests : PluginTestBase
         Assert.AreEqual("7", meta["kernelSize"]);
         Assert.AreEqual("3", meta["iterations"]);
         Assert.AreEqual("rect", meta["kernelShape"]);
+    }
+
+    [TestMethod]
+    public async Task ApplyMorphology_RemoveSpeckles_ProducesOutput()
+    {
+        var result = await _plugin.ApplyMorphology(TestImageRef, "remove_speckles");
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("remove_speckles", meta["operation"]);
+        Assert.AreEqual("20", meta["minArea"]);
+    }
+
+    [TestMethod]
+    public async Task ApplyMorphology_RemoveSpeckles_CustomMinArea()
+    {
+        var result = await _plugin.ApplyMorphology(TestImageRef, "remove_speckles", minArea: 50);
+
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("50", meta["minArea"]);
     }
 }
 

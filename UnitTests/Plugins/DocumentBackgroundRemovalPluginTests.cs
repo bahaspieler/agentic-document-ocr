@@ -4,6 +4,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests DocumentBackgroundRemovalPlugin removal presets and outputs.
+/// </summary>
 [TestClass]
 public sealed class DocumentBackgroundRemovalPluginTests : PluginTestBase
 {

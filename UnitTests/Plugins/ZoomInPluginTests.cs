@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Geometric;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests ZoomInPlugin zoom factor variants and outputs.
+/// </summary>
 [TestClass]
 public sealed class ZoomInPluginTests : PluginTestBase
 {

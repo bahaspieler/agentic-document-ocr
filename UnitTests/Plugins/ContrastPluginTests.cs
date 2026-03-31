@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Enhancement;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests ContrastPlugin enhancement modes and output images.
+/// </summary>
 [TestClass]
 public sealed class ContrastPluginTests : PluginTestBase
 {

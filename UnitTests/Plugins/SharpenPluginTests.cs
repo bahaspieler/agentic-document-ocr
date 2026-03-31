@@ -1,8 +1,11 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OcrAgent.Plugins.Enhancement;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests SharpenPlugin strength presets and output images.
+/// </summary>
 [TestClass]
 public sealed class SharpenPluginTests : PluginTestBase
 {

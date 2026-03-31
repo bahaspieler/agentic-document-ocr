@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Enhancement;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests BrightnessPlugin variant generation and output validation.
+/// </summary>
 [TestClass]
 public sealed class BrightnessPluginTests : PluginTestBase
 {

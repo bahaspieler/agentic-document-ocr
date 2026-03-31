@@ -5,6 +5,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests PerspectivePlugin correction paths with optional U2Net predictor.
+/// </summary>
 [TestClass]
 public sealed class PerspectivePluginTests : PluginTestBase
 {

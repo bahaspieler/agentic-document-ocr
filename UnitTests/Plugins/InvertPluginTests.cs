@@ -4,6 +4,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests InvertPlugin image inversion and output validity.
+/// </summary>
 [TestClass]
 public sealed class InvertPluginTests : PluginTestBase
 {

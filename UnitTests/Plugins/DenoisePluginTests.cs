@@ -9,6 +9,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins.Enhancement
 {
+    /// <summary>
+    /// Tests DenoisePlugin bilateral, median, and error handling.
+    /// </summary>
     [TestClass]
     public class DenoisePluginTests
     {
@@ -180,7 +183,7 @@ namespace UnitTests.Plugins.Enhancement
             store.RegisterExisting(inputRef, inputPath);
             var plugin = new DenoisePlugin(store);
 
-            await ExpectThrowsAsync<ArgumentException>(() =>
+            await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
                 plugin.DenoiseImage(inputRef, "wrong", "medium"));
         }
 
@@ -201,7 +204,7 @@ namespace UnitTests.Plugins.Enhancement
             store.RegisterExisting(inputRef, inputPath);
             var plugin = new DenoisePlugin(store);
 
-            await ExpectThrowsAsync<ArgumentException>(() =>
+            await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
                 plugin.DenoiseImage(inputRef, "bilateral", "super"));
         }
 
@@ -244,18 +247,6 @@ namespace UnitTests.Plugins.Enhancement
         // Helpers
         // --------------------
 
-        private static async Task ExpectThrowsAsync<T>(Func<Task> action) where T : Exception
-        {
-            try
-            {
-                await action();
-                Assert.Fail($"Expected exception of type {typeof(T).Name}.");
-            }
-            catch (T)
-            {
-                // expected
-            }
-        }
 
         private static Mat CreateNoisyImage(int width, int height)
         {

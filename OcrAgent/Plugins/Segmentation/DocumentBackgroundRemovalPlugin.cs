@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using OcrAgent.Storage;
 using OcrAgent.Inference;
@@ -9,9 +10,7 @@ using System.Globalization;
 namespace OcrAgent.Plugins.Segmentation;
 
 /// <summary>
-/// Removes non-document background from images using ML-based detection (U2NETP)
-/// with CV-based fallback strategies. U2NETP provides robust object detection. 
-/// If model is unavailable, it falls back to Otsu/HSV/edges/GrabCut.
+/// Removes non-document background using U2-Net when loaded, otherwise Otsu, HSV, edges, and GrabCut.
 /// </summary>
 public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 {
@@ -22,12 +21,30 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
     private const double MaxMaskCoverage = 0.98;
     private const string DebugFolderName = "bgremoval_debug";
 
+    #region Public API
+
+    /// <summary>
+    /// Creates a plugin with optional U2-Net predictor for mask generation.
+    /// </summary>
+    /// <param name="store">Store for inputs, masks, and outputs.</param>
+    /// <param name="predictor">Optional ONNX model; if null, uses classical segmentation only.</param>
     public DocumentBackgroundRemovalPlugin(IImageStore store, U2NetpOnnxPredictor? predictor = null)
     {
         _store = store;
         _predictor = predictor;
     }
 
+    /// <summary>
+    /// Builds a document mask, optionally from contour JSON, then writes white, mask-only, or transparent PNG.
+    /// </summary>
+    /// <param name="imageReference">Source image id.</param>
+    /// <param name="mode">on_white, mask_only, or transparent.</param>
+    /// <param name="sensitivity">auto, aggressive, or conservative for fallback detectors.</param>
+    /// <param name="feather">Gaussian blur radius on the mask edge (0–10).</param>
+    /// <param name="fillHoles">Whether to fill interior holes in the mask.</param>
+    /// <param name="debug">When true, writes intermediate images next to storage.</param>
+    /// <param name="contourData">Optional JSON from contour extraction with maskReference.</param>
+    /// <returns>New image reference id.</returns>
     [Description("Removes non-document background. Modes: 'on_white' (white canvas), 'mask_only' (binary mask), 'transparent' (RGBA with alpha channel).")]
     public Task<string> RemoveDocumentBackground(
         [Description("The reference number of the image to process.")] string imageReference,
@@ -56,7 +73,7 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         bool shouldSkip = ShouldSkipBackgroundRemoval(imageReference);
         if (shouldSkip)
         {
-            Console.WriteLine($"  [BgRemoval] Skipped: perspective already cropped to document");
+            Debug.WriteLine("[BgRemoval] Skipped: perspective already cropped to document");
             var skipMeta = new Dictionary<string, string>
             {
                 ["parent"] = imageReference,
@@ -149,7 +166,11 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         var newRef = _store.SaveBytes(outputBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
     }
-    
+
+    #endregion
+
+    #region Background Detection
+
     /// <summary>
     /// Divides grayscale by a heavy-blurred version.
     /// Removes shadows and uneven lighting.
@@ -194,7 +215,11 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         return grayStd / Math.Max(grayMean, 1.0);
     }
-    
+
+    #endregion
+
+    #region Mask Generation
+
     /// <summary>
     /// Generates a document mask using 2-tier strategy.
     /// Tier 1: U2NETP (ML-based) - used directly if high confidence and also refined with GrabCut if medium confidence.
@@ -790,6 +815,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         return fullMask;
     }
 
+    #endregion
+
+    #region Rendering
+
     /// <summary>
     /// Applies the mask to produce a white-background output.
     /// Uses alpha blending when the mask is feathered.
@@ -832,6 +861,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         blended.ConvertTo(result, MatType.CV_8UC3, 255.0);
         return result;
     }
+
+    #endregion
+
+    #region Helpers
 
     private string PrepareDebugFolder(string imageReference)
     {
@@ -878,6 +911,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
         Cv2.ImWrite(filePath, vis);
     }
 
+    #endregion
+
+    #region Mask Generation
+
     /// <summary>
     /// Generates a document mask using U2NETP prediction.
     /// </summary>
@@ -898,11 +935,16 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
             return DocumentContourExtractor.ToBinaryMask(probMask);
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[WARN] U2NETP mask generation failed: {ex.Message}");
             return null;
         }
     }
+
+    #endregion
+
+    #region Rendering
 
     /// <summary>
     /// Renders the image with a transparent background (RGBA).
@@ -919,11 +961,11 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             using var alphaMask = new Mat();
             mask.CopyTo(alphaMask);
 
-            var channels = new[] { srcBgr.Split()[0], srcBgr.Split()[1], srcBgr.Split()[2], alphaMask };
+            var bgrChans = srcBgr.Split();
             var rgbaOut = new Mat();
-            Cv2.Merge(channels, rgbaOut);
+            Cv2.Merge(new[] { bgrChans[0], bgrChans[1], bgrChans[2], alphaMask }, rgbaOut);
 
-            foreach (var ch in channels.Take(3))
+            foreach (var ch in bgrChans)
                 ch.Dispose();
 
             return rgbaOut;
@@ -945,6 +987,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
 
         return rgbaResult;
     }
+
+    #endregion
+
+    #region Helpers
 
     /// <summary>
     /// Checks whether upstream perspective correction actually warped/cropped the document.
@@ -978,7 +1024,10 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             if (meta.TryGetValue("parent", out var parent) && !string.IsNullOrEmpty(parent))
                 return ShouldSkipBackgroundRemoval(parent);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[WARN] ShouldSkipBackgroundRemoval metadata walk: {ex.Message}");
+        }
 
         return false;
     }
@@ -1000,11 +1049,25 @@ public sealed class DocumentBackgroundRemovalPlugin : IImageProcessingTool
             var mask = Cv2.ImRead(maskPath, ImreadModes.Grayscale);
             return mask.Empty() ? null : mask;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[WARN] loading precomputed contour mask failed: {ex.Message}");
+            return null;
+        }
     }
 
+    #endregion
+
+    #region Public API
+
+    /// <summary>
+    /// Exposes background removal as an agent tool.
+    /// </summary>
+    /// <returns>Single wrapped function.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.RemoveDocumentBackground);
     }
+
+    #endregion
 }

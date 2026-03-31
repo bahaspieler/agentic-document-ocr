@@ -3,6 +3,9 @@ using OcrAgent.Plugins.Segmentation;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests BinarizePlugin for Otsu and adaptive binarization paths.
+/// </summary>
 [TestClass]
 public sealed class BinarizePluginTests : PluginTestBase
 {
@@ -60,6 +63,41 @@ public sealed class BinarizePluginTests : PluginTestBase
         var result = await _plugin.BinarizeImage(TestImageRef, "otsu");
         var meta = Store.GetMetadata(result);
         Assert.AreEqual(TestImageRef, meta["parent"]);
-        //Assert.IsTrue(meta.ContainsKey("suitableFor"));
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_Sauvola_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "sauvola");
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("sauvola", meta["method"]);
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_Auto_ProducesOutput()
+    {
+        var result = await _plugin.BinarizeImage(TestImageRef, "auto");
+        AssertImageValid(result);
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_Auto_WithQualityProfile_SelectsMethod()
+    {
+        var profile = """{"contrast": 60.0, "illuminationUniformity": 0.95}""";
+        var result = await _plugin.BinarizeImage(TestImageRef, "auto", qualityProfile: profile);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("otsu", meta["method"], "High uniformity + good contrast should select Otsu");
+    }
+
+    [TestMethod]
+    public async Task BinarizeImage_Auto_LowUniformity_SelectsSauvola()
+    {
+        var profile = """{"contrast": 50.0, "illuminationUniformity": 0.60}""";
+        var result = await _plugin.BinarizeImage(TestImageRef, "auto", qualityProfile: profile);
+        AssertImageValid(result);
+        var meta = Store.GetMetadata(result);
+        Assert.AreEqual("sauvola", meta["method"], "Low uniformity should select Sauvola");
     }
 }

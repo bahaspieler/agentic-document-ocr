@@ -1,8 +1,11 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OcrAgent.Plugins.Enhancement;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests ColorCorrectionPlugin auto and preset correction modes.
+/// </summary>
 [TestClass]
 public sealed class ColorCorrectionPluginTests : PluginTestBase
 {

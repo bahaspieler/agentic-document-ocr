@@ -1,20 +1,38 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Segmentation;
 
+/// <summary>
+/// Converts images to binary masks for OCR using Otsu, adaptive thresholds, or Sauvola.
+/// </summary>
 public sealed class BinarizePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates a plugin bound to the given image store.
+    /// </summary>
+    /// <param name="store">Store for inputs and output PNGs.</param>
     public BinarizePlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Binarizes the image and saves a new PNG reference; optional quality JSON steers <c>auto</c> mode.
+    /// </summary>
+    /// <param name="imageReference">Source image id.</param>
+    /// <param name="method">otsu, adaptive_mean, adaptive_gaussian, sauvola, or auto.</param>
+    /// <param name="blockSize">Odd window size for adaptive and Sauvola.</param>
+    /// <param name="constant">Constant subtracted in adaptive mean/Gaussian; ignored for Sauvola (fixed k).</param>
+    /// <param name="invertForDarkBackground">If true, inverts the binary result.</param>
+    /// <param name="qualityProfile">Optional JSON from quality assessment for auto selection.</param>
+    /// <returns>New binary image reference.</returns>
     [Description("Converts image to binary (black/white) for OCR. 'auto' analyzes the image and selects the best method. 'sauvola' is best for uneven illumination.")]
     public Task<string> BinarizeImage(
         [Description("The reference number of the image to binarize.")] string imageReference,
@@ -86,6 +104,9 @@ public sealed class BinarizePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    /// <summary>
+    /// Picks a method from quality JSON or local grayscale statistics.
+    /// </summary>
     private static string SelectBestMethod(Mat gray, string? qualityProfile)
     {
         double contrast = 0;
@@ -105,7 +126,10 @@ public sealed class BinarizePlugin : IImageProcessingTool
                 if (uniformity < 0.75) return "sauvola";
                 return "otsu";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WARN] quality profile parse (binarize method selection): {ex.Message}");
+            }
         }
 
         // Inline analysis: check histogram bimodality via Otsu's between-class variance
@@ -124,6 +148,9 @@ public sealed class BinarizePlugin : IImageProcessingTool
         return "sauvola";
     }
 
+    /// <summary>
+    /// Sauvola local threshold: mean and std per window, then pixel-wise threshold.
+    /// </summary>
     private static void ApplySauvola(Mat gray, Mat binary, int windowSize, double k, double R)
     {
         if (windowSize % 2 == 0) windowSize++;
@@ -174,6 +201,10 @@ public sealed class BinarizePlugin : IImageProcessingTool
         }
     }
 
+    /// <summary>
+    /// Exposes binarization as an agent tool.
+    /// </summary>
+    /// <returns>Single wrapped function.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.BinarizeImage);

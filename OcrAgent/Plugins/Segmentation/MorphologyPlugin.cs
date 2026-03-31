@@ -14,11 +14,25 @@ public sealed class MorphologyPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates a plugin bound to the given image store.
+    /// </summary>
+    /// <param name="store">Store for input and output images.</param>
     public MorphologyPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Runs erode, dilate, open, close, gradient, or connected-component speckle removal and saves a PNG.
+    /// </summary>
+    /// <param name="imageReference">Source image id.</param>
+    /// <param name="operation">Morphology op or remove_speckles.</param>
+    /// <param name="kernelSize">Odd kernel size for morphology ops.</param>
+    /// <param name="iterations">Repeat count for morphology ops.</param>
+    /// <param name="kernelShape">rect, cross, or ellipse.</param>
+    /// <param name="minArea">Minimum component area when operation is remove_speckles.</param>
+    /// <returns>New image reference id.</returns>
     [Description("Applies morphological operations to clean up images. 'close' fills gaps, 'open' removes noise, 'remove_speckles' removes small isolated components by area. Returns processed image reference.")]
     public Task<string> ApplyMorphology(
         [Description("The reference number of the image to process.")] string imageReference,
@@ -105,6 +119,9 @@ public sealed class MorphologyPlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    /// <summary>
+    /// Otsu-binarizes (unless already binary), drops connected components below minArea, then copies or masks color output.
+    /// </summary>
     private static void ApplyRemoveSpeckles(Mat src, Mat dst, int minArea, bool assumeBinary = false)
     {
         using var gray = new Mat();
@@ -151,6 +168,10 @@ public sealed class MorphologyPlugin : IImageProcessingTool
         }
     }
 
+    /// <summary>
+    /// Exposes morphology as an agent tool.
+    /// </summary>
+    /// <returns>Single wrapped function.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ApplyMorphology);

@@ -4,6 +4,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests ResizePlugin width, height, and scale resize behavior.
+/// </summary>
 [TestClass]
 public sealed class ResizePluginTests : PluginTestBase
 {

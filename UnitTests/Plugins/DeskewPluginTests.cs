@@ -4,6 +4,9 @@ using OpenCvSharp;
 
 namespace UnitTests.Plugins;
 
+/// <summary>
+/// Tests DeskewPlugin Hough and projection deskew modes.
+/// </summary>
 [TestClass]
 public sealed class DeskewPluginTests : PluginTestBase
 {
@@ -52,22 +55,22 @@ public sealed class DeskewPluginTests : PluginTestBase
         
         // detect angle (should be non-zero)
         double detectedAngle = double.Parse(meta["detectedAngle"]);
-        Assert.IsTrue(Math.Abs(detectedAngle) >= 0, "Should detect some angle");
+        Assert.IsTrue(Math.Abs(detectedAngle) > 0.1, $"Should detect meaningful skew angle, got {detectedAngle}");
     }
 
     private string CreateSkewedTestImage(double angle)
     {
-        // create test image
-        using var img = new Mat(100, 100, MatType.CV_8UC3, Scalar.White);
-        Cv2.Rectangle(img, new Rect(25, 25, 50, 50), Scalar.Black, -1);
+        // Larger image with horizontal lines to give the deskew algorithm clear edges
+        using var img = new Mat(600, 800, MatType.CV_8UC3, Scalar.White);
+        for (int y = 100; y < 500; y += 30)
+            Cv2.Line(img, new Point(80, y), new Point(720, y), Scalar.Black, 2);
 
-        // Rotate
-        var center = new Point2f(50, 50);
+        var center = new Point2f(400, 300);
         using var rotationMatrix = Cv2.GetRotationMatrix2D(center, angle, 1.0);
         using var rotated = new Mat();
-        Cv2.WarpAffine(img, rotated, rotationMatrix, new Size(100, 100), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.White);
+        Cv2.WarpAffine(img, rotated, rotationMatrix, new Size(800, 600),
+            InterpolationFlags.Linear, BorderTypes.Constant, Scalar.White);
 
-        // Save
         Cv2.ImEncode(".png", rotated, out var pngBytes);
         return Store.SaveBytes(pngBytes, "png", new Dictionary<string, string> { ["source"] = "test_skewed" }, "SKEWED001");
     }
