@@ -3,6 +3,9 @@ using OcrAgent.Workflows.Model;
 
 namespace UnitTests.Workflows;
 
+/// <summary>
+/// Tests workflow JSON models deserialize and round-trip correctly.
+/// </summary>
 [TestClass]
 public class WorkflowModelTests
 {

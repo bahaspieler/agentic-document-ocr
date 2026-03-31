@@ -3,6 +3,9 @@ using OcrAgent.Workflows.Engine;
 
 namespace UnitTests.Workflows;
 
+/// <summary>
+/// Tests ToolBindingRegistry registration and tool lookup.
+/// </summary>
 [TestClass]
 public class ToolBindingRegistryTests
 {

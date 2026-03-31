@@ -2,6 +2,9 @@ using OcrAgent.Workflows.Engine;
 
 namespace UnitTests.Workflows;
 
+/// <summary>
+/// Tests WorkflowCatalog loading workflow definitions from disk.
+/// </summary>
 [TestClass]
 public class WorkflowCatalogTests
 {

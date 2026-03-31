@@ -5,6 +5,9 @@ using OcrAgent.Workflows.Model;
 
 namespace UnitTests.Workflows;
 
+/// <summary>
+/// Runs WorkflowRunner with mock tools against sample workflows.
+/// </summary>
 [TestClass]
 public class WorkflowRunnerIntegrationTests
 {

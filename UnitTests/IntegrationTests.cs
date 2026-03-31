@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OcrAgent.Plugins;
 using OcrAgent.Storage;
@@ -6,6 +7,9 @@ using OpenCvSharp;
 
 namespace UnitTests; 
 
+/// <summary>
+/// Runs end-to-end checks for PluginAggregator with local image storage.
+/// </summary>
 [TestClass] 
 public sealed class IntegrationTests
 {
@@ -27,7 +31,8 @@ public sealed class IntegrationTests
     [TestCleanup]
     public void Cleanup()
     {
-        // cleanup temp files after test
+        _aggregator?.Dispose();
+
         try
         {
             if (Directory.Exists(_tempRoot))
@@ -44,7 +49,7 @@ public sealed class IntegrationTests
     {
         var tools = _aggregator.GetAllTools().ToList();
 
-        Assert.IsGreaterThanOrEqualTo(tools.Count, 13, $"Should have at least 13 tools registered, but found {tools.Count}");
+        Assert.IsGreaterThanOrEqualTo(22, tools.Count, $"Should have at least 22 tools registered, but found {tools.Count}");
     }
 
     [TestMethod]
@@ -154,5 +159,65 @@ public sealed class IntegrationTests
         Assert.AreEqual("png", meta["extension"]);
         Assert.IsTrue(meta.ContainsKey("createdUtc"));
         Assert.AreEqual(testImagePath, meta["originalPath"]);
+    }
+
+    [TestMethod]
+    public void PluginAggregator_Dispose_CanBeCalledMultipleTimes()
+    {
+        var store = new LocalFileImageStore(_tempRoot);
+        var aggregator = new PluginAggregator(store);
+
+        aggregator.Dispose();
+        aggregator.Dispose();
+    }
+
+    [TestMethod]
+    public void PluginAggregator_ImplementsIDisposable()
+    {
+        Assert.IsInstanceOfType<IDisposable>(_aggregator);
+    }
+
+    [TestMethod]
+    public void PluginAggregator_WithConfig_DoesNotThrow()
+    {
+        var configBuilder = new ConfigurationBuilder();
+        configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Tesseract:TessdataPath"] = null
+        });
+        var config = configBuilder.Build();
+
+        var store = new LocalFileImageStore(_tempRoot);
+        using var aggregator = new PluginAggregator(store, config);
+
+        var tools = aggregator.GetAllTools().ToList();
+        Assert.IsTrue(tools.Count > 0, "Should register tools even with null tessdata path");
+    }
+
+    [TestMethod]
+    public void PluginAggregator_WithNullConfig_DoesNotThrow()
+    {
+        var store = new LocalFileImageStore(_tempRoot);
+        using var aggregator = new PluginAggregator(store, config: null);
+
+        var tools = aggregator.GetAllTools().ToList();
+        Assert.IsTrue(tools.Count > 0, "Should register tools with null config");
+    }
+
+    [TestMethod]
+    public void PluginAggregator_GetToolRegistry_ReturnsNonNull()
+    {
+        var registry = _aggregator.GetToolRegistry();
+        Assert.IsNotNull(registry);
+    }
+
+    [TestMethod]
+    public void PluginAggregator_GetAllTools_IncludesRegisterImage()
+    {
+        var tools = _aggregator.GetAllTools().ToList();
+        var toolNames = tools.Select(t => t.Name).ToList();
+
+        Assert.IsTrue(toolNames.Contains("RegisterImage"),
+            "RegisterImage should be one of the tools");
     }
 }

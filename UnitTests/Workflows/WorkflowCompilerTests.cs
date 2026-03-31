@@ -1,4 +1,3 @@
-﻿using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using OcrAgent.Workflows.Engine;
 using OcrAgent.Workflows.Model;
@@ -7,6 +6,9 @@ using OcrAgent.Workflows.Model;
 
 namespace UnitTests.Workflows;
 
+/// <summary>
+/// Tests WorkflowCompiler plan building from definitions and registry.
+/// </summary>
 [TestClass]
 public class WorkflowCompilerTests
 {
@@ -86,9 +88,10 @@ public class WorkflowCompilerTests
             }
         };
 
-        var (workflow, _) = compiler.Compile(definition, overrides, new WorkflowContext());
+        var (workflow, stepCount) = compiler.Compile(definition, overrides, new WorkflowContext());
 
         Assert.IsNotNull(workflow);
+        Assert.AreEqual(1, stepCount, "Override should have disabled s2, leaving only s1");
     }
 
     [TestMethod]

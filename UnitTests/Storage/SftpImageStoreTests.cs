@@ -6,6 +6,9 @@ using System.Security;
 
 namespace UnitTests.Storage;
 
+/// <summary>
+/// Integration tests for SftpImageStore against a Docker SFTP server.
+/// </summary>
 [TestClass]
 [TestCategory("Integration")]
 public sealed class SftpImageStoreTests
@@ -431,6 +434,9 @@ public sealed class SftpImageStoreTests
 }
 
 
+/// <summary>
+/// Tests StorageFactory provider selection and error cases.
+/// </summary>
 [TestClass]
 public sealed class StorageFactoryTests
 {
@@ -498,6 +504,9 @@ public sealed class StorageFactoryTests
     }
 }
 
+/// <summary>
+/// Tests SftpStorageConfig and storage configuration validation.
+/// </summary>
 [TestClass]
 public sealed class StorageConfigurationTests
 {
