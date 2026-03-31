@@ -11,6 +11,9 @@ namespace OcrAgent.Inference;
 /// </summary>
 public sealed class U2NetpOnnxPredictor : IDisposable
 {
+    /// <summary>
+    /// Side length in pixels for the square fed to the model (width and height).
+    /// </summary>
     public const int InputSize = 320;
 
     private static readonly float[] Mean = { 0.485f, 0.456f, 0.406f };
@@ -28,6 +31,11 @@ public sealed class U2NetpOnnxPredictor : IDisposable
         _outputName = outputName;
     }
 
+    /// <summary>
+    /// Loads u2netp.onnx from disk and binds the session to its first input and output tensors.
+    /// </summary>
+    /// <param name="modelPath">Filesystem path to the ONNX model file.</param>
+    /// <returns>Ready-to-use predictor for that file.</returns>
     public static U2NetpOnnxPredictor FromModelPath(string modelPath)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -54,6 +62,7 @@ public sealed class U2NetpOnnxPredictor : IDisposable
     /// Creates predictor using U2NETP_ONNX_PATH env var or default Assets path.
     /// Returns null if model file cannot be found.
     /// </summary>
+    /// <returns>Predictor instance, or null when no model exists at resolved paths.</returns>
     public static U2NetpOnnxPredictor? TryCreateDefault()
     {
         var env = Environment.GetEnvironmentVariable("U2NETP_ONNX_PATH");
@@ -75,6 +84,8 @@ public sealed class U2NetpOnnxPredictor : IDisposable
     /// <summary>
     /// Predicts a probability mask (CV_32FC1, values 0..1) at the original image size.
     /// </summary>
+    /// <param name="bgrImage">Non-empty BGR image.</param>
+    /// <returns>Single-channel float mask matching image dimensions.</returns>
     public Mat PredictProbabilityMask(Mat bgrImage)
     {
         if (bgrImage.Empty())
@@ -151,6 +162,9 @@ public sealed class U2NetpOnnxPredictor : IDisposable
         return probMask;
     }
 
+    /// <summary>
+    /// Disposes the ONNX inference session.
+    /// </summary>
     public void Dispose()
     {
         _session.Dispose();

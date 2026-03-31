@@ -11,6 +11,14 @@ public static class DocumentContourExtractor
     /// <summary>
     /// Extracts a document mask and quad from a float probability mask.
     /// </summary>
+    /// <param name="probabilityMask32F">CV_32FC1 probability mask, same size as the source image.</param>
+    /// <param name="documentMask8U">Output binary 8U document mask.</param>
+    /// <param name="quadCorners">Four corners in order tl, tr, br, bl when true; otherwise empty.</param>
+    /// <param name="maskCoverage">Fraction of image pixels set in the binary mask when true.</param>
+    /// <param name="confidence">Heuristic score in 0..1 when true; otherwise 0.</param>
+    /// <param name="minAreaPercent">Minimum acceptable mask area as a percent of the image.</param>
+    /// <param name="maxAreaPercent">Maximum acceptable mask area as a percent of the image.</param>
+    /// <returns>True when a quad passes area and shape checks.</returns>
     public static bool TryExtractDocument(
         Mat probabilityMask32F,
         out Mat documentMask8U,
@@ -120,6 +128,8 @@ public static class DocumentContourExtractor
     /// <summary>
     /// Converts a float probability mask to a binary 8U mask, not extracting a quad.
     /// </summary>
+    /// <param name="probabilityMask32F">CV_32FC1 mask; must be non-empty.</param>
+    /// <returns>Owned 8U binary mask, or null when input is invalid or filtering fails.</returns>
     public static Mat? ToBinaryMask(Mat probabilityMask32F)
     {
         if (probabilityMask32F.Empty() || probabilityMask32F.Type() != MatType.CV_32FC1)
@@ -208,9 +218,20 @@ public static class DocumentContourExtractor
         return (hr + vr) / 2.0;
     }
 
+    /// <summary>
+    /// Euclidean distance between two points in image coordinates.
+    /// </summary>
+    /// <param name="a">First point.</param>
+    /// <param name="b">Second point.</param>
+    /// <returns>Scalar distance.</returns>
     public static double Dist(Point2f a, Point2f b)
         => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
+    /// <summary>
+    /// Sorts four quad vertices to top-left, top-right, bottom-right, bottom-left using sum and difference of x,y.
+    /// </summary>
+    /// <param name="pts">Four corner points from contour or min-area rectangle.</param>
+    /// <returns>Array in order tl, tr, br, bl.</returns>
     public static Point2f[] OrderCorners(Point2f[] pts)
     {
         var sum = pts.Select(p => p.X + p.Y).ToArray();
