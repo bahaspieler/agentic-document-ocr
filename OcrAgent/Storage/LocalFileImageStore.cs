@@ -2,17 +2,23 @@ using System.Text.Json;
 
 namespace OcrAgent.Storage;
 
+/// <summary>
+/// Stores images and JSON metadata on the local filesystem under a root folder.
+/// </summary>
 public sealed class LocalFileImageStore : IImageStore
 {
     private readonly string _root;
     private string? _activeSubdirectory;
 
+    /// <summary>Creates the store and ensures the root directory exists.</summary>
+    /// <param name="rootFolder">Base directory for all stored files.</param>
     public LocalFileImageStore(string rootFolder)
     {
         _root = rootFolder;
         Directory.CreateDirectory(_root);
     }
 
+    /// <inheritdoc />
     public void SetActiveSubdirectory(string? subdirectory)
     {
         _activeSubdirectory = subdirectory;
@@ -20,14 +26,17 @@ public sealed class LocalFileImageStore : IImageStore
             Directory.CreateDirectory(Path.Combine(_root, subdirectory));
     }
 
+    /// <inheritdoc />
     public string? GetActiveSubdirectory() => _activeSubdirectory;
 
+    /// <inheritdoc />
     public string GetWriteDirectory() => ActiveRoot;
 
     private string ActiveRoot => _activeSubdirectory != null
         ? Path.Combine(_root, _activeSubdirectory)
         : _root;
 
+    /// <inheritdoc />
     public bool Exists(string reference)
     {
         reference = ImageReferenceGenerator.Normalize(reference);
@@ -41,6 +50,7 @@ public sealed class LocalFileImageStore : IImageStore
         return false;
     }
 
+    /// <inheritdoc />
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
         if (!File.Exists(filePath))
@@ -57,6 +67,7 @@ public sealed class LocalFileImageStore : IImageStore
         }, desiredReference);
     }
 
+    /// <inheritdoc />
     public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null, string? desiredReference = null)
     {
         var reference = desiredReference ?? ImageReferenceGenerator.NewRef();
@@ -81,8 +92,10 @@ public sealed class LocalFileImageStore : IImageStore
         return reference;
     }
 
+    /// <inheritdoc />
     public string GetImagePath(string reference) => ResolveExistingImagePath(reference);
 
+    /// <inheritdoc />
     public IDictionary<string, string> GetMetadata(string reference)
     {
         reference = ImageReferenceGenerator.Normalize(reference);

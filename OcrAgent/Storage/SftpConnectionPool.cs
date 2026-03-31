@@ -4,6 +4,9 @@ using Renci.SshNet.Common;
 
 namespace OcrAgent.Storage;
 
+/// <summary>
+/// Holds a bounded set of SFTP clients: warm minimum connections, idle cleanup, optional health checks.
+/// </summary>
 public sealed class SftpConnectionPool : IDisposable
 {
     private readonly SftpStorageConfig _config;
@@ -15,6 +18,8 @@ public sealed class SftpConnectionPool : IDisposable
     private int _totalConnections = 0;
     private bool _disposed = false;
 
+    /// <summary>Creates the pool, pre-opens minimum connections, and starts idle and health timers when configured.</summary>
+    /// <param name="config">Connection and pool limits.</param>
     public SftpConnectionPool(SftpStorageConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -33,12 +38,18 @@ public sealed class SftpConnectionPool : IDisposable
         _idleConnectionCleanupTimer = new Timer(CleanupIdleConnections, null, idleCheckInterval, idleCheckInterval);
     }
 
+    /// <summary>
+    /// Borrows a client: waits on the pool semaphore, takes idle connection or opens a new one, tracks it as active.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation for the wait.</param>
+    /// <returns>Connected <see cref="SftpClient"/>; must be released with <see cref="ReleaseConnection"/>.</returns>
     public async Task<SftpClient> AcquireConnectionAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        
+
+        // Pool lifecycle: acquire slot -> take from idle bag or create -> mark active; ReleaseConnection returns to bag or disposes.
         await _connectionSemaphore.WaitAsync(cancellationToken);
-        
+
         try
         {
             if (_availableConnections.TryTake(out var pooledConnection))
@@ -65,6 +76,8 @@ public sealed class SftpConnectionPool : IDisposable
         }
     }
 
+    /// <summary>Returns a client to the idle pool or disposes it if invalid; always releases the semaphore slot.</summary>
+    /// <param name="client">Client previously acquired from this pool.</param>
     public void ReleaseConnection(SftpClient client)
     {
         if (client == null || _disposed)
@@ -92,6 +105,11 @@ public sealed class SftpConnectionPool : IDisposable
         _connectionSemaphore.Release();
     }
 
+    /// <summary>Acquires a client, runs the operation, then releases the client in a finally block.</summary>
+    /// <typeparam name="T">Operation result type.</typeparam>
+    /// <param name="operation">Work to run with the borrowed client.</param>
+    /// <param name="cancellationToken">Passed to acquire.</param>
+    /// <returns>The task result from <paramref name="operation"/>.</returns>
     public async Task<T> ExecuteAsync<T>(Func<SftpClient, Task<T>> operation, CancellationToken cancellationToken = default)
     {
         var client = await AcquireConnectionAsync(cancellationToken);
@@ -105,6 +123,9 @@ public sealed class SftpConnectionPool : IDisposable
         }
     }
 
+    /// <summary>Acquires a client, awaits the operation, then releases the client.</summary>
+    /// <param name="operation">Work to run with the borrowed client.</param>
+    /// <param name="cancellationToken">Passed to acquire.</param>
     public async Task ExecuteAsync(Func<SftpClient, Task> operation, CancellationToken cancellationToken = default)
     {
         var client = await AcquireConnectionAsync(cancellationToken);
@@ -315,6 +336,7 @@ public sealed class SftpConnectionPool : IDisposable
         }
     }
 
+    /// <summary>Stops timers and disconnects all pooled and active clients.</summary>
     public void Dispose()
     {
         if (_disposed) return;

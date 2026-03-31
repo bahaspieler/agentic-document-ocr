@@ -5,6 +5,9 @@ using Renci.SshNet.Common;
 
 namespace OcrAgent.Storage;
 
+/// <summary>
+/// <see cref="IImageStore"/> backed by remote files over SFTP, with retries and optional debug uploads.
+/// </summary>
 public sealed class SftpImageStore : IImageStore, IDisposable
 {
     private readonly SftpStorageConfig _config;
@@ -13,6 +16,8 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     private string? _activeSubdirectory;
     private bool _disposed = false;
 
+    /// <summary>Builds the store and opens the shared connection pool from config.</summary>
+    /// <param name="config">Host, paths, pool, and retry settings.</param>
     public SftpImageStore(SftpStorageConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -21,11 +26,17 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         _connectionPool = new SftpConnectionPool(config);
     }
 
+    #region IImageStore Implementation
+
+    /// <inheritdoc />
     public bool Exists(string reference)
     {
         return ExistsAsync(reference).GetAwaiter().GetResult();
     }
 
+    /// <summary>Async variant of <see cref="Exists"/>.</summary>
+    /// <param name="reference">Stored image id.</param>
+    /// <returns>True if a remote image file exists.</returns>
     public async Task<bool> ExistsAsync(string reference)
     {
         ValidateReference(reference);
@@ -61,11 +72,16 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public string SaveFromFile(string filePath, string? desiredReference = null)
     {
         return SaveFromFileAsync(filePath, desiredReference).GetAwaiter().GetResult();
     }
 
+    /// <summary>Async variant of <see cref="SaveFromFile"/>.</summary>
+    /// <param name="filePath">Path to the source file.</param>
+    /// <param name="desiredReference">Optional id; a new one is generated if null.</param>
+    /// <returns>The stored reference string.</returns>
     public async Task<string> SaveFromFileAsync(string filePath, string? desiredReference = null)
     {
         if (!File.Exists(filePath))
@@ -82,12 +98,19 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }, desiredReference);
     }
 
+    /// <inheritdoc />
     public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null,
         string? desiredReference = null)
     {
         return SaveBytesAsync(bytes, extension, metadata, desiredReference).GetAwaiter().GetResult();
     }
 
+    /// <summary>Async variant of <see cref="SaveBytes"/>.</summary>
+    /// <param name="bytes">Image file contents.</param>
+    /// <param name="extension">File extension without dot.</param>
+    /// <param name="metadata">Optional sidecar fields.</param>
+    /// <param name="desiredReference">Optional id; a new one is generated if null.</param>
+    /// <returns>The stored reference string.</returns>
     public async Task<string> SaveBytesAsync(byte[] bytes, string extension,
         IDictionary<string, string>? metadata = null, string? desiredReference = null)
     {
@@ -133,11 +156,15 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public string GetImagePath(string reference)
     {
         return GetImagePathAsync(reference).GetAwaiter().GetResult();
     }
 
+    /// <summary>Downloads the image to a temp file and returns that local path.</summary>
+    /// <param name="reference">Stored image id.</param>
+    /// <returns>Path under the system temp directory.</returns>
     public async Task<string> GetImagePathAsync(string reference)
     {
         ValidateReference(reference);
@@ -192,11 +219,15 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public IDictionary<string, string> GetMetadata(string reference)
     {
         return GetMetadataAsync(reference).GetAwaiter().GetResult();
     }
 
+    /// <summary>Loads remote JSON metadata; on failure returns an empty dictionary.</summary>
+    /// <param name="reference">Stored image id.</param>
+    /// <returns>Deserialized metadata or empty map.</returns>
     public async Task<IDictionary<string, string>> GetMetadataAsync(string reference)
     {
         ValidateReference(reference);
@@ -241,6 +272,15 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    #endregion
+
+    #region Debug / Diagnostics
+
+    /// <summary>Uploads a debug artifact under the configured debug folder when enabled.</summary>
+    /// <param name="parentReference">Reference grouping debug files.</param>
+    /// <param name="debugFolderName">Top-level debug directory name on the server.</param>
+    /// <param name="filename">Remote file name.</param>
+    /// <param name="imageBytes">File contents to upload.</param>
     public async Task SaveDebugImageAsync(string parentReference, string debugFolderName,
         string filename, byte[] imageBytes)
     {
@@ -270,6 +310,10 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    #endregion
+
+    #region SFTP Operations
+
     private async Task<T> ExecuteWithRetryAsync<T>(Func<SftpClient, Task<T>> operation)
     {
         int attempt = 0;
@@ -279,6 +323,7 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         {
             try
             {
+                // Runs the delegate with a pooled SFTP client (borrow on enter, return in finally).
                 return await _connectionPool.ExecuteAsync(operation);
             }
             catch (Exception ex) when (IsRetryableException(ex) && attempt < _config.Retry.MaxRetries)
@@ -340,6 +385,10 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         }
     }
 
+    #endregion
+
+    #region Metadata
+
     private async Task SaveMetadataAsync(SftpClient client, string reference, IDictionary<string, string> metadata)
     {
         var metaPath = GetMetadataPath(reference);
@@ -350,14 +399,25 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         await Task.Run(() => client.UploadFile(stream, metaPath, true));
     }
 
+    #endregion
+
+    #region IImageStore Implementation
+
+    /// <inheritdoc />
     public void SetActiveSubdirectory(string? subdirectory)
     {
         _activeSubdirectory = subdirectory;
     }
 
+    /// <inheritdoc />
     public string? GetActiveSubdirectory() => _activeSubdirectory;
 
+    /// <inheritdoc />
     public string GetWriteDirectory() => ActiveBasePath();
+
+    #endregion
+
+    #region SFTP Operations
 
     private string NormalizeBasePath()
     {
@@ -392,6 +452,11 @@ public sealed class SftpImageStore : IImageStore, IDisposable
             throw new SecurityException($"Invalid reference: potential directory traversal - {reference}");
     }
 
+    #endregion
+
+    #region IImageStore Implementation
+
+    /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed) return;
@@ -399,4 +464,6 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         _disposed = true;
         _connectionPool?.Dispose();
     }
+
+    #endregion
 }
