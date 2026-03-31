@@ -53,33 +53,17 @@ public sealed class U2NetpOnnxPredictorTests
     [TestMethod]
     public void FromModelPath_WhenPathEmpty_ThrowsArgumentException()
     {
-        bool thrown = false;
-        try
-        {
-            U2NetpOnnxPredictor.FromModelPath("");
-        }
-        catch (ArgumentException)
-        {
-            thrown = true;
-        }
-        Assert.IsTrue(thrown, "Should throw ArgumentException for empty path");
+        Assert.ThrowsExactly<ArgumentException>(
+            () => U2NetpOnnxPredictor.FromModelPath(""));
     }
 
     [TestMethod]
     public void FromModelPath_WhenFileNotFound_ThrowsFileNotFoundException()
     {
         var nonExistentPath = Path.Combine(_tempDir, "nonexistent.onnx");
-        
-        bool thrown = false;
-        try
-        {
-            U2NetpOnnxPredictor.FromModelPath(nonExistentPath);
-        }
-        catch (FileNotFoundException)
-        {
-            thrown = true;
-        }
-        Assert.IsTrue(thrown, "Should throw FileNotFoundException for missing file");
+
+        Assert.ThrowsExactly<FileNotFoundException>(
+            () => U2NetpOnnxPredictor.FromModelPath(nonExistentPath));
     }
 
     [TestMethod]
@@ -93,19 +77,11 @@ public sealed class U2NetpOnnxPredictorTests
         }
 
         using var emptyMat = new Mat();
-        
-        bool thrown = false;
-        try
-        {
-            predictor.PredictProbabilityMask(emptyMat);
-        }
-        catch (ArgumentException)
-        {
-            thrown = true;
-        }
-        
+
+        Assert.ThrowsExactly<ArgumentException>(
+            () => predictor.PredictProbabilityMask(emptyMat));
+
         predictor.Dispose();
-        Assert.IsTrue(thrown, "Should throw ArgumentException for empty image");
     }
 
     [TestMethod]
