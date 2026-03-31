@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using OcrAgent.Storage;
@@ -15,11 +16,23 @@ public sealed class DenoisePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public DenoisePlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Runs median, bilateral, NLM, or auto mode; auto may return the input reference when noise is low.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="method">auto, median, bilateral, or nlm.</param>
+    /// <param name="strength">low, medium, or high; ignored for auto.</param>
+    /// <param name="qualityProfile">Optional JSON with noiseSigma for auto mode.</param>
+    /// <returns>New denoised image reference, or unchanged input in auto when skipped.</returns>
     [Description("Removes noise from the given image using the specified method. 'auto' analyzes the image and selects the best method/strength automatically, skipping if noise is negligible. Returns the reference of the generated image.")]
     public Task<string> DenoiseImage(
         [Description("The reference number of the image to denoise.")] string imageReference,
@@ -94,7 +107,10 @@ public sealed class DenoisePlugin : IImageProcessingTool
                 if (doc.RootElement.TryGetProperty("noiseSigma", out var ns))
                     return ns.GetDouble();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WARN] quality profile parse (noiseSigma): {ex.Message}");
+            }
         }
 
         using var gray = new Mat();
@@ -121,6 +137,10 @@ public sealed class DenoisePlugin : IImageProcessingTool
         Cv2.FastNlMeansDenoisingColored(src, dst, h, h, 7, 21);
     }
 
+    /// <summary>
+    /// Registers denoising as an AI-callable tool.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.DenoiseImage);

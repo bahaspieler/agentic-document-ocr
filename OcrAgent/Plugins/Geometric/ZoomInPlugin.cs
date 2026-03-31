@@ -13,11 +13,21 @@ public sealed class ZoomInPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>Creates the plugin with the image store used to resolve and save images.</summary>
+    /// <param name="store">Backing store for input paths and output bytes.</param>
     public ZoomInPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Center-crops by a zoom-derived ratio, resizes back to the original size, saves each step as PNG.
+    /// </summary>
+    /// <param name="imageReference">Stored image id to read.</param>
+    /// <param name="startZoom">First zoom percent (e.g. 10 → 1.1× effective scale).</param>
+    /// <param name="endZoom">Last zoom percent (inclusive).</param>
+    /// <param name="zoomStep">Step between percent values; must be positive.</param>
+    /// <returns>Comma-separated new references, one per zoom level.</returns>
     [Description("Performs zooming in of the given image. It returns the comma-separated list of references of generated images.")]
     public Task<string> ZoomInImage(
         [Description("The reference number of the image, which should be zoomed in.")] string imageReference,
@@ -78,6 +88,8 @@ public sealed class ZoomInPlugin : IImageProcessingTool
         return Task.FromResult(string.Join(",", results));
     }
 
+    /// <summary>Exposes <see cref="ZoomInImage"/> as an AI-callable tool.</summary>
+    /// <returns>Sequence containing the ZoomInImage tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ZoomInImage);

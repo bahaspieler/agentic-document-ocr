@@ -2,51 +2,111 @@
   "id": "receipt_preprocess_v1",
   "name": "Receipt Preprocessing",
   "version": "1.0.0",
-  "description": "Standard preprocessing pipeline for receipt images: perspective correction, deskew, contrast enhancement, denoising, binarization, and morphological cleanup.",
-  "tags": ["receipt", "preprocessing"],
+  "description": "Full preprocessing pipeline for receipt images with quality assessment, contour extraction, perspective correction, cropping, illumination normalization, contrast enhancement, denoising, brightness normalization, sharpening, resizing, binarization, morphological cleanup, and OCR.",
+  "tags": ["receipt", "preprocessing", "ocr"],
   "budget": { "maxVariants": 12 },
   "steps": [
+    {
+      "id": "assess_quality",
+      "type": "tool",
+      "tool": "AssessQuality",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "qualityProfile": "$result" },
+      "description": "Analyze image quality metrics for downstream adaptive processing"
+    },
+    {
+      "id": "extract_contours",
+      "type": "tool",
+      "tool": "ExtractDocumentContours",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "contourData": "$result" },
+      "description": "Detect document boundaries for perspective correction and cropping"
+    },
     {
       "id": "perspective",
       "type": "tool",
       "tool": "CorrectPerspective",
-      "args": { "sensitivity": "auto", "marginPercent": 2, "enhanceEdges": true },
-      "description": "Fix perspective distortion from angled mobile captures"
+      "args": { "sensitivity": "auto", "contourData": "$context.contourData" },
+      "description": "Fix perspective distortion using pre-computed contour data"
+    },
+    {
+      "id": "auto_crop",
+      "type": "tool",
+      "tool": "AutoCrop",
+      "args": { "marginPercent": 1, "contourData": "$context.contourData" },
+      "description": "Crop to document content area"
     },
     {
       "id": "deskew",
       "type": "tool",
       "tool": "DeskewImage",
-      "args": { "method": "hough", "maxAngle": 15, "preserveSize": true },
+      "args": { "method": "hough", "maxAngle": 15 },
       "description": "Correct document skew/tilt"
+    },
+    {
+      "id": "illumination",
+      "type": "tool",
+      "tool": "NormalizeIllumination",
+      "args": { "kernelSize": 51, "qualityProfile": "$context.qualityProfile" },
+      "description": "Remove shadows and normalize uneven lighting"
     },
     {
       "id": "contrast",
       "type": "tool",
       "tool": "EnhanceContrast",
-      "args": { "method": "clahe" },
-      "description": "Improve text-background contrast"
+      "args": { "method": "auto_lab", "qualityProfile": "$context.qualityProfile" },
+      "description": "Enhance text-background contrast with LAB CLAHE"
     },
     {
       "id": "denoise",
       "type": "tool",
       "tool": "DenoiseImage",
-      "args": { "method": "bilateral", "strength": "low" },
-      "description": "Remove noise while preserving text edges"
+      "args": { "method": "auto", "qualityProfile": "$context.qualityProfile" },
+      "description": "Adaptive noise removal based on quality assessment"
+    },
+    {
+      "id": "brightness",
+      "type": "tool",
+      "tool": "AutoAdjustBrightness",
+      "args": { "qualityProfile": "$context.qualityProfile" },
+      "description": "Normalize brightness to OCR-optimal range"
+    },
+    {
+      "id": "sharpen",
+      "type": "tool",
+      "tool": "SharpenImage",
+      "args": { "adaptiveStrength": true },
+      "description": "Sharpen text edges for better OCR recognition"
+    },
+    {
+      "id": "resize",
+      "type": "tool",
+      "tool": "ResizeImage",
+      "args": { "documentType": "receipt" },
+      "description": "Resize to OCR-optimal resolution"
     },
     {
       "id": "binarize",
       "type": "tool",
       "tool": "BinarizeImage",
-      "args": { "method": "adaptive_gaussian", "blockSize": 15, "constant": 4 },
-      "description": "Convert to binary for OCR"
+      "args": { "method": "auto", "qualityProfile": "$context.qualityProfile" },
+      "description": "Adaptive binarization using quality metrics"
     },
     {
       "id": "morphology",
       "type": "tool",
       "tool": "ApplyMorphology",
-      "args": { "operation": "close", "kernelSize": 3, "iterations": 1 },
-      "description": "Close small gaps in character strokes"
+      "args": { "operation": "remove_speckles", "minArea": 20 },
+      "description": "Remove small speckle noise from binarized image"
+    },
+    {
+      "id": "ocr",
+      "type": "tool",
+      "tool": "RunOcr",
+      "args": { "language": "eng" },
+      "description": "Extract text from preprocessed image"
     }
   ]
 }

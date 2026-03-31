@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
 using OcrAgent.Storage;
 using OpenCvSharp;
 
@@ -13,11 +14,25 @@ public sealed class ResizePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>Creates the plugin with the image store used to resolve and save images.</summary>
+    /// <param name="store">Backing store for input paths and output bytes.</param>
     public ResizePlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Resizes by explicit size, DPI-derived size, or document preset; records size and DPI hints in metadata.
+    /// </summary>
+    /// <param name="imageReference">Stored image id to read.</param>
+    /// <param name="targetWidth">Target width in pixels; 0 with height for aspect fill.</param>
+    /// <param name="targetHeight">Target height in pixels; 0 with width for aspect fill.</param>
+    /// <param name="targetDPI">When &gt; 0 and preset is auto, scales from assumed physical size.</param>
+    /// <param name="maintainAspectRatio">Fills missing dimension from the other when true.</param>
+    /// <param name="interpolation"><c>linear</c>, <c>cubic</c>, or <c>lanczos4</c>.</param>
+    /// <param name="documentType">Preset name or <c>auto</c> to use width/height/DPI only.</param>
+    /// <param name="skipIfLarger">When true, skips resize if the source already meets target dimensions.</param>
+    /// <returns>New image reference for the resized or skipped copy.</returns>
     [Description("Resizes image to normalize dimensions. Use targetDPI for document standardization (300 recommended for OCR). Can specify pixels or use document type presets.")]
     public Task<string> ResizeImage(
         [Description("The reference number of the image to resize.")] string imageReference,
@@ -26,7 +41,8 @@ public sealed class ResizePlugin : IImageProcessingTool
         [Description("Target DPI for document (e.g., 300 for high-quality OCR, 200 for receipts). Overrides width/height if > 0.")] int targetDPI = 0,
         [Description("Maintain aspect ratio when one dimension is 0 (recommended: true).")] bool maintainAspectRatio = true,
         [Description("Interpolation method: 'linear' (fast), 'cubic' (balanced), 'lanczos4' (for upscaling).")] string interpolation = "lanczos4",
-        [Description("Document type preset: 'auto', 'receipt', 'form', 'statement', 'invoice'. Overrides other dimensions if specified.")] string documentType = "auto")
+        [Description("Document type preset: 'auto', 'receipt', 'form', 'statement', 'invoice'. Overrides other dimensions if specified.")] string documentType = "auto",
+        [Description("If true, only resize when the image is smaller than target. Prevents quality loss from upscaling.")] bool skipIfLarger = false)
     {
         interpolation = interpolation.ToLowerInvariant();
         documentType = documentType.ToLowerInvariant();
@@ -42,15 +58,15 @@ public sealed class ResizePlugin : IImageProcessingTool
 
         int originalWidth = src.Width;
         int originalHeight = src.Height;
-
+        int effectiveDPI = targetDPI;
 
         if (documentType != "auto")
         {
-            (targetWidth, targetHeight) = GetDocumentPreset(documentType);
+            (targetWidth, targetHeight, effectiveDPI) = GetDocumentPreset(documentType, originalWidth, originalHeight);
         }
         else if (targetDPI > 0)
         {
-            (targetWidth, targetHeight) = CalculateDimensionsFromDPI(targetDPI, originalWidth, originalHeight);
+            (targetWidth, targetHeight) = CalculateDimensionsFromDPI(targetDPI, originalWidth, originalHeight, documentType);
         }
         else
         {
@@ -61,7 +77,6 @@ public sealed class ResizePlugin : IImageProcessingTool
                 throw new ArgumentException("Dimensions must be >= 0");
         }
 
-        // if maintain aspect ratio
         if (maintainAspectRatio)
         {
             double aspectRatio = (double)originalWidth / originalHeight;
@@ -76,11 +91,30 @@ public sealed class ResizePlugin : IImageProcessingTool
             }
         }
 
-        // valid dimensions
         targetWidth = Math.Max(1, targetWidth);
         targetHeight = Math.Max(1, targetHeight);
 
-        // interpolation method
+        if (skipIfLarger && originalHeight >= targetHeight && originalWidth >= targetWidth)
+        {
+            effectiveDPI = EstimateCurrentDpi(originalWidth, originalHeight, documentType);
+            Debug.WriteLine($"[Resize] Image already large enough ({originalWidth}x{originalHeight}), skipping resize. effectiveDPI={effectiveDPI}");
+
+            var skipMeta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference,
+                ["op"] = "resize",
+                ["skipped"] = "true",
+                ["skipReason"] = "image already at or above target dimensions",
+                ["originalSize"] = $"{originalWidth}x{originalHeight}",
+                ["effectiveDPI"] = effectiveDPI.ToString(),
+                ["documentType"] = documentType,
+            };
+            var skipRef = PluginHelpers.MakeUniqueRef(_store, $"{imageReference}_resize_skipped");
+            Cv2.ImEncode(".png", src, out var skipBytes);
+            var savedSkipRef = _store.SaveBytes(skipBytes, "png", skipMeta, skipRef);
+            return Task.FromResult(savedSkipRef);
+        }
+
         var interpFlag = interpolation switch
         {
             "linear" => InterpolationFlags.Linear,
@@ -89,9 +123,11 @@ public sealed class ResizePlugin : IImageProcessingTool
             _ => InterpolationFlags.Lanczos4
         };
 
-        // resize
         using var resized = new Mat();
         Cv2.Resize(src, resized, new Size(targetWidth, targetHeight), 0, 0, interpFlag);
+
+        if (effectiveDPI == 0 && targetHeight > 0 && originalHeight > 0)
+            effectiveDPI = (int)(targetDPI > 0 ? targetDPI : 300.0 * targetHeight / originalHeight);
 
         Cv2.ImEncode(".png", resized, out var pngBytes);
 
@@ -102,6 +138,7 @@ public sealed class ResizePlugin : IImageProcessingTool
             ["originalSize"] = $"{originalWidth}x{originalHeight}",
             ["newSize"] = $"{targetWidth}x{targetHeight}",
             ["targetDPI"] = targetDPI.ToString(),
+            ["effectiveDPI"] = effectiveDPI.ToString(),
             ["documentType"] = documentType,
             ["interpolation"] = interpolation,
             ["maintainAspectRatio"] = maintainAspectRatio.ToString(),
@@ -114,45 +151,75 @@ public sealed class ResizePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
-    private (int width, int height) GetDocumentPreset(string documentType)
+    private static (int width, int height, int effectiveDPI) GetDocumentPreset(
+        string documentType, int originalWidth, int originalHeight)
     {
-        // Standard document presets optimized for OCR workflows
         return documentType switch
         {
-            "receipt" => (1200, 1600),        // 200 DPI equivalent
-            "form" => (2550, 3300),           // A4 @ 300 DPI, preserve structure
-            "statement" => (2550, 3300),      // A4 @ 300 DPI, standard
-            "invoice" => (2550, 3300),        // A4 @ 300 DPI, standard
-            "letter" => (2550, 3300),         // US Letter @ 300 DPI
-            "a4" => (2550, 3300),             // A4 @ 300 DPI
+            "receipt" => GetReceiptDimensions(originalWidth, originalHeight),
+            "form" => (2550, 3300, 300),
+            "statement" => (2550, 3300, 300),
+            "invoice" => (2550, 3300, 300),
+            "letter" => (2550, 3300, 300),
+            "a4" => (2480, 3508, 300),
             _ => throw new ArgumentException($"Unknown document type: {documentType}. Use 'receipt', 'form', 'statement', 'invoice', 'letter', or 'a4'.")
         };
     }
 
-    private (int width, int height) CalculateDimensionsFromDPI(int dpi, int originalWidth, int originalHeight)
+    private static (int width, int height, int effectiveDPI) GetReceiptDimensions(int originalWidth, int originalHeight)
     {
-        // physical dimensions from original size
-        // Assume original is at 72 DPI
-        const int assumedOriginalDPI = 72;
+        const int targetDpi = 300;
+        double aspect = (double)originalWidth / Math.Max(originalHeight, 1);
 
-        // physical dimensions in inches
-        double widthInches = originalWidth / (double)assumedOriginalDPI;
-        double heightInches = originalHeight / (double)assumedOriginalDPI;
+        // Thermal receipts are typically ~3.15 inches wide.
+        // Use height-only target: 300 DPI * estimated height, preserving aspect ratio.
+        double widthInches = 3.15;
+        int w = (int)(widthInches * targetDpi);
+        int h = (int)(w / aspect);
 
-        // If unrealistic, assume A4 paper (8.27 x 11.69 inches)
-        if (widthInches > 12 || heightInches > 18)
+        // Clamp height to reasonable range (avoid absurdly tall images from very long receipts)
+        h = Math.Clamp(h, 800, 6000);
+        w = (int)(h * aspect);
+
+        return (w, h, targetDpi);
+    }
+
+    private static int EstimateCurrentDpi(int width, int height, string documentType)
+    {
+        double widthInches = documentType == "receipt" ? 3.15 : 8.27;
+        return (int)(width / widthInches);
+    }
+
+    private static (int width, int height) CalculateDimensionsFromDPI(
+        int dpi, int originalWidth, int originalHeight, string documentType)
+    {
+        double widthInches, heightInches;
+
+        if (documentType == "receipt")
         {
-            widthInches = 8.27;
-            heightInches = 11.69;
+            widthInches = 3.15;
+            heightInches = widthInches * originalHeight / Math.Max(originalWidth, 1);
+        }
+        else
+        {
+            widthInches = originalWidth / 72.0;
+            heightInches = originalHeight / 72.0;
+
+            if (widthInches > 12 || heightInches > 18)
+            {
+                widthInches = 8.27;
+                heightInches = 11.69;
+            }
         }
 
-        // target dimensions at desired DPI
         int targetWidth = (int)(widthInches * dpi);
         int targetHeight = (int)(heightInches * dpi);
 
         return (targetWidth, targetHeight);
     }
 
+    /// <summary>Exposes <see cref="ResizeImage"/> as an AI-callable tool.</summary>
+    /// <returns>Sequence containing the ResizeImage tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ResizeImage);

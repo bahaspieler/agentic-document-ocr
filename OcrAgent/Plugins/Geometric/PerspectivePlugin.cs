@@ -1,5 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Text.Json;
 using OcrAgent.Storage;
 using OcrAgent.Inference;
 using OpenCvSharp;
@@ -21,12 +23,29 @@ public sealed class PerspectivePlugin : IImageProcessingTool
     private const double MaxAreaRatio = 0.995;
     private const string DebugFolderName = "perspective_debug";
 
+    #region Public API
+
+    /// <summary>Creates the plugin; optional predictor enables U2NETP-based corner detection.</summary>
+    /// <param name="store">Backing store for input paths and output bytes.</param>
+    /// <param name="predictor">ONNX document-segmentation predictor, or null for CV-only paths.</param>
     public PerspectivePlugin(IImageStore store, U2NetpOnnxPredictor? predictor = null)
     {
         _store = store;
         _predictor = predictor;
     }
 
+    /// <summary>
+    /// Finds a document quad (JSON, ML, or CV fallbacks), may skip warp when already flat, then warps to a rectangle.
+    /// </summary>
+    /// <param name="imageReference">Stored image id to read.</param>
+    /// <param name="sensitivity">Detection tuning: <c>auto</c>, <c>aggressive</c>, or <c>conservative</c>.</param>
+    /// <param name="targetWidth">Output width; 0 means derive from quad or defaults.</param>
+    /// <param name="targetHeight">Output height; 0 means derive from quad or defaults.</param>
+    /// <param name="marginPercent">Optional outward expansion of the quad (0–20).</param>
+    /// <param name="enhanceEdges">When true, applies bilateral + CLAHE before edge-based detection.</param>
+    /// <param name="debug">When true, writes intermediate images under a debug subfolder.</param>
+    /// <param name="contourData">Optional JSON with quad corners to bypass detection.</param>
+    /// <returns>New image reference for the warped or passthrough PNG.</returns>
     [Description("Auto-detects document boundaries and corrects perspective distortion. Returns corrected image reference.")]
     public Task<string> CorrectPerspective(
         [Description("The reference number of the image to correct.")] string imageReference,
@@ -35,7 +54,8 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         [Description("Target output height in pixels (0 = auto).")] int targetHeight = 0,
         [Description("Add margin padding around detected document.")] int marginPercent = 0,
         [Description("Enhance edges before detection.")] bool enhanceEdges = true,
-        [Description("Enable debug mode to save intermediate detection images.")] bool debug = false)
+        [Description("Enable debug mode to save intermediate detection images.")] bool debug = false,
+        [Description("Optional contour data JSON from ExtractDocumentContours. When provided with valid quad corners, skips the entire detection pipeline.")] string? contourData = null)
     {
         sensitivity = sensitivity.ToLowerInvariant();
         if (sensitivity is not ("auto" or "aggressive" or "conservative"))
@@ -48,6 +68,14 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
+
+        // If pre-computed contour data is available, use it directly
+        var precomputedQuad = TryParseContourData(contourData);
+        if (precomputedQuad != null)
+        {
+            return Task.FromResult(ApplyPerspectiveFromQuad(
+                src, precomputedQuad, imageReference, targetWidth, targetHeight, marginPercent, "contour_data"));
+        }
 
         string? debugPath = null;
         if (debug)
@@ -218,6 +246,10 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         var newRef = _store.SaveBytes(pngBytes, "png", meta, desiredRef);
         return Task.FromResult(newRef);
     }
+
+    #endregion
+
+    #region Detection Methods
 
     /// <summary>
     /// Detects document corners using 2-tier strategy.
@@ -438,8 +470,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
                 return (quadCorners, confidence, "u2netp");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[WARN] U2NETP corner detection failed: {ex.Message}");
             return (null, 0.0, "u2netp_error");
         }
     }
@@ -456,8 +489,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
             using var probMask = _predictor.PredictProbabilityMask(src);
             return DocumentContourExtractor.ToBinaryMask(probMask);
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[WARN] U2NETP mask for GrabCut prior failed: {ex.Message}");
             return null;
         }
     }
@@ -723,7 +757,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return (quad, conf, "grabcut");
     }
 
-    // Contour scoring methods
+    #endregion
+
+    #region Contour Helpers
 
     private static (Point2f[]? Quad, double Score) SelectBestQuadFromContours(
         Point[][] contours,
@@ -905,7 +941,9 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return good / 4.0;
     }
 
-    // geometry helper methods
+    #endregion
+
+    #region Corner Ordering
 
     private static Mat ResizeForDetection(Mat src, int maxSide, out double scale)
     {
@@ -1002,6 +1040,10 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return distortion;
     }
 
+    #endregion
+
+    #region Detection Methods
+
     /// <summary>
     /// Detects if the document fills the whole frame.
     /// </summary>
@@ -1094,6 +1136,10 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         double paperPixels = Cv2.CountNonZero(roi);
         return paperPixels / pixels;
     }
+
+    #endregion
+
+    #region Corner Ordering
 
     private static double Dist(Point2f a, Point2f b)
         => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
@@ -1223,7 +1269,7 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         return safe.Trim('_');
     }
 
-    // Debug helper methods
+    #endregion
 
     private string PrepareDebugFolder(string imageReference)
     {
@@ -1343,8 +1389,83 @@ public sealed class PerspectivePlugin : IImageProcessingTool
         Cv2.ImWrite(filePath, vis);
     }
 
+    private static Point2f[]? TryParseContourData(string? contourData)
+    {
+        if (string.IsNullOrEmpty(contourData)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(contourData);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("found", out var found) || !found.GetBoolean()) return null;
+            if (root.TryGetProperty("confidence", out var conf) && conf.GetDouble() < 0.5) return null;
+            if (!root.TryGetProperty("quadCorners", out var corners)) return null;
+
+            var pts = new List<Point2f>();
+            foreach (var corner in corners.EnumerateArray())
+            {
+                var coords = corner.EnumerateArray().ToArray();
+                pts.Add(new Point2f((float)coords[0].GetDouble(), (float)coords[1].GetDouble()));
+            }
+            return pts.Count == 4 ? pts.ToArray() : null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[WARN] contour JSON parse failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private string ApplyPerspectiveFromQuad(
+        Mat src, Point2f[] quad, string imageReference,
+        int targetWidth, int targetHeight, int marginPercent, string method)
+    {
+        var corners = OrderCorners(quad);
+        if (marginPercent > 0)
+            corners = ExpandQuad(corners, src.Width, src.Height, marginPercent);
+
+        double distortion = CalculateDistortionAmount(corners);
+        if (distortion < 0.05)
+        {
+            double quadArea = Cv2.ContourArea(corners.Select(p => new Point((int)p.X, (int)p.Y)).ToArray());
+            double imgArea = src.Width * (double)src.Height;
+            double coverage = quadArea / imgArea;
+
+            Cv2.ImEncode(".png", src, out var origBytes);
+            var meta = new Dictionary<string, string>
+            {
+                ["parent"] = imageReference, ["op"] = "perspective_correct",
+                ["detectionMethod"] = method, ["note"] = "already aligned, no crop needed",
+                ["distortion"] = distortion.ToString("F3"),
+                ["coverage"] = coverage.ToString("F3"),
+                ["detectedCorners"] = FormatCorners(corners),
+            };
+            var desiredRef = PluginHelpers.MakeUniqueRef(_store, $"{imageReference}_perspective_aligned");
+            return _store.SaveBytes(origBytes, "png", meta, desiredRef);
+        }
+
+        var (outW, outH) = CalculateOutputDimensions(corners, targetWidth, targetHeight);
+        using var corrected = ApplyPerspectiveTransform(src, corners, outW, outH);
+        Cv2.ImEncode(".png", corrected, out var pngBytes);
+
+        var resultMeta = new Dictionary<string, string>
+        {
+            ["parent"] = imageReference, ["op"] = "perspective_correct",
+            ["detectedCorners"] = FormatCorners(corners),
+            ["outputDimensions"] = $"{outW}x{outH}",
+            ["detectionMethod"] = method
+        };
+        var baseRef = $"{imageReference}_perspective_{method}";
+        return _store.SaveBytes(pngBytes, "png", resultMeta, PluginHelpers.MakeUniqueRef(_store, baseRef));
+    }
+
+    #region Public API
+
+    /// <summary>Exposes <see cref="CorrectPerspective"/> as an AI-callable tool.</summary>
+    /// <returns>Sequence containing the CorrectPerspective tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.CorrectPerspective);
     }
+
+    #endregion
 }

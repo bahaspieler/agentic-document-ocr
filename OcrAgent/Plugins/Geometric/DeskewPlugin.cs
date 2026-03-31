@@ -14,11 +14,21 @@ public sealed class DeskewPlugin : IImageProcessingTool
     private readonly IImageStore _store;
     private const double MinimumSkewThreshold = 0.5;
 
+    /// <summary>Creates the plugin with the image store used to resolve and save images.</summary>
+    /// <param name="store">Backing store for input paths and output bytes.</param>
     public DeskewPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Estimates skew with Hough lines or projection variance, rotates when above a small threshold, saves PNG.
+    /// </summary>
+    /// <param name="imageReference">Stored image id to read.</param>
+    /// <param name="maxAngle">Search/limit range for skew in degrees (exclusive upper bound 45).</param>
+    /// <param name="method"><c>hough</c> or <c>projection</c>.</param>
+    /// <param name="preserveSize">When true, output matches input dimensions; when false, expands to fit rotation.</param>
+    /// <returns>New image reference with deskew metadata.</returns>
     [Description("Auto-detects and corrects document skew. Essential for receipts and forms. Returns deskewed image reference.")]
     public Task<string> DeskewImage(
         [Description("The reference number of the image to deskew.")] string imageReference,
@@ -221,6 +231,8 @@ public sealed class DeskewPlugin : IImageProcessingTool
         return Math.Max(0.0, 1.0 - normalized);
     }
 
+    /// <summary>Exposes <see cref="DeskewImage"/> as an AI-callable tool.</summary>
+    /// <returns>Sequence containing the DeskewImage tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.DeskewImage);

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
 using OpenCvSharp;
@@ -13,11 +13,23 @@ public sealed class SharpenPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public SharpenPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Sharpens with unsharp mask or Laplacian; optional adaptive mode picks strength from blur variance.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="strength">low, medium, or high.</param>
+    /// <param name="method">unsharp or laplacian.</param>
+    /// <param name="adaptiveStrength">When true, overrides strength from detected blur.</param>
+    /// <returns>Reference of the saved sharpened image.</returns>
     [Description("Enhances text edges and reduces blur. Use 'low' for clean scans, 'medium' for mobile captures, 'high' for very blurry receipts. Returns sharpened image reference.")]
     public Task<string> SharpenImage(
         [Description("The reference number of the image to sharpen.")] string imageReference,
@@ -172,6 +184,10 @@ public sealed class SharpenPlugin : IImageProcessingTool
             return "high";   // very blurry
     }
 
+    /// <summary>
+    /// Registers sharpening as an AI-callable tool.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.SharpenImage);

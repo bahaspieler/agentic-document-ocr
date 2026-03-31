@@ -1,0 +1,135 @@
+{
+  "id": "receipt_extract_v3",
+  "name": "Receipt Extraction v3",
+  "version": "3.1.0",
+  "description": "Receipt extraction: geometric preprocessing, Tesseract OCR with auto variant/PSM selection, rule-based parsing.",
+  "documentType": "receipt",
+  "budget": {
+    "maxSteps": 15,
+    "maxVariants": 6,
+    "timeoutSeconds": 120
+  },
+  "steps": [
+    {
+      "id": "assess_quality",
+      "type": "tool",
+      "tool": "AssessQuality",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "qualityProfile": "$result" },
+      "description": "Assess image quality (noise, blur, illumination)"
+    },
+    {
+      "id": "extract_contours",
+      "type": "tool",
+      "tool": "ExtractDocumentContours",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "contourData": "$result" },
+      "description": "Detect document contours for perspective correction"
+    },
+    {
+      "id": "auto_orient",
+      "type": "tool",
+      "tool": "AutoOrient",
+      "args": {},
+      "description": "Fix 90/180/270 degree rotations"
+    },
+    {
+      "id": "correct_perspective",
+      "type": "tool",
+      "tool": "CorrectPerspective",
+      "args": {
+        "contourData": "$context.contourData"
+      },
+      "description": "Correct perspective distortion using detected contours"
+    },
+    {
+      "id": "remove_background",
+      "type": "tool",
+      "tool": "RemoveDocumentBackground",
+      "args": {
+        "mode": "on_white",
+        "sensitivity": "auto"
+      },
+      "description": "Remove non-document background"
+    },
+    {
+      "id": "deskew",
+      "type": "tool",
+      "tool": "DeskewImage",
+      "args": {
+        "maxAngle": 15
+      },
+      "description": "Fine-angle deskew using Hough lines"
+    },
+    {
+      "id": "resize",
+      "type": "tool",
+      "tool": "ResizeImage",
+      "args": {
+        "documentType": "receipt",
+        "skipIfLarger": true
+      },
+      "description": "Resize to 300 DPI equivalent preserving aspect ratio"
+    },
+    {
+      "id": "denoise",
+      "type": "tool",
+      "tool": "DenoiseImage",
+      "args": {
+        "method": "auto",
+        "qualityProfile": "$context.qualityProfile"
+      },
+      "description": "Conditional denoising based on quality assessment"
+    },
+    {
+      "id": "add_border",
+      "type": "tool",
+      "tool": "AddBorderPadding",
+      "args": {
+        "pixels": 10,
+        "color": "white"
+      },
+      "description": "Add 10px white border (Tesseract needs borders around text)"
+    },
+    {
+      "id": "ocr",
+      "type": "tool",
+      "tool": "RunOcr",
+      "args": {
+        "language": "eng",
+        "variant": "auto",
+        "pageSegMode": "multi",
+        "dpi": 300,
+        "qualityProfile": "$context.qualityProfile"
+      },
+      "passthrough": true,
+      "outputs": { "ocrResult": "$result" },
+      "description": "Tesseract OCR with auto variant selection (natural+Otsu+adaptive+Sauvola) and multi-PSM scoring"
+    },
+    {
+      "id": "parse_receipt",
+      "type": "tool",
+      "tool": "ParseReceipt",
+      "args": {
+        "ocrJson": "$context.ocrResult"
+      },
+      "passthrough": true,
+      "outputs": { "receiptJson": "$result" },
+      "description": "Rule-based receipt extraction (merchant, items, totals)"
+    },
+    {
+      "id": "export",
+      "type": "tool",
+      "tool": "ExportReceiptData",
+      "args": {
+        "receiptJson": "$context.receiptJson",
+        "workflowId": "$context.workflowId",
+        "runId": "$context.runId"
+      },
+      "passthrough": true,
+      "description": "Export structured receipt data to JSON and CSV"
+    }
+  ]
+}

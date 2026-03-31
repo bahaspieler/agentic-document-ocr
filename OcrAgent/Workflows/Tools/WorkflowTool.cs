@@ -4,17 +4,29 @@ using OcrAgent.Workflows.Engine;
 
 namespace OcrAgent.Workflows.Tools;
 
+/// <summary>
+/// Exposes catalog listing and workflow execution as AI-callable functions for an agent host.
+/// </summary>
 public sealed class WorkflowTool
 {
     private readonly WorkflowRunner _runner;
     private readonly WorkflowCatalog _catalog;
 
+    /// <summary>
+    /// Creates the tool facade backed by a runner and catalog.
+    /// </summary>
+    /// <param name="runner">Executes workflows by id.</param>
+    /// <param name="catalog">Lists available workflow definitions.</param>
     public WorkflowTool(WorkflowRunner runner, WorkflowCatalog catalog)
     {
         _runner = runner;
         _catalog = catalog;
     }
 
+    /// <summary>
+    /// Returns a text list of workflow ids, names, and descriptions from the catalog.
+    /// </summary>
+    /// <returns>Human-readable listing or a message when empty.</returns>
     [Description("Lists all available preprocessing workflows with their IDs, names, and descriptions.")]
     public string ListWorkflows()
     {
@@ -26,6 +38,13 @@ public sealed class WorkflowTool
             $"- {w.Id}: {w.Name} -- {w.Description}"));
     }
 
+    /// <summary>
+    /// Runs a workflow and returns a summary string (trace, paths, context, errors).
+    /// </summary>
+    /// <param name="workflowId">Workflow definition id.</param>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="overridesJson">Optional JSON for step and budget overrides.</param>
+    /// <returns>Formatted result or failure message.</returns>
     [Description("Runs a predefined preprocessing workflow on an image. " +
                  "Returns the final processed image reference, execution trace, and any output data (e.g. OCR results).")]
     public async Task<string> RunWorkflow(
@@ -63,6 +82,10 @@ public sealed class WorkflowTool
         return summary;
     }
 
+    /// <summary>
+    /// Builds <see cref="AITool"/> instances for listing and running workflows.
+    /// </summary>
+    /// <returns>Enumerable of function-backed tools.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ListWorkflows);

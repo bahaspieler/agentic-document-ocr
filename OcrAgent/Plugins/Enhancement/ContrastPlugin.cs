@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using OcrAgent.Storage;
 using OpenCvSharp;
@@ -14,11 +15,22 @@ public sealed class ContrastPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public ContrastPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Applies the chosen contrast method and saves a PNG; may return the input reference when auto_lab skips on a strong profile.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="method">auto, histogram, clahe, or auto_lab.</param>
+    /// <param name="qualityProfile">Optional JSON; auto_lab can skip when contrast is high enough.</param>
+    /// <returns>New image reference, or unchanged input reference when skipped.</returns>
     [Description("Enhances the contrast of the given image. 'auto_lab' applies LAB-based CLAHE with highlight protection (recommended for documents). Returns the reference of the generated image, or the input reference unchanged if contrast is already adequate.")]
     public Task<string> EnhanceContrast(
         [Description("The reference number of the image to enhance.")] string imageReference,
@@ -37,7 +49,10 @@ public sealed class ContrastPlugin : IImageProcessingTool
                 if (doc.RootElement.TryGetProperty("contrast", out var c) && c.GetDouble() > 55)
                     return Task.FromResult(imageReference);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WARN] quality profile parse (contrast skip): {ex.Message}");
+            }
         }
 
         var inputPath = _store.GetImagePath(imageReference);
@@ -153,6 +168,10 @@ public sealed class ContrastPlugin : IImageProcessingTool
         foreach (var ch in channels) ch.Dispose();
     }
 
+    /// <summary>
+    /// Registers contrast enhancement as an AI-callable tool.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.EnhanceContrast);

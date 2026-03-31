@@ -1,0 +1,61 @@
+{
+  "id": "receipt_extract_v1",
+  "name": "Receipt Extract & Map",
+  "version": "1.0.0",
+  "description": "Full pipeline: preprocess receipt image, run OCR.",
+  "tags": ["receipt", "extraction", "ocr", "json", "csv"],
+  "budget": { "maxVariants": 12 },
+  "steps": [
+    {
+      "id": "assess_quality",
+      "type": "tool",
+      "tool": "AssessQuality",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "qualityProfile": "$result" },
+      "description": "Analyze image quality metrics for downstream adaptive processing"
+    },
+    {
+      "id": "extract_contours",
+      "type": "tool",
+      "tool": "ExtractDocumentContours",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "contourData": "$result" },
+      "description": "Detect document boundaries for perspective correction and cropping"
+    },
+    {
+      "id": "perspective",
+      "type": "tool",
+      "tool": "CorrectPerspective",
+      "args": { "sensitivity": "auto", "contourData": "$context.contourData" },
+      "description": "Fix perspective distortion using pre-computed contour data"
+    },
+    {
+      "id": "binarize",
+      "type": "tool",
+      "tool": "BinarizeImage",
+      "args": { "method": "auto", "qualityProfile": "$context.qualityProfile" },
+      "description": "Adaptive binarization using quality metrics"
+    },
+    {
+      "id": "ocr",
+      "type": "tool",
+      "tool": "RunOcr",
+      "args": { "language": "eng" },
+      "passthrough": true,
+      "outputs": { "ocrResult": "$result" },
+      "description": "Extract text and bounding boxes from preprocessed image"
+    }
+  ]
+}
+
+
+
+
+
+
+
+
+
+

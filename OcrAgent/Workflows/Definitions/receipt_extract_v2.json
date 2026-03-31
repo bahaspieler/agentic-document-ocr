@@ -1,0 +1,95 @@
+{
+  "id": "receipt_extract_v2",
+  "name": "Receipt Extract v2 (Lightweight)",
+  "version": "2.1.0",
+  "description": "Streamlined pipeline: detect document, fix perspective, remove background, fix orientation/skew, resize, OCR. No heavy enhancement stack.",
+  "tags": ["receipt", "extraction", "ocr", "json", "csv"],
+  "budget": { "maxVariants": 12 },
+  "steps": [
+    {
+      "id": "assess_quality",
+      "type": "tool",
+      "tool": "AssessQuality",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "qualityProfile": "$result" },
+      "description": "Analyze image quality metrics for downstream adaptive processing"
+    },
+    {
+      "id": "extract_contours",
+      "type": "tool",
+      "tool": "ExtractDocumentContours",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "contourData": "$result" },
+      "description": "Detect document boundaries on original image"
+    },
+    {
+      "id": "perspective",
+      "type": "tool",
+      "tool": "CorrectPerspective",
+      "args": { "sensitivity": "auto", "contourData": "$context.contourData" },
+      "description": "Fix perspective distortion using contour data from original image"
+    },
+    {
+      "id": "remove_background",
+      "type": "tool",
+      "tool": "RemoveDocumentBackground",
+      "args": { "mode": "on_white" },
+      "description": "Re-detect and isolate document on the perspective-corrected image"
+    },
+    {
+      "id": "deskew",
+      "type": "tool",
+      "tool": "DeskewImage",
+      "args": { "method": "hough", "maxAngle": 15 },
+      "description": "Correct document skew/tilt"
+    },
+    {
+      "id": "auto_orient",
+      "type": "tool",
+      "tool": "AutoOrient",
+      "args": {},
+      "description": "Detect and correct document orientation (90/180/270 degree rotations)"
+    },
+    {
+      "id": "resize",
+      "type": "tool",
+      "tool": "ResizeImage",
+      "args": { "documentType": "receipt" },
+      "description": "Resize to OCR-optimal resolution (1200x1600)"
+    },
+    {
+      "id": "denoise",
+      "type": "tool",
+      "tool": "DenoiseImage",
+      "args": { "method": "auto", "qualityProfile": "$context.qualityProfile" },
+      "description": "Light noise removal if quality profile indicates noise"
+    },
+    {
+      "id": "ocr",
+      "type": "tool",
+      "tool": "RunOcr",
+      "args": { "language": "eng", "pageSegMode": "single_column", "dpi": 300 },
+      "passthrough": true,
+      "outputs": { "ocrResult": "$result" },
+      "description": "Extract text using Tesseract with single-column mode for receipt layout"
+    },
+    {
+      "id": "parse_receipt",
+      "type": "tool",
+      "tool": "ParseReceipt",
+      "args": { "ocrJson": "$context.ocrResult" },
+      "passthrough": true,
+      "outputs": { "receiptData": "$result" },
+      "description": "Parse OCR output into structured receipt data (merchant, items, totals)"
+    },
+    {
+      "id": "export_data",
+      "type": "tool",
+      "tool": "ExportReceiptData",
+      "args": { "receiptJson": "$context.receiptData" },
+      "description": "Export receipt data as JSON and CSV files"
+    }
+  ]
+}

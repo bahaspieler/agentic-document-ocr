@@ -8,5 +8,9 @@ namespace OcrAgent.Plugins;
 /// </summary>
 public interface IImageProcessingTool
 {
+    /// <summary>
+    /// Returns the AI tools this plugin exposes to the agent.
+    /// </summary>
+    /// <returns>Sequence of registered tools.</returns>
     IEnumerable<AITool> GetAITools();
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using OcrAgent.Storage;
 using OpenCvSharp;
@@ -14,11 +15,23 @@ public sealed class BrightnessPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public BrightnessPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Saves PNG variants with brightness offsets from <paramref name="startBrightness"/> to <paramref name="endBrightness"/> in steps of <paramref name="step"/>.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="startBrightness">First offset in [-100, 100].</param>
+    /// <param name="endBrightness">Last offset in [-100, 100].</param>
+    /// <param name="step">Positive step between offsets.</param>
+    /// <returns>Comma-separated references of saved images.</returns>
     [Description("Adjusts the brightness of the given image. It returns the comma-separated list of references of generated images.")]
     public Task<string> AdjustBrightness(
         [Description("The reference number of the image to adjust.")] string imageReference,
@@ -69,6 +82,12 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         return Task.FromResult(string.Join(",", results));
     }
 
+    /// <summary>
+    /// Nudges mean luminance toward ~150 when it falls outside the skip window; otherwise returns the input reference.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="qualityProfile">Optional JSON with meanBrightness from quality assessment.</param>
+    /// <returns>Same reference if skipped, or a new reference for the adjusted image.</returns>
     [Description("Automatically normalizes image brightness to the optimal range for OCR (~150 median luminance). Skips if brightness is already adequate. Returns the image reference (unchanged if skipped, or new reference if adjusted).")]
     public Task<string> AutoAdjustBrightness(
         [Description("The reference number of the image to adjust.")] string imageReference,
@@ -113,7 +132,10 @@ public sealed class BrightnessPlugin : IImageProcessingTool
                 if (doc.RootElement.TryGetProperty("meanBrightness", out var mb))
                     return mb.GetDouble();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WARN] quality profile parse (meanBrightness): {ex.Message}");
+            }
         }
 
         using var hsv = new Mat();
@@ -130,6 +152,10 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         }
     }
 
+    /// <summary>
+    /// Registers brightness-related tools for the AI runtime.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.AdjustBrightness);

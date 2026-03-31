@@ -13,11 +13,21 @@ public sealed class InvertPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public InvertPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Optionally inverts BGR with BitwiseNot per mode, then saves a PNG with metadata about the decision.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="mode">auto, always, or smart.</param>
+    /// <returns>Reference of the saved image (copy or inverted).</returns>
     [Description("Inverts image colors (dark becomes light, light becomes dark). Use for documents with light text on dark backgrounds. 'auto' detects if inversion is needed, 'always' forces inversion, 'smart' analyzes histogram for dark-background documents. Returns image reference.")]
     public Task<string> InvertImage(
         [Description("The reference number of the image to invert.")] string imageReference,
@@ -128,6 +138,10 @@ public sealed class InvertPlugin : IImageProcessingTool
         return (isDarkBackground, darkRatio);
     }
 
+    /// <summary>
+    /// Registers inversion as an AI-callable tool.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.InvertImage);

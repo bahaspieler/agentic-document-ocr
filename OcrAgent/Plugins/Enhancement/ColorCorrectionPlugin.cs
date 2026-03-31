@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Storage;
 using OpenCvSharp;
@@ -12,10 +12,21 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates the plugin with the image store used to load inputs and save outputs.
+    /// </summary>
+    /// <param name="store">Image storage implementation.</param>
     public ColorCorrectionPlugin(IImageStore store)
     {
         _store = store;
     }
+
+    /// <summary>
+    /// Applies gray-world, white-patch, histogram match, or auto-picked method, then saves a corrected PNG.
+    /// </summary>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="method">auto, gray_world, white_patch, or histogram_match.</param>
+    /// <returns>Reference of the saved color-corrected image.</returns>
     [Description("Corrects color casts and white balance in document images. Returns corrected image reference.")]
     public Task<string> CorrectColor(
         [Description("The reference number of the image to correct.")] string imageReference,
@@ -211,6 +222,10 @@ private static double GetPercentileValue(Mat channel, double percentile)
     }
 
 
+    /// <summary>
+    /// Registers color correction as an AI-callable tool.
+    /// </summary>
+    /// <returns>Tool bindings for this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.CorrectColor);

@@ -5,15 +5,28 @@ using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Geometric;
 
+/// <summary>
+/// Generates one PNG per angle in a range by rotating around the image center with an expanded canvas.
+/// </summary>
 public sealed class RotatePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>Creates the plugin with the image store used to resolve and save images.</summary>
+    /// <param name="store">Backing store for input paths and output bytes.</param>
     public RotatePlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Saves up to <see cref="PluginHelpers.MaxOutputs"/> rotated variants as separate references.
+    /// </summary>
+    /// <param name="imageReference">Stored image id to read.</param>
+    /// <param name="startAngle">First angle in degrees (inclusive).</param>
+    /// <param name="endAngle">Last angle in degrees (inclusive).</param>
+    /// <param name="angleStep">Increment between angles; must be positive.</param>
+    /// <returns>Comma-separated new references, one per angle.</returns>
     [Description("Rotates the given image by specified angles. It returns the comma-separated list of references of generated images.")]
     public Task<string> RotateImage(
         [Description("The reference number of the image to rotate.")] string imageReference,
@@ -80,6 +93,8 @@ public sealed class RotatePlugin : IImageProcessingTool
         return Task.FromResult(string.Join(",", results));
     }
 
+    /// <summary>Exposes <see cref="RotateImage"/> as an AI-callable tool.</summary>
+    /// <returns>Sequence containing the RotateImage tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.RotateImage);

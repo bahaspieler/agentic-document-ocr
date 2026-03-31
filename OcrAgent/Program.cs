@@ -1,17 +1,18 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using OcrAgent.Agent;
 using OcrAgent.Plugins;
 using OcrAgent.Storage;
 
 namespace OcrAgent;
+
+/// <summary>
+/// Application entry: loads configuration, builds storage and plugins, then runs the CLI or interactive chat.
+/// </summary>
 internal class Program
 {
-    static async Task Main(string[] args)
+    static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("OcrAgent - AI-Powered Image Preprocessing for OCR");
-        Console.WriteLine("Type 'exit' to quit.");
-        Console.WriteLine();
-
+        // JSON appsettings, optional env-specific file, OCR_ env vars; .env loaded from cwd or parents.
         var config = LoadConfiguration();
         
         var storageConfig = config.GetSection("Storage").Get<StorageConfiguration>() 
@@ -26,23 +27,34 @@ internal class Program
         {
             Console.WriteLine($"Error: Failed to initialize storage - {ex.Message}");
             Console.WriteLine("Please check your appsettings.json configuration.");
-            return;
+            return 1;
         }
 
-        var aggregator = new PluginAggregator(store);
-        var agent = AgentRunner.CreateAgent(aggregator.GetAllTools());
-        var runner = new AgentRunner(agent);
+        var aggregator = new PluginAggregator(store, config);
 
         try
         {
+            // First arg other than "chat" selects CLI (workflow, tool, register, list-*, help).
+            if (args.Length > 0 && !args[0].Equals("chat", StringComparison.OrdinalIgnoreCase))
+            {
+                var cli = new CliRunner(store, aggregator);
+                return await cli.RunAsync(args);
+            }
+
+            Console.WriteLine("OcrAgent - AI-Powered Image Preprocessing for OCR");
+            Console.WriteLine("Type 'exit' to quit. Run with '--help' for CLI mode.");
+            Console.WriteLine();
+
+            var agent = AgentRunner.CreateAgent(aggregator.GetAllTools());
+            var runner = new AgentRunner(agent);
             await runner.RunConversationLoopAsync();
+            return 0;
         }
         finally
         {
+            aggregator.Dispose();
             if (store is IDisposable disposable)
-            {
                 disposable.Dispose();
-            }
         }
     }
 

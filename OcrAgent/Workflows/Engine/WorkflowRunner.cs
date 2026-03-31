@@ -8,12 +8,21 @@ using OcrAgent.Workflows.Model;
 
 namespace OcrAgent.Workflows.Engine;
 
+/// <summary>
+/// Runs a catalog workflow for one image: scoped storage, compile, stream events into trace and result fields.
+/// </summary>
 public sealed class WorkflowRunner
 {
     private readonly WorkflowCatalog _catalog;
     private readonly WorkflowCompiler _compiler;
     private readonly IImageStore? _store;
 
+    /// <summary>
+    /// Creates a runner using the given catalog, compiler, and optional image store for per-run paths.
+    /// </summary>
+    /// <param name="catalog">Resolves workflow id to definition.</param>
+    /// <param name="compiler">Builds the executable graph.</param>
+    /// <param name="store">When set, receives a per-run subdirectory for writes.</param>
     public WorkflowRunner(WorkflowCatalog catalog, WorkflowCompiler compiler, IImageStore? store = null)
     {
         _catalog = catalog;
@@ -21,6 +30,13 @@ public sealed class WorkflowRunner
         _store = store;
     }
 
+    /// <summary>
+    /// Executes one run: new run id, optional overrides JSON, compiles, streams step events into <see cref="WorkflowRunResult.Trace"/>.
+    /// </summary>
+    /// <param name="workflowId">Catalog workflow id.</param>
+    /// <param name="imageRef">Input image reference for the pipeline.</param>
+    /// <param name="overridesJson">Optional JSON for <see cref="WorkflowOverrides"/>.</param>
+    /// <returns>Trace, final text output, context snapshot, and timing.</returns>
     public async Task<WorkflowRunResult> RunAsync(
         string workflowId, string imageRef, string? overridesJson = null)
     {
@@ -45,6 +61,7 @@ public sealed class WorkflowRunner
         var totalSw = Stopwatch.StartNew();
         int completed = 0;
 
+        // Isolate this run's uploads/downloads under wf_<id>/<runId> when a store is configured.
         _store?.SetActiveSubdirectory(subdirectory);
         try
         {
@@ -66,14 +83,15 @@ public sealed class WorkflowRunner
 
             var run = await InProcessExecution.RunStreamingAsync(workflow, imageRef);
 
+            // StepCompletedEvent rows populate Trace and debug progress; output/error events fill the result object.
             await foreach (var evt in run.WatchStreamAsync())
             {
                 switch (evt)
                 {
                     case StepCompletedEvent step:
                         completed++;
-                        Console.WriteLine(
-                            $"  [{completed}/{stepCount}] {step.ToolName}: " +
+                        Debug.WriteLine(
+                            $"[{completed}/{stepCount}] {step.ToolName}: " +
                             $"{step.InputRef} -> {step.OutputRef} ({step.DurationMs}ms)");
                         result.Trace.Add(new StepTraceEntry
                         {
