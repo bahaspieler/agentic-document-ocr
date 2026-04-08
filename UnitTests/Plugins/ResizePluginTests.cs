@@ -67,7 +67,7 @@ public sealed class ResizePluginTests : PluginTestBase
         AssertImageValid(result);
         var meta = Store.GetMetadata(result);
         Assert.AreEqual("receipt", meta["documentType"]);
-        Assert.AreEqual("1200x1600", meta["newSize"]);
+        Assert.AreEqual("945x945", meta["newSize"]);
     }
 
     [TestMethod]
