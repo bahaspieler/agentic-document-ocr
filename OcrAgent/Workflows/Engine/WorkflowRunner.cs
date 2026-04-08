@@ -47,7 +47,7 @@ public sealed class WorkflowRunner
             : null;
 
         var runId = Guid.CreateVersion7().ToString("D");
-        var subdirectory = $"wf_{definition.Id}/{runId}";
+        var subdirectory = Path.Combine($"wf_{definition.Id}", runId);
 
         var result = new WorkflowRunResult
         {

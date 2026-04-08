@@ -48,7 +48,7 @@ public sealed class BinarizePlugin : IImageProcessingTool
             throw new ArgumentException("method must be 'auto', 'otsu', 'adaptive_mean', 'adaptive_gaussian', or 'sauvola'");
 
         var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 

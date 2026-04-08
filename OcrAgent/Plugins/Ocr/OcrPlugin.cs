@@ -81,7 +81,7 @@ public sealed class OcrPlugin : IImageProcessingTool
         {
             if (effectiveVariant != "natural")
             {
-                using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+                using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
                 tempPath = effectiveVariant switch
                 {
                     "otsu" => ApplyOtsu(src, imageReference),
@@ -113,7 +113,7 @@ public sealed class OcrPlugin : IImageProcessingTool
         Dictionary<string, string> configVars,
         string? qualityProfile, int maxVariants)
     {
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference}");
 

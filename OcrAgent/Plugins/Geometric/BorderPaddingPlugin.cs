@@ -31,7 +31,7 @@ public sealed class BorderPaddingPlugin : IImageProcessingTool
         var borderColor = color == "black" ? Scalar.All(0) : Scalar.White;
 
         var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference}");
 

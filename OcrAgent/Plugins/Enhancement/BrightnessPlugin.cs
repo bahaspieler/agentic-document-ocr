@@ -45,7 +45,7 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         if (endBrightness < -100 || endBrightness > 100) throw new ArgumentException("endBrightness must be in range -100 to 100");
         
         var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
         
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
@@ -94,7 +94,7 @@ public sealed class BrightnessPlugin : IImageProcessingTool
         [Description("Optional quality profile JSON from AssessQuality. Uses pre-computed brightness data if available.")] string? qualityProfile = null)
     {
         var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
 

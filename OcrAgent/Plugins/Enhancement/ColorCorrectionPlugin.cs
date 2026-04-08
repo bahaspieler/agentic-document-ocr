@@ -37,7 +37,7 @@ public sealed class ColorCorrectionPlugin : IImageProcessingTool
         if (method is not ("auto" or "gray_world" or "white_patch" or "histogram_match"))
             throw new ArgumentException("method must be 'auto', 'gray_world', 'white_patch', or 'histogram_match'");
         var inputPath = _store.GetImagePath(imageReference);
-        using var src = Cv2.ImRead(inputPath, ImreadModes.Color);
+        using var src = Cv2.ImDecode(File.ReadAllBytes(inputPath), ImreadModes.Color);
 
         if (src.Empty())
             throw new InvalidOperationException($"Could not read image for reference {imageReference} from {inputPath}");
