@@ -47,7 +47,7 @@ public sealed class TesseractOcrEngine : IOcrEngine, IDisposable
         {
             ApplyConfigVars(options);
 
-            using var img = Pix.LoadFromFile(imagePath);
+            using var img = Pix.LoadFromMemory(File.ReadAllBytes(imagePath));
 
             if (options.Dpi > 0)
             {
