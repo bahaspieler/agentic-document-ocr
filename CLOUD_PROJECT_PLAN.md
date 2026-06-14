@@ -110,3 +110,23 @@ Two consequences drive the schedule:
 - Basic monitoring and structured logging.
 
 The solution is structured so the primary tier is always shippable even if the stretch tier slips.
+
+## Sprint Plan
+
+The sprint dates follow the course schedule (01-06-2026 to 23-08-2026).
+
+### Sprint 1 (01-06 – 14-06): Plan and Foundation
+
+- Write this cloud project plan and the experiment specification.
+- Decide the .NET 8 strategy for reusing `OcrAgent` (multi-target or port).
+- Define team-owned storage entity names (container, queue, table, SQL database).
+
+**Acceptance:** plan and specification committed.
+
+### Sprint 2 (15-06 – 28-06): Azure Storage Provider
+
+- Implement `AzureStorageProvider`: receive queue message, download input blob, upload result blob, write Table record, commit message.
+- Implement `AzureBlobImageStore` behind `IImageStore`.
+- Run the full queue → blob → table path locally against Azurite with a stub experiment.
+
+**Acceptance:** a queue message drives a complete run against Azurite; outputs land in Blob and a row appears in Table.
