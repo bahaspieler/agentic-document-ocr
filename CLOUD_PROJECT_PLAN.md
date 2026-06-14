@@ -130,3 +130,21 @@ The sprint dates follow the course schedule (01-06-2026 to 23-08-2026).
 - Run the full queue → blob → table path locally against Azurite with a stub experiment.
 
 **Acceptance:** a queue message drives a complete run against Azurite; outputs land in Blob and a row appears in Table.
+
+### Sprint 3 (29-06 – 12-07): Execution Core and Container
+
+- Wire the three execution modes into `Experiment.RunAsync`: workflow mode (`WorkflowRunner` + `receipt_extract_v3`), tool mode (`ToolBindingRegistry`), and agent mode (`AgentRunner` + GPT-4o-mini).
+- Map each mode's result onto the experiment result and output artifacts.
+- Supply the model key as a secret/environment variable for agent mode.
+- Build the Docker image with Tesseract, OpenCV runtime, tessdata, and U2-Net.
+- Prove OCR and an agent command both run inside the container.
+
+**Acceptance:** queued jobs produce real output for workflow, single-tool, and agent commands from inside the container.
+
+### Sprint 4 (13-07 – 26-07): Azure Deployment, SQL, and API
+
+- Deploy the container to Azure.
+- Add Azure SQL and persist structured receipt data; add the vector column.
+- Build the REST API accepting all three modes and exposing result queries.
+
+**Acceptance:** agent, tool, and workflow jobs submitted through the API run on Azure, and structured results are queryable in SQL.
