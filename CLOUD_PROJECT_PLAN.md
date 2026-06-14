@@ -84,3 +84,29 @@ Two consequences drive the schedule:
 
 1. Docker is the enabler, not a nice-to-have. A Linux container with the native libraries preinstalled is the only reliable way to run this on Azure. We prove the container builds and runs OCR early, before building the API, MCP server, or UI on top of it.
 2. We standardize the cloud solution on .NET 8. The existing `OcrAgent` targets .NET 9, so we either multi-target it or port the parts the experiment needs to .NET 8. This is resolved in Sprint 1 so later sprints build on a stable base.
+
+## Goals
+
+### Primary (grade floor — must ship)
+
+- Queue-triggered experiment runs the receipt OCR workflow end to end.
+- Input read from Blob, outputs written to Blob, run record written to Table.
+- Implements `IExperiment` and `IStorageProvider`; template structure intact.
+- Runs in a container deployed to Azure.
+
+### Secondary (the transformation story)
+
+- `AzureBlobImageStore` replaces local storage through the existing interface.
+- The core supports all three modes in the cloud: agent command, single-tool invocation, and workflow run.
+- The natural-language agent runs in the cloud and reaches GPT-4o-mini securely.
+- Azure SQL stores queryable structured receipt data.
+- REST API to submit jobs (any mode) and fetch results.
+
+### Stretch (standout features)
+
+- MCP server exposing the agent, individual tools, and workflows remotely.
+- Web UI on Azure with a chat panel and an upload-and-run panel.
+- Vector similarity search over receipts in Azure SQL.
+- Basic monitoring and structured logging.
+
+The solution is structured so the primary tier is always shippable even if the stretch tier slips.
