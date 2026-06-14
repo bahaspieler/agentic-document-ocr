@@ -54,3 +54,33 @@ The sample worker loop stays structurally the same. It now calls the real experi
 
 The plugins are already annotated as callable tools. We expose them through an MCP server so any MCP-capable client can drive the cloud system remotely: send a natural-language command to the agent, invoke a single tool, run a workflow, check job status, and fetch results. This is a direct continuation of the SE project's tool-calling design and the headline cloud feature.
 
+### New: REST API
+
+A thin ASP.NET API is the single entry into the core. It accepts all three modes — an agent command, a single-tool call, or a workflow run — enqueues or dispatches the job, and reads results from Table Storage and SQL. The MCP server and the Web UI both call this API so there is one consistent path into the system.
+
+### New: Web UI
+
+A frontend that offers both interaction styles from the SE project. A chat panel sends natural-language commands to the cloud agent and shows the streamed response with intermediate image references. An upload-and-run panel registers a receipt, triggers a workflow, polls status, and shows the processed image with the extracted fields. Hosted on Azure. This closes the "no GUI" gap we listed as future work in the SE paper.
+
+## Azure Services and Their Justification
+
+| Service | Role | Replaces / Adds |
+|---------|------|-----------------|
+| Azure Blob Storage | Input images and output artifacts | Replaces local/SFTP storage |
+| Azure Queue Storage | Job triggers, template execution path | New, required by template |
+| Azure Table Storage | Per-run experiment log | New, required by template |
+| Azure SQL | Queryable structured receipt data + vector search | New value-add |
+| OpenAI / Azure OpenAI | GPT-4o-mini for the agent's tool selection | Carried from SE project, now cloud-hosted |
+| Azure Key Vault (or App settings secrets) | Holds the model API key and connection strings | New, keeps secrets out of the image |
+| Docker | Package native OCR dependencies reproducibly | Enables cloud hosting |
+| Azure App Service / Container Apps | Host worker, API, agent, MCP server, UI | New |
+| MCP server | Remote access to agent, tools, and workflows | New headline feature |
+
+## Primary Risk: Native Dependencies
+
+The largest risk is that `OcrAgent` depends on native components: Tesseract, the OpenCvSharp runtime, the tessdata files, and a U2-Net ONNX model. These are heavy and platform-sensitive.
+
+Two consequences drive the schedule:
+
+1. Docker is the enabler, not a nice-to-have. A Linux container with the native libraries preinstalled is the only reliable way to run this on Azure. We prove the container builds and runs OCR early, before building the API, MCP server, or UI on top of it.
+2. We standardize the cloud solution on .NET 8. The existing `OcrAgent` targets .NET 9, so we either multi-target it or port the parts the experiment needs to .NET 8. This is resolved in Sprint 1 so later sprints build on a stable base.
