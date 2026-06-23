@@ -148,3 +148,31 @@ The sprint dates follow the course schedule (01-06-2026 to 23-08-2026).
 - Build the REST API accepting all three modes and exposing result queries.
 
 **Acceptance:** agent, tool, and workflow jobs submitted through the API run on Azure, and structured results are queryable in SQL.
+
+### Sprint 5 (27-07 – 09-08): MCP Server and Web UI
+
+- Build the MCP server exposing the agent, individual tools, workflow execution, status, and result fetch.
+- Build the Web UI with a chat panel (agent) and an upload-and-run panel (workflow), plus status and result viewing.
+
+**Acceptance:** a receipt can be processed end to end through the MCP server and through both panels of the Web UI.
+
+### Sprint 6 (10-08 – 23-08): Hardening, Documentation, Demo
+
+- Add monitoring, structured logging, and error handling.
+- Complete the README, the cloud documentation, and the exercise write-ups.
+- Capture screenshots of the queue, blob, table, and SQL.
+- Record the demo and submit a review request roughly two weeks before the deadline.
+
+**Acceptance:** documentation is complete, the demo runs, and the submission is ready ahead of 23-08-2026.
+
+## Deliverables
+
+- `Documentation/CLOUD_PROJECT_PLAN.md` (this file).
+- `Documentation/EXPERIMENT_SPECIFICATION.md`.
+- Cloud solution adapted from the template, referencing `OcrAgent`.
+- `AzureStorageProvider`, `AzureBlobImageStore`, and the experiment implementation covering agent, tool, and workflow modes.
+- Dockerfile and Azure deployment configuration.
+- Azure SQL schema for structured receipt data.
+- Cloud-hosted agent, MCP server, and Web UI.
+- `SampleFiles/` with test inputs and example request messages for each mode.
+- Exercise documentation and the final cloud README.
