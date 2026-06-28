@@ -1,0 +1,28 @@
+{
+  "id": "receipt_preprocess_v1",
+  "version": "1.0.0",
+  "budget": { "maxVariants": 12 },
+  "steps": [
+    {
+      "id": "assess_quality",
+      "type": "tool",
+      "tool": "AssessQuality",
+      "args": {},
+      "passthrough": true,
+      "outputs": { "qualityProfile": "$result" }
+    },
+    {
+      "id": "denoise",
+      "type": "tool",
+      "tool": "DenoiseImage",
+      "args": {
+        "method": "auto",
+        "qualityProfile": "$context.qualityProfile"
+      }
+    }
+  ]
+}
+
+
+
+

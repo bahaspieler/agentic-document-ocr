@@ -46,7 +46,11 @@ public sealed class WorkflowRunner
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             : null;
 
+#if NET9_0_OR_GREATER
         var runId = Guid.CreateVersion7().ToString("D");
+#else
+        var runId = Guid.NewGuid().ToString("D");
+#endif
         var subdirectory = Path.Combine($"wf_{definition.Id}", runId);
 
         var result = new WorkflowRunResult
