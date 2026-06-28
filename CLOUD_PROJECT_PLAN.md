@@ -112,7 +112,8 @@ Two consequences drive the schedule:
 The solution is structured so the primary tier is always shippable even if the stretch tier slips.
 
 
-## System Architecture Flow
+
+##System Architecture Flow
 
 The cloud version follows a clear request-processing flow:
 
@@ -127,3 +128,70 @@ The cloud version follows a clear request-processing flow:
 6. Run metadata is written to Azure Table Storage.
 7. Structured receipt fields are stored in Azure SQL for later querying, reporting, and duplicate detection.
 8. The user receives the final status, output references, and extracted data through the original entry point.
+=======
+## Sprint Plan
+
+The sprint dates follow the course schedule (01-06-2026 to 23-08-2026).
+
+### Sprint 1 (01-06 – 14-06): Plan and Foundation
+
+- Write this cloud project plan and the experiment specification.
+- Decide the .NET 8 strategy for reusing `OcrAgent` (multi-target or port).
+- Define team-owned storage entity names (container, queue, table, SQL database).
+
+**Acceptance:** plan and specification committed.
+
+### Sprint 2 (15-06 – 28-06): Azure Storage Provider
+
+- Implement `AzureStorageProvider`: receive queue message, download input blob, upload result blob, write Table record, commit message.
+- Implement `AzureBlobImageStore` behind `IImageStore`.
+- Run the full queue → blob → table path locally against Azurite with a stub experiment.
+
+**Acceptance:** a queue message drives a complete run against Azurite; outputs land in Blob and a row appears in Table.
+
+### Sprint 3 (29-06 – 12-07): Execution Core and Container
+
+- Wire the three execution modes into `Experiment.RunAsync`: workflow mode (`WorkflowRunner` + `receipt_extract_v3`), tool mode (`ToolBindingRegistry`), and agent mode (`AgentRunner` + GPT-4o-mini).
+- Map each mode's result onto the experiment result and output artifacts.
+- Supply the model key as a secret/environment variable for agent mode.
+- Build the Docker image with Tesseract, OpenCV runtime, tessdata, and U2-Net.
+- Prove OCR and an agent command both run inside the container.
+
+**Acceptance:** queued jobs produce real output for workflow, single-tool, and agent commands from inside the container.
+
+### Sprint 4 (13-07 – 26-07): Azure Deployment, SQL, and API
+
+- Deploy the container to Azure.
+- Add Azure SQL and persist structured receipt data; add the vector column.
+- Build the REST API accepting all three modes and exposing result queries.
+
+**Acceptance:** agent, tool, and workflow jobs submitted through the API run on Azure, and structured results are queryable in SQL.
+
+### Sprint 5 (27-07 – 09-08): MCP Server and Web UI
+
+- Build the MCP server exposing the agent, individual tools, workflow execution, status, and result fetch.
+- Build the Web UI with a chat panel (agent) and an upload-and-run panel (workflow), plus status and result viewing.
+
+**Acceptance:** a receipt can be processed end to end through the MCP server and through both panels of the Web UI.
+
+### Sprint 6 (10-08 – 23-08): Hardening, Documentation, Demo
+
+- Add monitoring, structured logging, and error handling.
+- Complete the README, the cloud documentation, and the exercise write-ups.
+- Capture screenshots of the queue, blob, table, and SQL.
+- Record the demo and submit a review request roughly two weeks before the deadline.
+
+**Acceptance:** documentation is complete, the demo runs, and the submission is ready ahead of 23-08-2026.
+
+## Deliverables
+
+- `Documentation/CLOUD_PROJECT_PLAN.md` (this file).
+- `Documentation/EXPERIMENT_SPECIFICATION.md`.
+- Cloud solution adapted from the template, referencing `OcrAgent`.
+- `AzureStorageProvider`, `AzureBlobImageStore`, and the experiment implementation covering agent, tool, and workflow modes.
+- Dockerfile and Azure deployment configuration.
+- Azure SQL schema for structured receipt data.
+- Cloud-hosted agent, MCP server, and Web UI.
+- `SampleFiles/` with test inputs and example request messages for each mode.
+- Exercise documentation and the final cloud README.
+>>>>>>> 3cc925b1271face4b5fa3c845e99bb9340496370
