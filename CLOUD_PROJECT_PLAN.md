@@ -194,4 +194,20 @@ The sprint dates follow the course schedule (01-06-2026 to 23-08-2026).
 - Cloud-hosted agent, MCP server, and Web UI.
 - `SampleFiles/` with test inputs and example request messages for each mode.
 - Exercise documentation and the final cloud README.
->>>>>>> 3cc925b1271face4b5fa3c845e99bb9340496370
+
+## System Architecture Flow
+
+The cloud version follows a clear request-processing flow:
+
+1. A user submits a request through the Web UI, REST API, MCP server, or Azure Queue.
+2. The request is normalized into a job message containing the execution mode, input reference, workflow or tool name, and optional natural-language command.
+3. Input images are read from Azure Blob Storage through `AzureBlobImageStore`.
+4. The experiment core selects one of three execution paths:
+   - Agent mode for natural-language tool selection and chaining.
+   - Tool mode for direct invocation of one preprocessing or extraction tool.
+   - Workflow mode for deterministic JSON-based processing such as `receipt_extract_v3`.
+5. Generated images, OCR results, and intermediate artifacts are written back to Azure Blob Storage.
+6. Run metadata is written to Azure Table Storage.
+7. Structured receipt fields are stored in Azure SQL for later querying, reporting, and duplicate detection.
+8. The user receives the final status, output references, and extracted data through the original entry point.
+ (Update cloud project plan)(Update cloud project plan)
