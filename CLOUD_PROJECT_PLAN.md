@@ -110,3 +110,20 @@ Two consequences drive the schedule:
 - Basic monitoring and structured logging.
 
 The solution is structured so the primary tier is always shippable even if the stretch tier slips.
+
+
+## System Architecture Flow
+
+The cloud version follows a clear request-processing flow:
+
+1. A user submits a request through the Web UI, REST API, MCP server, or Azure Queue.
+2. The request is normalized into a job message containing the execution mode, input reference, workflow or tool name, and optional natural-language command.
+3. Input images are read from Azure Blob Storage through `AzureBlobImageStore`.
+4. The experiment core selects one of three execution paths:
+   - Agent mode for natural-language tool selection and chaining.
+   - Tool mode for direct invocation of one preprocessing or extraction tool.
+   - Workflow mode for deterministic JSON-based processing such as `receipt_extract_v3`.
+5. Generated images, OCR results, and intermediate artifacts are written back to Azure Blob Storage.
+6. Run metadata is written to Azure Table Storage.
+7. Structured receipt fields are stored in Azure SQL for later querying, reporting, and duplicate detection.
+8. The user receives the final status, output references, and extracted data through the original entry point.
