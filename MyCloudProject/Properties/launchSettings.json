@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "MyCloudProject": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ENVVAR1xxx": "1111"
+      }
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
