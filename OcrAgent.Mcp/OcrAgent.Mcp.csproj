@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OcrAgent\OcrAgent.csproj" />
+  </ItemGroup>
+
+  <!-- Content that OcrAgent tools load from AppContext.BaseDirectory -->
+  <ItemGroup>
+    <Content Include="..\OcrAgent\Workflows\Definitions\*.json" Link="Workflows\Definitions\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\OcrAgent\Assets\tessdata\*.traineddata" Link="Assets\tessdata\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\OcrAgent\Assets\tessdata')" />
+    <Content Include="..\OcrAgent\Assets\Models\u2netp.onnx" Link="Assets\Models\u2netp.onnx" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\OcrAgent\Assets\Models\u2netp.onnx')" />
+    <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
+  </ItemGroup>
+
+  <!--
+    macOS (Apple Silicon) OCR support. Tesseract's InteropDotNet loader resolves the arm64
+    native libraries from an x64/ subfolder next to the assembly. The base OcrAgent project
+    provisions these dylibs into its own output via scripts/setup-native-libs.sh; forward the
+    same files into this host so RunOcr works here too. No-op on Windows or when the libs are
+    not present (Tesseract simply stays disabled, exactly as in OcrAgent).
+  -->
+  <Target Name="ForwardMacTesseractNativeLibs" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <ItemGroup>
+      <_OcrAgentMacNativeLib Include="$(MSBuildProjectDirectory)\..\OcrAgent\bin\$(Configuration)\net8.0\x64\libleptonica-*.dylib" />
+      <_OcrAgentMacNativeLib Include="$(MSBuildProjectDirectory)\..\OcrAgent\bin\$(Configuration)\net8.0\x64\libtesseract*.dylib" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OcrAgentMacNativeLib)"
+          DestinationFolder="$(OutDir)x64"
+          SkipUnchangedFiles="true"
+          Condition="'@(_OcrAgentMacNativeLib)' != ''" />
+  </Target>
+
+</Project>
