@@ -7,7 +7,7 @@ namespace OcrAgent.Storage;
 /// </summary>
 public sealed class StorageConfiguration
 {
-    /// <summary><c>local</c> or <c>sftp</c> (case-insensitive in <see cref="StorageFactory"/>).</summary>
+    /// <summary><c>local</c>, <c>sftp</c>, or <c>azureblob</c> (case-insensitive in <see cref="StorageFactory"/>).</summary>
     public string Provider { get; set; } = "local";
 
     /// <summary>Settings when <see cref="Provider"/> is local.</summary>
@@ -15,6 +15,9 @@ public sealed class StorageConfiguration
 
     /// <summary>Settings when <see cref="Provider"/> is SFTP.</summary>
     public SftpStorageConfig Sftp { get; set; } = new();
+
+    /// <summary>Settings when <see cref="Provider"/> is Azure Blob Storage.</summary>
+    public AzureBlobStorageConfig AzureBlob { get; set; } = new();
 }
 
 /// <summary>Root directory for <see cref="LocalFileImageStore"/>.</summary>
@@ -22,6 +25,44 @@ public sealed class LocalStorageConfig
 {
     /// <summary>Filesystem path; created on use if missing.</summary>
     public string RootPath { get; set; } = "./Storage";
+}
+
+/// <summary>Container, credentials, and local cache location for <see cref="AzureBlobImageStore"/>.</summary>
+public sealed class AzureBlobStorageConfig
+{
+    /// <summary>
+    /// Storage account connection string. Left empty in committed configuration; supplied through
+    /// the <c>AZURE_STORAGE_CONNECTION_STRING</c> environment variable or a deployment secret.
+    /// </summary>
+    public string ConnectionString { get; set; } = "";
+
+    /// <summary>Blob container that holds images, sidecars, and run artifacts.</summary>
+    [Required]
+    public string ContainerName { get; set; } = "ocr-images";
+
+    /// <summary>Optional prefix inside the container, so several projects can share one container.</summary>
+    public string BlobPrefix { get; set; } = "";
+
+    /// <summary>
+    /// Local directory used to stage downloads and pending uploads. Plugins read images from disk,
+    /// so every blob is materialised here before use.
+    /// </summary>
+    public string CacheRootPath { get; set; } = "./blob-cache";
+
+    /// <summary>Creates the container on first use when it does not exist.</summary>
+    public bool CreateContainerIfNotExists { get; set; } = true;
+
+    /// <summary>Throws if the connection string or container name is missing.</summary>
+    /// <exception cref="ValidationException">Required setting missing.</exception>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(ConnectionString))
+            throw new ValidationException(
+                "Azure Blob ConnectionString is required. Set Storage:AzureBlob:ConnectionString or the AZURE_STORAGE_CONNECTION_STRING environment variable.");
+
+        if (string.IsNullOrWhiteSpace(ContainerName))
+            throw new ValidationException("Azure Blob ContainerName is required");
+    }
 }
 
 /// <summary>Host, auth, remote path, pool, retry, timeout, and behavior flags for SFTP storage.</summary>
