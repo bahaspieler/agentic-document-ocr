@@ -1,11 +1,11 @@
 namespace OcrAgent.Storage;
 
 /// <summary>
-/// Builds <see cref="IImageStore"/> from <see cref="StorageConfiguration"/> (local folder or SFTP).
+/// Builds <see cref="IImageStore"/> from <see cref="StorageConfiguration"/> (local folder, SFTP, or Azure Blob).
 /// </summary>
 public static class StorageFactory
 {
-    /// <summary>Selects local or SFTP implementation and validates SFTP settings.</summary>
+    /// <summary>Selects the implementation named by the configuration and validates its settings.</summary>
     /// <param name="config">Provider name and nested options.</param>
     /// <returns>Configured store instance.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="config"/> is null.</exception>
@@ -21,8 +21,20 @@ public static class StorageFactory
         {
             "local" => new LocalFileImageStore(config.Local.RootPath),
             "sftp" => CreateSftpStore(config.Sftp),
-            _ => throw new ArgumentException($"Unknown storage provider: {config.Provider}. Must be 'local' or 'sftp'.")
+            "azureblob" => CreateAzureBlobStore(config.AzureBlob),
+            _ => throw new ArgumentException($"Unknown storage provider: {config.Provider}. Must be 'local', 'sftp', or 'azureblob'.")
         };
+    }
+
+    private static IImageStore CreateAzureBlobStore(AzureBlobStorageConfig config)
+    {
+        if (string.IsNullOrWhiteSpace(config.ConnectionString))
+        {
+            config.ConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? "";
+        }
+
+        config.Validate();
+        return new AzureBlobImageStore(config);
     }
 
     private static IImageStore CreateSftpStore(SftpStorageConfig config)
