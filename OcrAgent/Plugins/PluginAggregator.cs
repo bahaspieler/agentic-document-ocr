@@ -2,6 +2,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using System.ComponentModel;
 using System.Diagnostics;
+using OcrAgent.Runs;
 using OcrAgent.Storage;
 using OcrAgent.Inference;
 using OcrAgent.Ocr;
@@ -21,13 +22,15 @@ public sealed class PluginAggregator : IDisposable
     private readonly ToolBindingRegistry _toolRegistry;
     private readonly WorkflowTool? _workflowTool;
     private readonly IOcrEngine? _ocrEngine;
+    private readonly List<AITool> _tools;
 
     /// <summary>
     /// Registers built-in plugins, binds their tools, and wires the workflow tool when tessdata is available.
     /// </summary>
     /// <param name="store">Image store shared by all plugins.</param>
     /// <param name="config">Optional configuration (e.g. Tesseract paths).</param>
-    public PluginAggregator(IImageStore store, IConfiguration? config = null)
+    /// <param name="runStore">When set, every tool call and workflow run leaves a record.</param>
+    public PluginAggregator(IImageStore store, IConfiguration? config = null, IRunStore? runStore = null)
     {
         _store = store;
         _plugins = new List<IImageProcessingTool>();
@@ -75,20 +78,40 @@ public sealed class PluginAggregator : IDisposable
         RegisterPlugin(new Extraction.ParseReceiptPlugin(store));
         RegisterPlugin(new Extraction.ExportReceiptPlugin(store));
 
+        var definitionsPath = Path.Combine(AppContext.BaseDirectory, "Workflows", "Definitions");
+        var catalog = new WorkflowCatalog(definitionsPath);
+        var compiler = new WorkflowCompiler(_toolRegistry);
+        var runner = new WorkflowRunner(catalog, compiler, store, runStore);
+        _workflowTool = new WorkflowTool(runner, catalog);
+
+        // Tools are wrapped for recording once, here, and the same instances go to both the
+        // agent-facing surface and the registry the workflow engine resolves step names against.
+        // A call is then recorded once regardless of which entry point raised it.
+        _tools = new List<AITool>
+        {
+            RecordingAIFunction.Wrap(AIFunctionFactory.Create(this.RegisterImage), runStore, store)
+        };
+
         foreach (var plugin in _plugins)
         {
             foreach (var tool in plugin.GetAITools())
             {
-                if (tool is AIFunction func)
-                    _toolRegistry.Register(func);
+                if (tool is not AIFunction function)
+                {
+                    _tools.Add(tool);
+                    continue;
+                }
+
+                var recorded = RecordingAIFunction.Wrap(function, runStore, store);
+                _toolRegistry.Register(recorded);
+                _tools.Add(recorded);
             }
         }
 
-        var definitionsPath = Path.Combine(AppContext.BaseDirectory, "Workflows", "Definitions");
-        var catalog = new WorkflowCatalog(definitionsPath);
-        var compiler = new WorkflowCompiler(_toolRegistry);
-        var runner = new WorkflowRunner(catalog, compiler, store);
-        _workflowTool = new WorkflowTool(runner, catalog);
+        _tools.AddRange(_workflowTool.GetAITools());
+
+        if (runStore is { IsEnabled: true })
+            _tools.AddRange(new RunQueryTool(runStore).GetAITools());
     }
 
     /// <summary>
@@ -112,21 +135,29 @@ public sealed class PluginAggregator : IDisposable
     }
 
     /// <summary>
-    /// Yields register-image, every plugin tool, and workflow tools.
+    /// Invokes the register-image tool, so callers outside the agent record the call the same way.
+    /// </summary>
+    /// <param name="filePath">Local file path of the image to register.</param>
+    /// <param name="desiredReference">Optional id; if null or empty, one is generated.</param>
+    /// <returns>New image reference id.</returns>
+    public async Task<string> RegisterImageAsync(string filePath, string? desiredReference = null)
+    {
+        var tool = _tools.OfType<AIFunction>().First(function => function.Name == nameof(RegisterImage));
+
+        var arguments = new AIFunctionArguments { ["filePath"] = filePath };
+        if (!string.IsNullOrWhiteSpace(desiredReference))
+            arguments["desiredReference"] = desiredReference;
+
+        var result = await tool.InvokeAsync(arguments);
+        return result?.ToString() ?? "";
+    }
+
+    /// <summary>
+    /// Yields register-image, every plugin tool, the workflow tools, and the run history tools when
+    /// a run store is configured.
     /// </summary>
     /// <returns>All tools exposed to the agent.</returns>
-    public IEnumerable<AITool> GetAllTools()
-    {
-        yield return AIFunctionFactory.Create(this.RegisterImage);
-
-        foreach (var plugin in _plugins)
-            foreach (var tool in plugin.GetAITools())
-                yield return tool;
-
-        if (_workflowTool != null)
-            foreach (var tool in _workflowTool.GetAITools())
-                yield return tool;
-    }
+    public IEnumerable<AITool> GetAllTools() => _tools;
 
     internal void RegisterPlugin(IImageProcessingTool plugin)
     {
