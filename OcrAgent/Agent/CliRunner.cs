@@ -1,11 +1,13 @@
 using OcrAgent.Plugins;
+using OcrAgent.Runs;
 using OcrAgent.Storage;
 using OcrAgent.Workflows.Engine;
+using OcrAgent.Workflows.Model;
 
 namespace OcrAgent.Agent;
 
 /// <summary>
-/// Non-interactive command mode: workflows, single-tool calls, image registration, and listings.
+/// Non-interactive command mode: workflows, single-tool calls, image registration, run history, and listings.
 /// </summary>
 public sealed class CliRunner
 {
@@ -14,20 +16,23 @@ public sealed class CliRunner
     private readonly ToolBindingRegistry _toolRegistry;
     private readonly WorkflowRunner _workflowRunner;
     private readonly WorkflowCatalog _workflowCatalog;
+    private readonly IRunStore _runStore;
 
     /// <summary>Loads workflow definitions from the app base and wires a runner to the store and tools.</summary>
     /// <param name="store">Backing store for images.</param>
     /// <param name="aggregator">Supplies the tool registry used by workflows and the tool command.</param>
-    public CliRunner(IImageStore store, PluginAggregator aggregator)
+    /// <param name="runStore">Receives run records and answers the <c>runs</c> command.</param>
+    public CliRunner(IImageStore store, PluginAggregator aggregator, IRunStore? runStore = null)
     {
         _store = store;
         _aggregator = aggregator;
         _toolRegistry = aggregator.GetToolRegistry();
+        _runStore = runStore ?? NullRunStore.Instance;
 
         var definitionsPath = Path.Combine(AppContext.BaseDirectory, "Workflows", "Definitions");
         _workflowCatalog = new WorkflowCatalog(definitionsPath);
         var compiler = new WorkflowCompiler(_toolRegistry);
-        _workflowRunner = new WorkflowRunner(_workflowCatalog, compiler, store);
+        _workflowRunner = new WorkflowRunner(_workflowCatalog, compiler, store, _runStore);
     }
 
     /// <summary>Routes on <paramref name="args"/>[0] to workflow, tool, register, list, or help.</summary>
@@ -41,7 +46,8 @@ public sealed class CliRunner
         {
             "workflow" or "wf" => await RunWorkflowCommand(args[1..]),
             "tool" => await RunToolCommand(args[1..]),
-            "register" => RunRegisterCommand(args[1..]),
+            "register" => await RunRegisterCommand(args[1..]),
+            "runs" => await RunRunsCommand(args[1..]),
             "list-tools" => RunListTools(),
             "list-workflows" => RunListWorkflows(),
             "help" => ShowHelp(),
@@ -77,7 +83,18 @@ public sealed class CliRunner
         Console.WriteLine($"Running workflow '{workflowId}' on image '{imageRef}'...");
         Console.WriteLine(new string('-', 60));
 
-        var result = await _workflowRunner.RunAsync(workflowId, imageRef, overridesJson);
+        WorkflowRunResult result;
+        try
+        {
+            result = await _workflowRunner.RunAsync(workflowId, imageRef, overridesJson);
+        }
+        catch (Exception ex)
+        {
+            // The workflow could not start at all: unknown id, or overrides that did not parse.
+            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine("Run 'dotnet run -- list-workflows' to see the available workflow IDs.");
+            return 1;
+        }
 
         Console.WriteLine(new string('-', 60));
         Console.WriteLine($"Success: {result.Success}");
@@ -177,7 +194,7 @@ public sealed class CliRunner
         }
     }
 
-    private int RunRegisterCommand(string[] args)
+    private async Task<int> RunRegisterCommand(string[] args)
     {
         if (args.Length < 1)
         {
@@ -197,7 +214,9 @@ public sealed class CliRunner
 
         try
         {
-            var reference = _store.SaveFromFile(filePath, desiredRef);
+            // Through the tool rather than straight to the store, so a registration is recorded the
+            // same way here as it is when an MCP client or the agent asks for one.
+            var reference = await _aggregator.RegisterImageAsync(filePath, desiredRef);
             Console.WriteLine($"Registered: {reference}");
             return 0;
         }
@@ -206,6 +225,73 @@ public sealed class CliRunner
             Console.WriteLine($"Error: {ex.Message}");
             return 1;
         }
+    }
+
+    private async Task<int> RunRunsCommand(string[] args)
+    {
+        if (!_runStore.IsEnabled)
+        {
+            Console.WriteLine("Run history is not configured.");
+            Console.WriteLine("Set Runs:Provider to 'azuretable' (OCR_Runs__Provider) and supply AZURE_STORAGE_CONNECTION_STRING.");
+            return 1;
+        }
+
+        var subcommand = args.Length > 0 ? args[0].ToLowerInvariant() : "list";
+
+        if (subcommand == "get")
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("Usage: dotnet run -- runs get <runId>");
+                return 1;
+            }
+
+            var record = await _runStore.GetAsync(args[1]);
+            if (record == null)
+            {
+                Console.WriteLine($"No run found with ID '{args[1]}'.");
+                return 1;
+            }
+
+            Console.WriteLine(RunQueryTool.Describe(record, includeTrace: true));
+            return 0;
+        }
+
+        if (subcommand != "list")
+        {
+            Console.WriteLine($"Unknown runs subcommand: '{subcommand}'. Use 'list' or 'get'.");
+            return 1;
+        }
+
+        int top = 20;
+        string? mode = null;
+
+        for (int i = 1; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--top" && int.TryParse(args[i + 1], out var parsed))
+                top = parsed;
+            else if (args[i] == "--mode")
+                mode = args[i + 1];
+        }
+
+        var records = await _runStore.ListAsync(top, mode);
+        if (records.Count == 0)
+        {
+            Console.WriteLine("No runs recorded yet.");
+            return 0;
+        }
+
+        Console.WriteLine($"{"RUN ID",-38} {"MODE",-9} {"NAME",-28} {"RESULT",-7} {"MS",7} STARTED");
+        foreach (var record in records)
+        {
+            var name = record.Name.Length > 28 ? record.Name[..27] + "~" : record.Name;
+            Console.WriteLine(
+                $"{record.RunId,-38} {record.Mode,-9} {name,-28} " +
+                $"{(record.Success ? "OK" : "FAILED"),-7} {record.DurationMs,7} " +
+                $"{record.StartTimeUtc:yyyy-MM-dd HH:mm:ss}Z");
+        }
+
+        return 0;
     }
 
     private int RunListTools()
@@ -258,6 +344,8 @@ public sealed class CliRunner
         Console.WriteLine("  wf       <id> <image> [--overrides <json>]   Alias for 'workflow'");
         Console.WriteLine("  tool     <name> <image> [key=value ...]      Invoke a single plugin tool");
         Console.WriteLine("  register <filePath> [referenceId]            Register an image file");
+        Console.WriteLine("  runs list [--top N] [--mode tool|workflow]   Show recorded runs, newest first");
+        Console.WriteLine("  runs get <runId>                             Show one recorded run in full");
         Console.WriteLine("  list-tools                                   List all available tools");
         Console.WriteLine("  list-workflows                               List all available workflows");
         Console.WriteLine("  chat                                         Start interactive chat mode");
@@ -269,6 +357,7 @@ public sealed class CliRunner
         Console.WriteLine("  dotnet run -- tool AssessQuality RECEIPT003");
         Console.WriteLine("  dotnet run -- tool EnhanceContrast RECEIPT001 method=auto_lab");
         Console.WriteLine("  dotnet run -- register ./Storage/scan.jpg SCAN001");
+        Console.WriteLine("  dotnet run -- runs list --top 10 --mode workflow");
         Console.WriteLine("  dotnet run -- list-tools");
         Console.WriteLine("  dotnet run                                    (starts chat mode)");
 
