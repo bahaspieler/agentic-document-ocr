@@ -105,6 +105,10 @@ public sealed class AgentRunner
                 "22. ListWorkflows() - Show available preprocessing workflows\n" +
                 "23. RunWorkflow(workflowId, imageRef, overridesJson?) - Run a complete deterministic pipeline. " +
                     "Steps with unavailable tools are automatically skipped.\n\n" +
+
+                "RUN HISTORY (only available if a run store is configured):\n" +
+                "24. ListRuns(top?, mode?) - List recently executed jobs, newest first\n" +
+                "25. GetRun(runId) - Look up one past job by its run ID\n\n" +
                 "IMPORTANT WORKFLOW RULES:\n" +
                 "- When the user asks to 'use the workflow' or 'extract data', call RunWorkflow ONCE with the image reference. " +
                   "Do NOT call individual tools manually when a workflow is requested.\n" +
