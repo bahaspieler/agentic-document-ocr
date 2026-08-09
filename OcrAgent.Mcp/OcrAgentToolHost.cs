@@ -1,7 +1,9 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using ModelContextProtocol.Server;
+using OcrAgent.Configuration;
 using OcrAgent.Plugins;
+using OcrAgent.Runs;
 using OcrAgent.Storage;
 
 namespace OcrAgent.Mcp;
@@ -19,19 +21,25 @@ public sealed class OcrAgentToolHost : IDisposable
     /// <summary>Registry of all preprocessing, OCR, extraction, and workflow tools.</summary>
     public PluginAggregator Aggregator { get; }
 
-    private OcrAgentToolHost(IImageStore store, PluginAggregator aggregator)
+    /// <summary>Store that receives one record per job executed through this host.</summary>
+    public IRunStore RunStore { get; }
+
+    private OcrAgentToolHost(IImageStore store, PluginAggregator aggregator, IRunStore runStore)
     {
         Store = store;
         Aggregator = aggregator;
+        RunStore = runStore;
     }
 
     /// <summary>
-    /// Loads configuration, initializes the image store, and builds the plugin aggregator.
+    /// Loads configuration, initializes the image and run stores, and builds the plugin aggregator.
     /// </summary>
     /// <returns>A ready-to-use host whose tools can be exposed over MCP.</returns>
     public static OcrAgentToolHost Create()
     {
         var (config, configBasePath) = LoadConfiguration();
+
+        RunScope.Source = "mcp";
 
         var storageConfig = config.GetSection("Storage").Get<StorageConfiguration>()
             ?? new StorageConfiguration();
@@ -41,10 +49,17 @@ public sealed class OcrAgentToolHost : IDisposable
             storageConfig.Local.RootPath = Path.GetFullPath(
                 Path.Combine(configBasePath, storageConfig.Local.RootPath));
 
-        var store = StorageFactory.Create(storageConfig);
-        var aggregator = new PluginAggregator(store, config);
+        if (!Path.IsPathRooted(storageConfig.AzureBlob.CacheRootPath))
+            storageConfig.AzureBlob.CacheRootPath = Path.GetFullPath(
+                Path.Combine(configBasePath, storageConfig.AzureBlob.CacheRootPath));
 
-        return new OcrAgentToolHost(store, aggregator);
+        var runStore = RunStoreFactory.CreateOrNull(
+            config.GetSection("Runs").Get<RunStoreConfiguration>() ?? new RunStoreConfiguration());
+
+        var store = StorageFactory.Create(storageConfig);
+        var aggregator = new PluginAggregator(store, config, runStore);
+
+        return new OcrAgentToolHost(store, aggregator, runStore);
     }
 
     /// <summary>
@@ -60,6 +75,8 @@ public sealed class OcrAgentToolHost : IDisposable
 
     private static (IConfiguration Config, string BasePath) LoadConfiguration()
     {
+        EnvFile.Load();
+
         // Content (appsettings.json, Workflows/Definitions, Assets) is copied next to the
         // built assembly, so resolve against AppContext.BaseDirectory first.
         var basePath = File.Exists(Path.Combine(AppContext.BaseDirectory, "appsettings.json"))
