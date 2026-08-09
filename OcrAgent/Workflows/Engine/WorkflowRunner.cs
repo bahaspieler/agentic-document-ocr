@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Agents.AI.Workflows;
+using OcrAgent.Runs;
 using OcrAgent.Storage;
 using OcrAgent.Workflows.Events;
 using OcrAgent.Workflows.Model;
@@ -16,6 +17,7 @@ public sealed class WorkflowRunner
     private readonly WorkflowCatalog _catalog;
     private readonly WorkflowCompiler _compiler;
     private readonly IImageStore? _store;
+    private readonly IRunStore? _runStore;
 
     /// <summary>
     /// Creates a runner using the given catalog, compiler, and optional image store for per-run paths.
@@ -23,16 +25,23 @@ public sealed class WorkflowRunner
     /// <param name="catalog">Resolves workflow id to definition.</param>
     /// <param name="compiler">Builds the executable graph.</param>
     /// <param name="store">When set, receives a per-run subdirectory for writes.</param>
-    public WorkflowRunner(WorkflowCatalog catalog, WorkflowCompiler compiler, IImageStore? store = null)
+    /// <param name="runStore">When set, receives one record per completed run.</param>
+    public WorkflowRunner(
+        WorkflowCatalog catalog, WorkflowCompiler compiler, IImageStore? store = null, IRunStore? runStore = null)
     {
         _catalog = catalog;
         _compiler = compiler;
         _store = store;
+        _runStore = runStore;
     }
 
     /// <summary>
-    /// Executes one run: new run id, optional overrides JSON, compiles, streams step events into <see cref="WorkflowRunResult.Trace"/>.
+    /// Executes one run and records it.
     /// </summary>
+    /// <remarks>
+    /// The run is marked as a job for its whole duration, so the individual steps it drives through
+    /// the tool bindings are not recorded a second time in their own right.
+    /// </remarks>
     /// <param name="workflowId">Catalog workflow id.</param>
     /// <param name="imageRef">Input image reference for the pipeline.</param>
     /// <param name="overridesJson">Optional JSON for <see cref="WorkflowOverrides"/>.</param>
@@ -40,17 +49,51 @@ public sealed class WorkflowRunner
     public async Task<WorkflowRunResult> RunAsync(
         string workflowId, string imageRef, string? overridesJson = null)
     {
+        var startedUtc = DateTimeOffset.UtcNow;
+        using var scope = RunScope.Enter();
+
+        try
+        {
+            var result = await ExecuteAsync(workflowId, imageRef, overridesJson);
+            await RunRecording.SafeSaveAsync(_runStore, ToRecord(result, imageRef, startedUtc));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            // Reached when the workflow could not start at all, such as an unknown id or malformed
+            // overrides. The attempt is still worth a row.
+            await RunRecording.SafeSaveAsync(_runStore, new RunRecord
+            {
+                RunId = RunId.NewId(),
+                Mode = "workflow",
+                Name = workflowId,
+                Source = RunScope.Source,
+                InputReference = imageRef,
+                Success = false,
+                Error = ex.Message,
+                StartTimeUtc = startedUtc,
+                EndTimeUtc = DateTimeOffset.UtcNow,
+                DurationMs = (long)(DateTimeOffset.UtcNow - startedUtc).TotalMilliseconds,
+                StorageProvider = RunRecording.DescribeProvider(_store),
+            });
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Runs the pipeline: new run id, optional overrides JSON, compiles, streams step events into <see cref="WorkflowRunResult.Trace"/>.
+    /// </summary>
+    private async Task<WorkflowRunResult> ExecuteAsync(
+        string workflowId, string imageRef, string? overridesJson)
+    {
         var definition = _catalog.Get(workflowId);
         var overrides = overridesJson != null
             ? JsonSerializer.Deserialize<WorkflowOverrides>(overridesJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             : null;
 
-#if NET9_0_OR_GREATER
-        var runId = Guid.CreateVersion7().ToString("D");
-#else
-        var runId = Guid.NewGuid().ToString("D");
-#endif
+        var runId = RunId.NewId();
         var subdirectory = Path.Combine($"wf_{definition.Id}", runId);
 
         var result = new WorkflowRunResult
@@ -142,4 +185,29 @@ public sealed class WorkflowRunner
         result.TotalDurationMs = totalSw.ElapsedMilliseconds;
         return result;
     }
+
+    /// <summary>Maps a finished run onto the record written to the run store.</summary>
+    /// <param name="result">Outcome of the run.</param>
+    /// <param name="imageRef">Reference the run started from.</param>
+    /// <param name="startedUtc">When the run began.</param>
+    /// <returns>Record describing the run, with the step trace inlined as JSON.</returns>
+    private RunRecord ToRecord(WorkflowRunResult result, string imageRef, DateTimeOffset startedUtc) => new()
+    {
+        RunId = result.RunId,
+        Mode = "workflow",
+        Name = result.WorkflowId,
+        Version = result.Version,
+        Source = RunScope.Source,
+        InputReference = imageRef,
+        OutputReference = result.OutputImageRef,
+        OutputDirectory = result.OutputDirectory,
+        StepCount = result.Trace.Count,
+        Success = result.Success,
+        Error = result.Error,
+        StartTimeUtc = startedUtc,
+        EndTimeUtc = startedUtc.AddMilliseconds(result.TotalDurationMs),
+        DurationMs = result.TotalDurationMs,
+        StorageProvider = RunRecording.DescribeProvider(_store),
+        TraceJson = JsonSerializer.Serialize(result.Trace),
+    };
 }

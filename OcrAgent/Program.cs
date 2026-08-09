@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using OcrAgent.Agent;
+using OcrAgent.Configuration;
 using OcrAgent.Plugins;
+using OcrAgent.Runs;
 using OcrAgent.Storage;
 
 namespace OcrAgent;
@@ -22,6 +24,18 @@ internal class Program
             storageConfig.Local.RootPath = Path.GetFullPath(
                 Path.Combine(configBasePath, storageConfig.Local.RootPath));
 
+        if (!Path.IsPathRooted(storageConfig.AzureBlob.CacheRootPath))
+            storageConfig.AzureBlob.CacheRootPath = Path.GetFullPath(
+                Path.Combine(configBasePath, storageConfig.AzureBlob.CacheRootPath));
+
+        var runStore = RunStoreFactory.CreateOrNull(
+            config.GetSection("Runs").Get<RunStoreConfiguration>() ?? new RunStoreConfiguration());
+
+        // Chat is the default when no command is given; the CLI branch below overrides it.
+        RunScope.Source = args.Length > 0 && !args[0].Equals("chat", StringComparison.OrdinalIgnoreCase)
+            ? "cli"
+            : "chat";
+
         IImageStore store;
         try
         {
@@ -34,14 +48,14 @@ internal class Program
             return 1;
         }
 
-        var aggregator = new PluginAggregator(store, config);
+        var aggregator = new PluginAggregator(store, config, runStore);
 
         try
         {
-            // First arg other than "chat" selects CLI (workflow, tool, register, list-*, help).
+            // First arg other than "chat" selects CLI (workflow, tool, register, runs, list-*, help).
             if (args.Length > 0 && !args[0].Equals("chat", StringComparison.OrdinalIgnoreCase))
             {
-                var cli = new CliRunner(store, aggregator);
+                var cli = new CliRunner(store, aggregator, runStore);
                 return await cli.RunAsync(args);
             }
 
@@ -64,7 +78,7 @@ internal class Program
 
     private static (IConfiguration Config, string BasePath) LoadConfiguration()
     {
-        LoadEnvFile();
+        EnvFile.Load();
 
         var basePath = File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json"))
             ? Directory.GetCurrentDirectory()
@@ -78,39 +92,5 @@ internal class Program
             .AddEnvironmentVariables("OCR_");
 
         return (builder.Build(), basePath);
-    }
-
-    private static void LoadEnvFile()
-    {
-        var startDir = Directory.GetCurrentDirectory();
-        var dir = startDir;
-        
-        while (dir != null)
-        {
-            var envPath = Path.Combine(dir, ".env");
-            if (File.Exists(envPath))
-            {
-                foreach (var line in File.ReadAllLines(envPath))
-                {
-                    var trimmed = line.Trim();
-                    if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#')) continue;
-                    
-                    var eqIndex = trimmed.IndexOf('=');
-                    if (eqIndex <= 0) continue;
-                    
-                    var key = trimmed[..eqIndex].Trim();
-                    var value = trimmed[(eqIndex + 1)..].Trim();
-                    
-                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
-                        Environment.SetEnvironmentVariable(key, value);
-                }
-                
-                return;
-            }
-            
-            var parentDir = Directory.GetParent(dir);
-            if (parentDir == null) break;
-            dir = parentDir.FullName;
-        }
     }
 }
