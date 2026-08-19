@@ -207,8 +207,23 @@ public sealed class SftpImageStore : IImageStore, IDisposable
 
                 var tempPath = Path.Combine(Path.GetTempPath(), $"{reference}.{foundExtension}");
 
-                using var fileStream = File.Create(tempPath);
-                await Task.Run(() => client.DownloadFile(remotePath, fileStream));
+                // The temp name comes from the reference, so two runs given the same input land on
+                // the same file. Truncating it in place would hand the other run an empty or partial
+                // image, which decodes to nothing rather than failing. Download privately, then
+                // replace in one step.
+                var partialPath = $"{tempPath}.{Guid.NewGuid():N}.partial";
+                try
+                {
+                    using (var fileStream = File.Create(partialPath))
+                        await Task.Run(() => client.DownloadFile(remotePath, fileStream));
+
+                    File.Move(partialPath, tempPath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(partialPath))
+                        File.Delete(partialPath);
+                }
 
                 return tempPath;
             });

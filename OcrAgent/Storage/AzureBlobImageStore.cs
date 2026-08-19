@@ -124,7 +124,23 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         if (File.Exists(localPath))
             return localPath;
 
-        _container.GetBlobClient(BlobName(scope, $"{reference}.{extension}")).DownloadTo(localPath);
+        // Two runs started against the same input reference both reach this line while the cache is
+        // cold. Downloading straight to localPath would let the second one open a file the first is
+        // still writing, and a half-written image decodes to an empty matrix instead of throwing, so
+        // the run would carry on and produce nothing. Fill a private file and rename it: the rename
+        // replaces in one step, so a reader sees either no file or the whole one.
+        var partialPath = $"{localPath}.{Guid.NewGuid():N}.partial";
+        try
+        {
+            _container.GetBlobClient(BlobName(scope, $"{reference}.{extension}")).DownloadTo(partialPath);
+            File.Move(partialPath, localPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(partialPath))
+                File.Delete(partialPath);
+        }
+
         return localPath;
     }
 

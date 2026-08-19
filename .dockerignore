@@ -15,7 +15,6 @@
 **/bin
 **/charts
 **/docker-compose*
-**/Dockerfile*
 **/node_modules
 **/npm-debug.log
 **/obj
@@ -23,3 +22,10 @@
 **/values.dev.yaml
 LICENSE
 README.md
+
+# Local run artifacts. These sit inside the project directories, so without this they would be
+# copied into the image and would grow it with every local run.
+**/local-storage
+**/blob-cache
+**/.DS_Store
+**/.idea

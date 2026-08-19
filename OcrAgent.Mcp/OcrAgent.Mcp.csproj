@@ -23,6 +23,19 @@
   </ItemGroup>
 
   <!--
+    OcrAgent is an executable in its own right and carries its own appsettings.json, which content
+    flow from the project reference then delivers here under the same relative path as this host's
+    file. A build silently lets the local file win; a publish refuses to guess and fails. Drop the
+    incoming copy, since this host reads its own settings.
+  -->
+  <Target Name="RemoveEngineAppSettingsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(RelativePath)' == 'appsettings.json' AND '%(RootDir)%(Directory)' != '$([MSBuild]::EnsureTrailingSlash($(MSBuildProjectDirectory)))'" />
+    </ItemGroup>
+  </Target>
+
+  <!--
     macOS (Apple Silicon) OCR support. Tesseract's InteropDotNet loader resolves the arm64
     native libraries from an x64/ subfolder next to the assembly. The base OcrAgent project
     provisions these dylibs into its own output via scripts/setup-native-libs.sh; forward the

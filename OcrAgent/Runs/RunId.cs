@@ -8,10 +8,9 @@ namespace OcrAgent.Runs;
 /// from them.
 /// </summary>
 /// <remarks>
-/// The engine multi-targets net8.0 and net9.0 and <c>Guid.CreateVersion7</c> exists only on the
-/// latter, so the id is built here instead. That keeps ids identical whichever host mints them, and
-/// it keeps the millisecond timestamp readable out of an existing id, which is what allows
-/// <see cref="ToRowKey"/> to address a stored record without a lookup.
+/// The engine targets net8.0, which has no <c>Guid.CreateVersion7</c>, so the id is built here
+/// instead. That also keeps the millisecond timestamp readable out of an existing id, which is what
+/// allows <see cref="ToRowKey"/> to address a stored record without a lookup.
 /// </remarks>
 public static class RunId
 {
