@@ -14,8 +14,8 @@
   <ItemGroup>
     <PackageReference Include="Azure.Data.Tables" Version="12.8.3" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.18.0" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.18.0" />
     <!--
       Microsoft.Agents.AI.Workflows.Generators is deliberately absent. It writes routing tables for
       executors that declare their handlers with attributes; ours build theirs in ConfigureProtocol
@@ -23,7 +23,7 @@
       .NET 8 SDK image carries, so inside the container it failed to load and said so as a warning
       on every release build, which is a bad thing to have to explain away in a build log.
     -->
-    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.18.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.2" />
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />

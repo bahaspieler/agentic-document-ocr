@@ -166,7 +166,7 @@ if [ -z "$RUN_IDS" ]; then
 fi
 
 echo
-echo "[7] Azure-side assertions"
+echo "[8] Azure-side assertions"
 FAILURES=0
 for run_id in $RUN_IDS; do
     prefix="$(blob_name "wf_${WORKFLOW}/${run_id}/")"

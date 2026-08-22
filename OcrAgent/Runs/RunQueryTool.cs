@@ -87,6 +87,9 @@ public sealed class RunQueryTool
         text.AppendLine($"Output:    {record.OutputReference}");
         text.AppendLine($"Steps:     {record.StepCount}");
 
+        if (!string.IsNullOrEmpty(record.ConversationId))
+            text.AppendLine($"Conversation: {record.ConversationId}");
+
         if (!string.IsNullOrEmpty(record.OutputDirectory))
             text.AppendLine($"Directory: {record.OutputDirectory}");
 

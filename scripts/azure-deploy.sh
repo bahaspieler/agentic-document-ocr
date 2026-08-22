@@ -166,7 +166,7 @@ if ! az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$
         --cpu 1.0 \
         --memory 2.0Gi \
         --min-replicas 0 \
-        --max-replicas 1 \
+        --max-replicas "$AZURE_MAX_REPLICAS" \
         --registry-server "$ACR_LOGIN_SERVER" \
         --registry-username "$ACR_USERNAME" \
         --registry-password "$ACR_PASSWORD" \
@@ -194,7 +194,7 @@ else
         --cpu 1.0 \
         --memory 2.0Gi \
         --min-replicas 0 \
-        --max-replicas 1 \
+        --max-replicas "$AZURE_MAX_REPLICAS" \
         --set-env-vars "${ENV_VARS[@]}" \
         --output none
 fi

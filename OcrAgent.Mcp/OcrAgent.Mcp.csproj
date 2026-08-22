@@ -18,8 +18,8 @@
     <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
   </ItemGroup>
 
   <!--

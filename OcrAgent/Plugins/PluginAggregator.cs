@@ -20,9 +20,16 @@ public sealed class PluginAggregator : IDisposable
     private readonly IImageStore _store;
     private readonly List<IImageProcessingTool> _plugins;
     private readonly ToolBindingRegistry _toolRegistry;
-    private readonly WorkflowTool? _workflowTool;
+    private readonly WorkflowTool _workflowTool;
     private readonly IOcrEngine? _ocrEngine;
     private readonly List<AITool> _tools;
+
+    /// <summary>The workflow facade behind the ListWorkflows and RunWorkflow tools.</summary>
+    /// <remarks>
+    /// Reached directly by a host that needs an entry point the generated tool cannot offer, which today
+    /// means running a workflow with a progress sink attached.
+    /// </remarks>
+    public WorkflowTool Workflows => _workflowTool;
 
     /// <summary>
     /// Registers built-in plugins, binds their tools, and wires the workflow tool when tessdata is available.

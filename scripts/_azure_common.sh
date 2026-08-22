@@ -59,6 +59,10 @@ require_az() {
 
 # Resource names. Overridable from .env; defaults match the team's existing group.
 apply_azure_defaults() {
+    # The MCP server serves every request statelessly, so a second replica is free to answer a
+    # request whose predecessor went elsewhere. The ceiling is what lets Container Apps use that;
+    # the floor stays 0, so an idle deployment still costs nothing.
+    : "${AZURE_MAX_REPLICAS:=3}"
     : "${AZURE_RESOURCE_GROUP:=RG_Hidden_Layer}"
     : "${AZURE_ACR_NAME:=acrhiddenlayerocr}"
     : "${AZURE_CONTAINER_APP_NAME:=ca-ocr-agent}"

@@ -4,8 +4,11 @@
 # revision and setting the replica range.
 #
 # Usage:
-#   scripts/azure-start.sh          # min 0, max 1 (scale to zero when idle)
-#   scripts/azure-start.sh --warm   # min 1, max 1 (keep a replica up for a demo)
+#   scripts/azure-start.sh          # min 0 (scale to zero when idle)
+#   scripts/azure-start.sh --warm   # min 1 (keep a replica up for a demo)
+#
+# The maximum comes from AZURE_MAX_REPLICAS and is above one: the server holds no per-client state
+# between requests, so scaling out needs no session affinity.
 #
 set -euo pipefail
 
@@ -18,7 +21,7 @@ for arg in "$@"; do
     case "$arg" in
         --warm) WARM=1 ;;
         -h|--help)
-            sed -n '2,11p' "$0" | sed 's/^# \?//'
+            sed -n '2,12p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *)
@@ -67,7 +70,7 @@ else
 fi
 
 MIN=0
-MAX=1
+MAX="$AZURE_MAX_REPLICAS"
 if [ "$WARM" -eq 1 ]; then
     MIN=1
 fi

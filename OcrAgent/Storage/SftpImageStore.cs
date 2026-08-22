@@ -1,4 +1,3 @@
-using System.Security;
 using System.Text.Json;
 using Renci.SshNet;
 using Renci.SshNet.Common;
@@ -8,12 +7,21 @@ namespace OcrAgent.Storage;
 /// <summary>
 /// <see cref="IImageStore"/> backed by remote files over SFTP, with retries and optional debug uploads.
 /// </summary>
+/// <remarks>
+/// The active subdirectory is held in an <see cref="AsyncLocal{T}"/> so concurrent runs sharing one
+/// store instance cannot overwrite each other's write scope, matching <see cref="AzureBlobImageStore"/>.
+/// <para>
+/// Writes return a reference qualified with the scope they landed in (see
+/// <see cref="ImageReferenceGenerator"/>), and reads take the scope back out of it, so an image is
+/// reachable by the reference alone rather than only while the scope that produced it is still active.
+/// </para>
+/// </remarks>
 public sealed class SftpImageStore : IImageStore, IDisposable
 {
     private readonly SftpStorageConfig _config;
     private readonly SftpConnectionPool _connectionPool;
     private readonly string[] _supportedExtensions = { "png", "jpg", "jpeg", "tif", "tiff", "bmp" };
-    private string? _activeSubdirectory;
+    private readonly AsyncLocal<string?> _activeSubdirectory = new();
     private bool _disposed = false;
 
     /// <summary>Builds the store and opens the shared connection pool from config.</summary>
@@ -39,37 +47,21 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     /// <returns>True if a remote image file exists.</returns>
     public async Task<bool> ExistsAsync(string reference)
     {
-        ValidateReference(reference);
-        reference = ImageReferenceGenerator.Normalize(reference);
+        var (explicitScope, leaf) = ImageReferenceGenerator.Split(reference);
 
-        try
+        return await ExecuteWithRetryAsync(async client =>
         {
-            return await ExecuteWithRetryAsync(async client =>
+            foreach (var scope in CandidateScopes(explicitScope))
             {
                 foreach (var ext in _supportedExtensions)
                 {
-                    var remotePath = GetRemotePath(reference, ext);
-                    if (await Task.Run(() => client.Exists(remotePath)))
+                    if (await Task.Run(() => client.Exists(RemotePath(scope, $"{leaf}.{ext}"))))
                         return true;
                 }
+            }
 
-                if (_activeSubdirectory != null)
-                {
-                    foreach (var ext in _supportedExtensions)
-                    {
-                        var rootPath = $"{NormalizeBasePath()}/{reference}.{ext}";
-                        if (await Task.Run(() => client.Exists(rootPath)))
-                            return true;
-                    }
-                }
-
-                return false;
-            });
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+            return false;
+        });
     }
 
     /// <inheritdoc />
@@ -117,43 +109,36 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         if (bytes == null || bytes.Length == 0)
             throw new ArgumentException("Bytes cannot be null or empty", nameof(bytes));
 
-        var reference = desiredReference ?? ImageReferenceGenerator.NewRef();
-        reference = ImageReferenceGenerator.Normalize(reference);
-        ValidateReference(reference);
+        var leaf = LeafOf(desiredReference);
+        var scope = _activeSubdirectory.Value;
+        var reference = ImageReferenceGenerator.Qualify(scope, leaf);
 
-        try
+        await ExecuteWithRetryAsync(async client =>
         {
-            await ExecuteWithRetryAsync(async client =>
-            {
-                var remotePath = GetRemotePath(reference, extension);
+            var remotePath = RemotePath(scope, $"{leaf}.{extension}");
 
-                if (await Task.Run(() => client.Exists(remotePath)))
-                    throw new InvalidOperationException($"Reference already exists: {reference}");
+            if (await Task.Run(() => client.Exists(remotePath)))
+                throw new InvalidOperationException($"Reference already exists: {reference}");
 
-                EnsureRemoteDirectoryExists(client, Path.GetDirectoryName(remotePath)!.Replace("\\", "/"));
+            EnsureRemoteDirectoryExists(client, Path.GetDirectoryName(remotePath)!.Replace("\\", "/"));
 
-                using var stream = new MemoryStream(bytes);
-                await Task.Run(() => client.UploadFile(stream, remotePath, true));
+            using var stream = new MemoryStream(bytes);
+            await Task.Run(() => client.UploadFile(stream, remotePath, true));
 
-                var meta = metadata ?? new Dictionary<string, string>();
-                meta["reference"] = reference;
-                meta["extension"] = extension;
-                meta["createdUtc"] = DateTime.UtcNow.ToString("O");
-                meta["sizeBytes"] = bytes.Length.ToString();
-                if (_activeSubdirectory != null)
-                    meta["workflowDir"] = _activeSubdirectory;
+            var meta = metadata ?? new Dictionary<string, string>();
+            meta["reference"] = reference;
+            meta["extension"] = extension;
+            meta["createdUtc"] = DateTime.UtcNow.ToString("O");
+            meta["sizeBytes"] = bytes.Length.ToString();
+            if (scope != null)
+                meta["workflowDir"] = scope;
 
-                await SaveMetadataAsync(client, reference, meta);
+            await SaveMetadataAsync(client, RemotePath(scope, $"{leaf}.json"), meta);
 
-                return true;
-            });
+            return true;
+        });
 
-            return reference;
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+        return reference;
     }
 
     /// <inheritdoc />
@@ -167,71 +152,61 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     /// <returns>Path under the system temp directory.</returns>
     public async Task<string> GetImagePathAsync(string reference)
     {
-        ValidateReference(reference);
-        reference = ImageReferenceGenerator.Normalize(reference);
+        var (explicitScope, leaf) = ImageReferenceGenerator.Split(reference);
 
-        try
+        return await ExecuteWithRetryAsync(async client =>
         {
-            return await ExecuteWithRetryAsync(async client =>
-            {
-                string? remotePath = null;
-                string? foundExtension = null;
+            string? remotePath = null;
+            string? foundExtension = null;
+            string? foundScope = null;
 
+            foreach (var scope in CandidateScopes(explicitScope))
+            {
                 foreach (var ext in _supportedExtensions)
                 {
-                    var path = GetRemotePath(reference, ext);
+                    var path = RemotePath(scope, $"{leaf}.{ext}");
                     if (await Task.Run(() => client.Exists(path)))
                     {
                         remotePath = path;
                         foundExtension = ext;
+                        foundScope = scope;
                         break;
                     }
                 }
 
-                if (remotePath == null && _activeSubdirectory != null)
-                {
-                    foreach (var ext in _supportedExtensions)
-                    {
-                        var rootPath = $"{NormalizeBasePath()}/{reference}.{ext}";
-                        if (await Task.Run(() => client.Exists(rootPath)))
-                        {
-                            remotePath = rootPath;
-                            foundExtension = ext;
-                            break;
-                        }
-                    }
-                }
+                if (remotePath != null)
+                    break;
+            }
 
-                if (remotePath == null)
-                    throw new FileNotFoundException($"No stored image found for reference: {reference}");
+            if (remotePath == null)
+                throw new FileNotFoundException($"No stored image found for reference: {reference}");
 
-                var tempPath = Path.Combine(Path.GetTempPath(), $"{reference}.{foundExtension}");
+            // Flattened because the temp directory has no scope subdirectories, and scope-qualified
+            // because two runs can produce the same leaf name under different scopes.
+            var tempName = ImageReferenceGenerator.Qualify(foundScope, leaf)
+                .Replace(ImageReferenceGenerator.ScopeSeparator, '_');
+            var tempPath = Path.Combine(Path.GetTempPath(), $"{tempName}.{foundExtension}");
 
-                // The temp name comes from the reference, so two runs given the same input land on
-                // the same file. Truncating it in place would hand the other run an empty or partial
-                // image, which decodes to nothing rather than failing. Download privately, then
-                // replace in one step.
-                var partialPath = $"{tempPath}.{Guid.NewGuid():N}.partial";
-                try
-                {
-                    using (var fileStream = File.Create(partialPath))
-                        await Task.Run(() => client.DownloadFile(remotePath, fileStream));
+            // The temp name comes from the reference, so two runs given the same input land on
+            // the same file. Truncating it in place would hand the other run an empty or partial
+            // image, which decodes to nothing rather than failing. Download privately, then
+            // replace in one step.
+            var partialPath = $"{tempPath}.{Guid.NewGuid():N}.partial";
+            try
+            {
+                using (var fileStream = File.Create(partialPath))
+                    await Task.Run(() => client.DownloadFile(remotePath, fileStream));
 
-                    File.Move(partialPath, tempPath, overwrite: true);
-                }
-                finally
-                {
-                    if (File.Exists(partialPath))
-                        File.Delete(partialPath);
-                }
+                File.Move(partialPath, tempPath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(partialPath))
+                    File.Delete(partialPath);
+            }
 
-                return tempPath;
-            });
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+            return tempPath;
+        });
     }
 
     /// <inheritdoc />
@@ -245,40 +220,30 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     /// <returns>Deserialized metadata or empty map.</returns>
     public async Task<IDictionary<string, string>> GetMetadataAsync(string reference)
     {
-        ValidateReference(reference);
-        reference = ImageReferenceGenerator.Normalize(reference);
-
         try
         {
+            var (explicitScope, leaf) = ImageReferenceGenerator.Split(reference);
+
             return await ExecuteWithRetryAsync(async client =>
             {
-                var metaPath = GetMetadataPath(reference);
-
-                if (!await Task.Run(() => client.Exists(metaPath)))
+                foreach (var scope in CandidateScopes(explicitScope))
                 {
-                    if (_activeSubdirectory != null)
-                    {
-                        var rootMetaPath = $"{NormalizeBasePath()}/{reference}.json";
-                        if (await Task.Run(() => client.Exists(rootMetaPath)))
-                            metaPath = rootMetaPath;
-                        else
-                            return new Dictionary<string, string>();
-                    }
-                    else
-                    {
-                        return new Dictionary<string, string>();
-                    }
+                    var metaPath = RemotePath(scope, $"{leaf}.json");
+                    if (!await Task.Run(() => client.Exists(metaPath)))
+                        continue;
+
+                    using var stream = new MemoryStream();
+                    await Task.Run(() => client.DownloadFile(metaPath, stream));
+                    stream.Position = 0;
+
+                    using var reader = new StreamReader(stream);
+                    var json = await reader.ReadToEndAsync();
+
+                    return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                        ?? new Dictionary<string, string>();
                 }
 
-                using var stream = new MemoryStream();
-                await Task.Run(() => client.DownloadFile(metaPath, stream));
-                stream.Position = 0;
-
-                using var reader = new StreamReader(stream);
-                var json = await reader.ReadToEndAsync();
-
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-                    ?? new Dictionary<string, string>();
+                return new Dictionary<string, string>();
             });
         }
         catch (Exception)
@@ -302,13 +267,13 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         if (!_config.Behavior.EnableDebugFolders)
             return;
 
-        ValidateReference(parentReference);
+        var parentLeaf = ImageReferenceGenerator.Split(parentReference).Leaf;
 
         try
         {
             await ExecuteWithRetryAsync(async client =>
             {
-                var debugPath = $"{NormalizeBasePath()}/{debugFolderName}/{parentReference}/{filename}";
+                var debugPath = $"{NormalizeBasePath()}/{debugFolderName}/{parentLeaf}/{filename}";
                 var debugDir = Path.GetDirectoryName(debugPath)!.Replace("\\", "/");
 
                 EnsureRemoteDirectoryExists(client, debugDir);
@@ -404,9 +369,8 @@ public sealed class SftpImageStore : IImageStore, IDisposable
 
     #region Metadata
 
-    private async Task SaveMetadataAsync(SftpClient client, string reference, IDictionary<string, string> metadata)
+    private async Task SaveMetadataAsync(SftpClient client, string metaPath, IDictionary<string, string> metadata)
     {
-        var metaPath = GetMetadataPath(reference);
         var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
         var bytes = System.Text.Encoding.UTF8.GetBytes(json);
 
@@ -421,14 +385,14 @@ public sealed class SftpImageStore : IImageStore, IDisposable
     /// <inheritdoc />
     public void SetActiveSubdirectory(string? subdirectory)
     {
-        _activeSubdirectory = subdirectory;
+        _activeSubdirectory.Value = subdirectory;
     }
 
     /// <inheritdoc />
-    public string? GetActiveSubdirectory() => _activeSubdirectory;
+    public string? GetActiveSubdirectory() => _activeSubdirectory.Value;
 
     /// <inheritdoc />
-    public string GetWriteDirectory() => ActiveBasePath();
+    public string GetWriteDirectory() => ScopeBasePath(_activeSubdirectory.Value);
 
     #endregion
 
@@ -442,30 +406,55 @@ public sealed class SftpImageStore : IImageStore, IDisposable
         return basePath;
     }
 
-    private string ActiveBasePath()
+    private string ScopeBasePath(string? scope)
     {
         var basePath = NormalizeBasePath();
-        return _activeSubdirectory != null ? $"{basePath}/{_activeSubdirectory}" : basePath;
+        if (string.IsNullOrWhiteSpace(scope)) return basePath;
+
+        return $"{basePath}/{scope.Replace('\\', '/').Trim('/')}";
     }
 
-    private string GetRemotePath(string reference, string extension)
+    private string RemotePath(string? scope, string fileName) => $"{ScopeBasePath(scope)}/{fileName}";
+
+    /// <summary>
+    /// Where to look for a reference: the scope it names, or the active scope then the root.
+    /// </summary>
+    /// <remarks>
+    /// A reference that names its own scope needs no search, which is what keeps an image produced by
+    /// a workflow reachable once that run has released the scope it was written under.
+    /// </remarks>
+    private IEnumerable<string?> CandidateScopes(string? explicitScope)
     {
-        return $"{ActiveBasePath()}/{reference}.{extension}";
+        if (explicitScope != null)
+        {
+            yield return explicitScope;
+            yield break;
+        }
+
+        var scope = _activeSubdirectory.Value;
+        yield return scope;
+
+        if (scope != null)
+            yield return null;
     }
 
-    private string GetMetadataPath(string reference)
-    {
-        return $"{ActiveBasePath()}/{reference}.json";
-    }
-
-    private void ValidateReference(string reference)
-    {
-        if (string.IsNullOrWhiteSpace(reference))
-            throw new ArgumentException("Reference cannot be null or whitespace", nameof(reference));
-
-        if (reference.Contains("..") || reference.Contains("/") || reference.Contains("\\"))
-            throw new SecurityException($"Invalid reference: potential directory traversal - {reference}");
-    }
+    /// <summary>
+    /// The file name a write should use, which is the requested reference stripped of any scope.
+    /// </summary>
+    /// <remarks>
+    /// Plugins derive an output name by appending to the reference they were given, and that reference
+    /// is itself scope-qualified whenever it came from an earlier step. Stripping here rather than in
+    /// twenty plugins is what stops the scope being prefixed twice.
+    /// <para>
+    /// Traversal is not a concern the way it was when this store rejected separators outright:
+    /// <see cref="ImageReferenceGenerator.Normalize"/> allows no <c>.</c> in a segment, so no
+    /// reference can name a parent directory.
+    /// </para>
+    /// </remarks>
+    private static string LeafOf(string? desiredReference) =>
+        desiredReference == null
+            ? ImageReferenceGenerator.NewRef()
+            : ImageReferenceGenerator.Split(desiredReference).Leaf;
 
     #endregion
 

@@ -31,6 +31,16 @@ public sealed class RunRecord
     /// <summary>Entry point that started the job: <c>cli</c>, <c>chat</c>, or <c>mcp</c>.</summary>
     public string Source { get; set; } = "";
 
+    /// <summary>
+    /// Conversation the job was raised for, null when it was called directly.
+    /// </summary>
+    /// <remarks>
+    /// A single request to the agent can turn into several jobs, because the model decides how many
+    /// tools to call. This is what ties those rows back together, and is the difference between a
+    /// history that lists forty tool calls and one that can show what a user asked for.
+    /// </remarks>
+    public string? ConversationId { get; set; }
+
     /// <summary>Team or deployment the run belongs to; the table partition key.</summary>
     public string GroupId { get; set; } = "";
 

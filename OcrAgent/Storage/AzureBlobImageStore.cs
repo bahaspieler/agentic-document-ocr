@@ -17,6 +17,11 @@ namespace OcrAgent.Storage;
 /// The active subdirectory is held in an <see cref="AsyncLocal{T}"/> so concurrent runs sharing one
 /// store instance cannot overwrite each other's write scope.
 /// </para>
+/// <para>
+/// Writes return a reference qualified with the scope they landed in (see
+/// <see cref="ImageReferenceGenerator"/>), and reads take the scope back out of it, so an image is
+/// reachable by the reference alone rather than only while the scope that produced it is still active.
+/// </para>
 /// </remarks>
 public sealed class AzureBlobImageStore : IImageStore, IDisposable
 {
@@ -54,11 +59,7 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
     public string ContainerName => _container.Name;
 
     /// <inheritdoc />
-    public bool Exists(string reference)
-    {
-        reference = Normalize(reference);
-        return TryResolve(reference, out _, out _);
-    }
+    public bool Exists(string reference) => TryResolve(reference, out _, out _, out _);
 
     /// <inheritdoc />
     public string SaveFromFile(string filePath, string? desiredReference = null)
@@ -84,15 +85,16 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         if (bytes == null || bytes.Length == 0)
             throw new ArgumentException("Bytes cannot be null or empty", nameof(bytes));
 
-        var reference = Normalize(desiredReference ?? ImageReferenceGenerator.NewRef());
+        var leaf = LeafOf(desiredReference);
         var scope = _activeSubdirectory.Value;
+        var reference = ImageReferenceGenerator.Qualify(scope, leaf);
 
-        var imageBlobName = BlobName(scope, $"{reference}.{extension}");
+        var imageBlobName = BlobName(scope, $"{leaf}.{extension}");
         if (_container.GetBlobClient(imageBlobName).Exists())
             throw new InvalidOperationException($"Reference already exists: {reference}");
 
         var stagingDirectory = EnsureStagingDirectory(scope);
-        var localImagePath = Path.Combine(stagingDirectory, $"{reference}.{extension}");
+        var localImagePath = Path.Combine(stagingDirectory, $"{leaf}.{extension}");
         File.WriteAllBytes(localImagePath, bytes);
         Upload(imageBlobName, localImagePath);
 
@@ -104,9 +106,9 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         if (scope != null)
             meta["workflowDir"] = scope;
 
-        var localMetaPath = Path.Combine(stagingDirectory, $"{reference}.json");
+        var localMetaPath = Path.Combine(stagingDirectory, $"{leaf}.json");
         File.WriteAllText(localMetaPath, JsonSerializer.Serialize(meta, MetadataJsonOptions));
-        Upload(BlobName(scope, $"{reference}.json"), localMetaPath);
+        Upload(BlobName(scope, $"{leaf}.json"), localMetaPath);
 
         return reference;
     }
@@ -115,12 +117,10 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
     /// <remarks>Downloads the blob into the local cache when it is not there yet.</remarks>
     public string GetImagePath(string reference)
     {
-        reference = Normalize(reference);
-
-        if (!TryResolve(reference, out var scope, out var extension))
+        if (!TryResolve(reference, out var scope, out var leaf, out var extension))
             throw new FileNotFoundException($"No stored image found for reference: {reference}");
 
-        var localPath = Path.Combine(EnsureStagingDirectory(scope), $"{reference}.{extension}");
+        var localPath = Path.Combine(EnsureStagingDirectory(scope), $"{leaf}.{extension}");
         if (File.Exists(localPath))
             return localPath;
 
@@ -132,7 +132,7 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         var partialPath = $"{localPath}.{Guid.NewGuid():N}.partial";
         try
         {
-            _container.GetBlobClient(BlobName(scope, $"{reference}.{extension}")).DownloadTo(partialPath);
+            _container.GetBlobClient(BlobName(scope, $"{leaf}.{extension}")).DownloadTo(partialPath);
             File.Move(partialPath, localPath, overwrite: true);
         }
         finally
@@ -149,15 +149,15 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
     {
         try
         {
-            reference = Normalize(reference);
+            var (explicitScope, leaf) = ImageReferenceGenerator.Split(reference);
 
-            foreach (var scope in CandidateScopes())
+            foreach (var scope in CandidateScopes(explicitScope))
             {
-                var localPath = Path.Combine(StagingDirectory(scope), $"{reference}.json");
+                var localPath = Path.Combine(StagingDirectory(scope), $"{leaf}.json");
                 if (File.Exists(localPath))
                     return Deserialize(File.ReadAllText(localPath));
 
-                var blob = _container.GetBlobClient(BlobName(scope, $"{reference}.json"));
+                var blob = _container.GetBlobClient(BlobName(scope, $"{leaf}.json"));
                 if (!blob.Exists()) continue;
 
                 using var stream = new MemoryStream();
@@ -231,22 +231,25 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
     }
 
     /// <summary>Finds where a reference lives, preferring the active scope over the container root.</summary>
-    private bool TryResolve(string reference, out string? scope, out string extension)
+    private bool TryResolve(string reference, out string? scope, out string leaf, out string extension)
     {
-        foreach (var candidate in CandidateScopes())
+        var (explicitScope, name) = ImageReferenceGenerator.Split(reference);
+        leaf = name;
+
+        foreach (var candidate in CandidateScopes(explicitScope))
         {
             var stagingDirectory = StagingDirectory(candidate);
 
             foreach (var ext in SupportedExtensions)
             {
-                if (File.Exists(Path.Combine(stagingDirectory, $"{reference}.{ext}")))
+                if (File.Exists(Path.Combine(stagingDirectory, $"{leaf}.{ext}")))
                 {
                     scope = candidate;
                     extension = ext;
                     return true;
                 }
 
-                if (_container.GetBlobClient(BlobName(candidate, $"{reference}.{ext}")).Exists())
+                if (_container.GetBlobClient(BlobName(candidate, $"{leaf}.{ext}")).Exists())
                 {
                     scope = candidate;
                     extension = ext;
@@ -260,9 +263,23 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         return false;
     }
 
-    /// <summary>Active scope first, then the root as fallback, matching the other stores.</summary>
-    private IEnumerable<string?> CandidateScopes()
+    /// <summary>
+    /// Where to look for a reference: the scope it names, or the active scope then the root.
+    /// </summary>
+    /// <remarks>
+    /// A reference that names its own scope needs no search, which is what keeps an image produced by
+    /// a workflow reachable once that run has released the scope it was written under. A bare
+    /// reference is either an input registered at the root or a name a plugin derived from one, so it
+    /// keeps the original probing order.
+    /// </remarks>
+    private IEnumerable<string?> CandidateScopes(string? explicitScope)
     {
+        if (explicitScope != null)
+        {
+            yield return explicitScope;
+            yield break;
+        }
+
         var scope = _activeSubdirectory.Value;
         yield return scope;
 
@@ -301,12 +318,23 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
         return directory;
     }
 
-    private static string Normalize(string reference)
+    /// <summary>
+    /// The file name a write should use, which is the requested reference stripped of any scope.
+    /// </summary>
+    /// <remarks>
+    /// Plugins derive an output name by appending to the reference they were given, and that reference
+    /// is itself scope-qualified whenever it came from an earlier step. Stripping here rather than in
+    /// twenty plugins is what stops the scope being prefixed twice.
+    /// </remarks>
+    private static string LeafOf(string? desiredReference)
     {
-        if (string.IsNullOrWhiteSpace(reference))
-            throw new ArgumentException("Reference cannot be null or whitespace", nameof(reference));
+        if (desiredReference == null)
+            return ImageReferenceGenerator.NewRef();
 
-        return ImageReferenceGenerator.Normalize(reference);
+        if (string.IsNullOrWhiteSpace(desiredReference))
+            throw new ArgumentException("Reference cannot be null or whitespace", nameof(desiredReference));
+
+        return ImageReferenceGenerator.Split(desiredReference).Leaf;
     }
 
     private static Dictionary<string, string> Deserialize(string json) =>

@@ -106,6 +106,7 @@ public sealed class AzureTableRunStore : IRunStore
         };
 
         SetIfPresent(entity, "Version", record.Version);
+        SetIfPresent(entity, "ConversationId", record.ConversationId);
         SetIfPresent(entity, "OutputDirectory", record.OutputDirectory);
         SetIfPresent(entity, "StorageProvider", record.StorageProvider);
         SetIfPresent(entity, "Error", record.Error, MaxErrorChars);
@@ -122,6 +123,7 @@ public sealed class AzureTableRunStore : IRunStore
         Name = entity.GetString("Name") ?? "",
         Version = entity.GetString("Version"),
         Source = entity.GetString("Source") ?? "",
+        ConversationId = entity.GetString("ConversationId"),
         GroupId = entity.PartitionKey,
         InputReference = entity.GetString("InputReference") ?? "",
         OutputReference = entity.GetString("OutputReference") ?? "",

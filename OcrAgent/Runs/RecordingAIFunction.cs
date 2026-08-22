@@ -71,6 +71,7 @@ internal sealed class RecordingAIFunction : DelegatingAIFunction
             Mode = "tool",
             Name = Name,
             Source = RunScope.Source,
+            ConversationId = RunScope.ConversationId,
             InputReference = InputReferenceOf(arguments),
             StepCount = 1,
             StartTimeUtc = DateTimeOffset.UtcNow,

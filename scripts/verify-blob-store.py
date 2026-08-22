@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Drives a running OcrAgent.Mcp server over MCP to verify the image and run stores end to end.
 
-Checks, in order: an input image, a single plugin call, a full workflow run, two concurrent
-workflow runs, and the run records left behind. The concurrency case matters because every run must
-keep its own write scope; overlapping runs writing to the same scope would corrupt each other's
-output. The run record checks are skipped when the server was started without a run store.
+Checks, in order: the guidance the server hands a client, an input image, a single plugin call, a
+full workflow run, a second call on what that workflow produced, two concurrent workflow runs, and
+the run records left behind. The
+concurrency case matters because every run must keep its own write scope; overlapping runs writing to
+the same scope would corrupt each other's output. The follow-up call matters because a workflow
+writes under a scope it releases when it finishes, so its output is only reachable afterwards if the
+reference it reports carries that scope. The workflow run also asks for progress, so its step
+notifications are counted against the number of steps the summary says it ran. The run record checks
+are skipped when the server was started without a run store.
 
 The input image is either a local file the server can read (--image, which goes through
 RegisterImage) or a blob-native reference already in the container (--image-ref), which is how a
@@ -31,6 +36,10 @@ import urllib.request
 # usually gone by the time it is printed.
 OCR_TEXT_PATTERN = re.compile(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)')
 
+# Token the workflow call asks its progress notifications to be tagged with. Any value the client
+# picks will do; a fixed one keeps the check readable.
+PROGRESS_TOKEN = "verify-workflow-progress"
+
 
 class McpClient:
     """Minimal MCP Streamable HTTP client. One instance is one session."""
@@ -40,6 +49,11 @@ class McpClient:
         self.name = name
         self.session_id = None
         self.request_id = 0
+        self.instructions = None
+        # Notifications the server sent while answering the most recent request. In stateless mode
+        # there is no standalone stream to receive them on, so they arrive on the response body of
+        # the request that caused them, ahead of the result.
+        self.notifications = []
 
     def _post(self, body, parse=True):
         request = urllib.request.Request(self.url, data=json.dumps(body).encode(), method="POST")
@@ -58,6 +72,7 @@ class McpClient:
             return None
 
         # Responses arrive either as plain JSON or as server-sent events.
+        self.notifications = []
         for line in raw.splitlines():
             line = line.strip()
             if line.startswith("data:"):
@@ -68,8 +83,12 @@ class McpClient:
                 message = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(message, dict) and "id" in message:
+            if not isinstance(message, dict):
+                continue
+            if "id" in message:
                 return message
+            if "method" in message:
+                self.notifications.append(message)
         return None
 
     def initialize(self):
@@ -79,7 +98,15 @@ class McpClient:
                        "clientInfo": {"name": self.name, "version": "1.0"}},
         })
         self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, parse=False)
+        self.instructions = response["result"].get("instructions")
         return response["result"]["serverInfo"]
+
+    def prompts(self):
+        self.request_id += 1
+        response = self._post({
+            "jsonrpc": "2.0", "id": 100 + self.request_id, "method": "prompts/list", "params": {},
+        })
+        return (response or {}).get("result", {}).get("prompts", [])
 
     def tool_names(self):
         self.request_id += 1
@@ -89,11 +116,17 @@ class McpClient:
         tools = (response or {}).get("result", {}).get("tools", [])
         return {tool.get("name") for tool in tools}
 
-    def call_tool(self, tool, arguments):
+    def call_tool(self, tool, arguments, progress_token=None):
         self.request_id += 1
+        params = {"name": tool, "arguments": arguments}
+        # A server only reports progress for a call that asked for it, by naming the token its
+        # notifications should carry.
+        if progress_token is not None:
+            params["_meta"] = {"progressToken": progress_token}
+
         response = self._post({
             "jsonrpc": "2.0", "id": 100 + self.request_id, "method": "tools/call",
-            "params": {"name": tool, "arguments": arguments},
+            "params": params,
         })
         result = (response or {}).get("result", {})
         text = "\n".join(
@@ -113,6 +146,25 @@ def run_id_of(text):
     for line in text.splitlines():
         if "Run ID:" in line:
             return line.split("Run ID:")[1].strip()
+    return None
+
+
+def steps_executed_by(text):
+    """How many steps a workflow summary says it ran, or None when it does not say."""
+    for line in text.splitlines():
+        if line.startswith("Steps executed:"):
+            try:
+                return int(line.split("Steps executed:")[1].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def output_image_of(text):
+    """The image reference a workflow summary reports as its result, or None."""
+    for line in text.splitlines():
+        if line.startswith("Output image:"):
+            return line.split("Output image:")[1].strip() or None
     return None
 
 
@@ -175,6 +227,7 @@ def main():
 
     client = McpClient(args.url, "verify-blob-store")
     print("server:", client.initialize())
+    failures.extend(check_server_guidance(client))
 
     if register_path is not None:
         is_error, reference = client.call_tool("RegisterImage", {"filePath": register_path})
@@ -202,7 +255,8 @@ def main():
         failures.append("BinarizeImage")
 
     is_error, workflow_output = client.call_tool(
-        "RunWorkflow", {"workflowId": args.workflow, "imageReference": reference})
+        "RunWorkflow", {"workflowId": args.workflow, "imageReference": reference},
+        progress_token=PROGRESS_TOKEN)
     workflow_run_id = run_id_of(workflow_output)
     print("[4] RunWorkflow    error=%s runId=%s" % (is_error, workflow_run_id))
     if is_error or "completed" not in workflow_output:
@@ -216,7 +270,11 @@ def main():
         elif text:
             print("    ocr text: %s" % text[:110])
 
-    print("\n[5] Two concurrent workflow runs")
+    failures.extend(check_progress(client.notifications, workflow_output))
+
+    failures.extend(check_followup_call(client, workflow_output))
+
+    print("\n[6] Two concurrent workflow runs")
     results = {}
 
     def run_workflow(tag, image_ref):
@@ -267,16 +325,96 @@ def main():
     return 1 if failures else 0
 
 
+def check_server_guidance(client):
+    """Confirms the server tells a connecting client how to use the tools together.
+
+    Instructions carry the rules the tool schemas cannot express, chiefly that a workflow is one call
+    and that references chain. They must not repeat the tool catalogue, which the client already has.
+    Prompts name the flows worth offering by name.
+    """
+    failures = []
+    instructions = client.instructions or ""
+
+    print("\n[0] Server instructions: %d characters" % len(instructions))
+    if not instructions:
+        failures.append("server sent no instructions")
+    else:
+        for rule in ("RunWorkflow ONCE", "CHAINING RULE", "REFERENCE RULE"):
+            if rule not in instructions:
+                failures.append("instructions omit %r" % rule)
+        if "AVAILABLE TOOLS" in instructions:
+            failures.append("instructions repeat the tool catalogue")
+
+    names = [prompt.get("name") for prompt in client.prompts()]
+    print("    prompts: %s" % (", ".join(names) or "none"))
+    for expected in ("extract_receipt", "improve_image_for_ocr"):
+        if expected not in names:
+            failures.append("prompt %r not offered" % expected)
+
+    return failures
+
+
+def check_progress(notifications, workflow_output):
+    """Confirms the workflow reported its steps while it was still running.
+
+    A run takes seconds across a dozen steps, so a client should be able to show where it is rather
+    than only that a call is outstanding. The count is checked against the summary: one notification
+    per step the run actually executed, no more and no fewer.
+    """
+    progress = [
+        message["params"] for message in notifications
+        if message.get("method") == "notifications/progress"
+        and message.get("params", {}).get("progressToken") == PROGRESS_TOKEN
+    ]
+
+    print("    progress notifications: %d" % len(progress))
+    if not progress:
+        return ["RunWorkflow sent no progress notifications"]
+
+    print("      first: %s" % json.dumps(progress[0].get("message") or progress[0]))
+    print("      last:  %s" % json.dumps(progress[-1].get("message") or progress[-1]))
+
+    steps = steps_executed_by(workflow_output)
+    if steps is not None and len(progress) != steps:
+        return ["progress notifications (%d) do not match steps executed (%d)"
+                % (len(progress), steps)]
+
+    # The last report should say the run is finished, which is how a client knows not to expect more.
+    tail = progress[-1]
+    if tail.get("total") is not None and tail.get("progress") != tail.get("total"):
+        return ["last progress notification is %s of %s" % (tail.get("progress"), tail.get("total"))]
+
+    return []
+
+
+def check_followup_call(client, workflow_output):
+    """Confirms the reference a workflow reports is usable in the next call.
+
+    The run wrote it under a per-run scope and released that scope on the way out, so this only
+    succeeds if the reference names the scope it lives in.
+    """
+    reference = output_image_of(workflow_output)
+    if reference is None:
+        print("\n[5] Follow-up call skipped (the workflow reported no output image)")
+        return []
+
+    is_error, output = client.call_tool(
+        "BinarizeImage", {"imageReference": reference, "method": "otsu"})
+    print("\n[5] BinarizeImage on the workflow output  error=%s" % is_error)
+    print("    %s -> %s" % (reference, output[:120]))
+    return ["follow-up call on the workflow output: %s" % output[:160]] if is_error else []
+
+
 def check_run_records(client, workflow_run_id, concurrent_ids):
     """Confirms each job left a record and that concurrent runs were recorded separately."""
     failures = []
 
     if not {"GetRun", "ListRuns"} <= client.tool_names():
-        print("\n[6] Run records    skipped (server started without a run store)")
+        print("\n[7] Run records    skipped (server started without a run store)")
         return failures
 
     is_error, listing = client.call_tool("ListRuns", {"top": 25})
-    print("\n[6] ListRuns       error=%s" % is_error)
+    print("\n[7] ListRuns       error=%s" % is_error)
     if is_error:
         return ["ListRuns"]
 

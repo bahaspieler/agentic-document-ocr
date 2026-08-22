@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using OcrAgent.Workflows.Engine;
+using OcrAgent.Workflows.Model;
 
 namespace OcrAgent.Workflows.Tools;
 
@@ -9,8 +10,35 @@ namespace OcrAgent.Workflows.Tools;
 /// </summary>
 public sealed class WorkflowTool
 {
+    /// <summary>What the run-workflow tool does, for whichever surface describes it.</summary>
+    /// <remarks>
+    /// A host that cannot use the <see cref="AIFunction"/> built here still has to describe the same
+    /// operation to a model, and two copies of the wording would drift. The constants are the single
+    /// source: they are what the attributes below expand to, and what such a host reuses.
+    /// </remarks>
+    public const string RunWorkflowDescription =
+        "Runs a predefined preprocessing workflow on an image. " +
+        "Returns the final processed image reference, execution trace, and any output data (e.g. OCR results).";
+
+    /// <summary>Description of the workflow id parameter.</summary>
+    public const string WorkflowIdDescription = "The workflow ID (e.g., 'receipt_extract_v3').";
+
+    /// <summary>Description of the input image reference parameter.</summary>
+    public const string ImageReferenceDescription = "The image reference to process.";
+
+    /// <summary>Description of the overrides parameter.</summary>
+    public const string OverridesJsonDescription =
+        "Optional JSON overrides to customize step parameters or disable steps.";
+
     private readonly WorkflowRunner _runner;
     private readonly WorkflowCatalog _catalog;
+
+    /// <summary>The definitions this tool can run.</summary>
+    /// <remarks>
+    /// Read by a host that has to name a workflow somewhere other than in a tool call, so the name it
+    /// uses comes from the definitions on disk rather than from a second list of its own.
+    /// </remarks>
+    public WorkflowCatalog Catalog => _catalog;
 
     /// <summary>
     /// Creates the tool facade backed by a runner and catalog.
@@ -41,18 +69,36 @@ public sealed class WorkflowTool
     /// <summary>
     /// Runs a workflow and returns a summary string (trace, paths, context, errors).
     /// </summary>
+    /// <remarks>
+    /// Exactly the three parameters a caller can supply, because this is the signature a tool schema is
+    /// generated from and a progress sink is not something a model can pass. Hosts that have one call
+    /// <see cref="RunWorkflowWithProgress"/> instead.
+    /// </remarks>
     /// <param name="workflowId">Workflow definition id.</param>
     /// <param name="imageReference">Input image reference.</param>
     /// <param name="overridesJson">Optional JSON for step and budget overrides.</param>
     /// <returns>Formatted result or failure message.</returns>
-    [Description("Runs a predefined preprocessing workflow on an image. " +
-                 "Returns the final processed image reference, execution trace, and any output data (e.g. OCR results).")]
-    public async Task<string> RunWorkflow(
-        [Description("The workflow ID (e.g., 'receipt_extract_v3').")] string workflowId,
-        [Description("The image reference to process.")] string imageReference,
-        [Description("Optional JSON overrides to customize step parameters or disable steps.")] string? overridesJson = null)
+    [Description(RunWorkflowDescription)]
+    public Task<string> RunWorkflow(
+        [Description(WorkflowIdDescription)] string workflowId,
+        [Description(ImageReferenceDescription)] string imageReference,
+        [Description(OverridesJsonDescription)] string? overridesJson = null)
+        => RunWorkflowWithProgress(workflowId, imageReference, overridesJson, progress: null);
+
+    /// <summary>
+    /// Runs a workflow, reporting each completed step, and returns the same summary as
+    /// <see cref="RunWorkflow"/>.
+    /// </summary>
+    /// <param name="workflowId">Workflow definition id.</param>
+    /// <param name="imageReference">Input image reference.</param>
+    /// <param name="overridesJson">Optional JSON for step and budget overrides.</param>
+    /// <param name="progress">Sink for step completions, or null to run without reporting.</param>
+    /// <returns>Formatted result or failure message.</returns>
+    public async Task<string> RunWorkflowWithProgress(
+        string workflowId, string imageReference, string? overridesJson,
+        IProgress<WorkflowStepProgress>? progress)
     {
-        var result = await _runner.RunAsync(workflowId, imageReference, overridesJson);
+        var result = await _runner.RunAsync(workflowId, imageReference, overridesJson, progress);
 
         if (!result.Success)
             return $"Workflow failed: {result.Error}";

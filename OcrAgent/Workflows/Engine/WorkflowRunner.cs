@@ -45,16 +45,21 @@ public sealed class WorkflowRunner
     /// <param name="workflowId">Catalog workflow id.</param>
     /// <param name="imageRef">Input image reference for the pipeline.</param>
     /// <param name="overridesJson">Optional JSON for <see cref="WorkflowOverrides"/>.</param>
+    /// <param name="progress">
+    /// When set, receives one report per completed step while the run is still going. Reports are made
+    /// on the thread draining the event stream, so a sink that blocks slows the run down.
+    /// </param>
     /// <returns>Trace, final text output, context snapshot, and timing.</returns>
     public async Task<WorkflowRunResult> RunAsync(
-        string workflowId, string imageRef, string? overridesJson = null)
+        string workflowId, string imageRef, string? overridesJson = null,
+        IProgress<WorkflowStepProgress>? progress = null)
     {
         var startedUtc = DateTimeOffset.UtcNow;
         using var scope = RunScope.Enter();
 
         try
         {
-            var result = await ExecuteAsync(workflowId, imageRef, overridesJson);
+            var result = await ExecuteAsync(workflowId, imageRef, overridesJson, progress);
             await RunRecording.SafeSaveAsync(_runStore, ToRecord(result, imageRef, startedUtc));
             return result;
         }
@@ -68,6 +73,7 @@ public sealed class WorkflowRunner
                 Mode = "workflow",
                 Name = workflowId,
                 Source = RunScope.Source,
+                ConversationId = RunScope.ConversationId,
                 InputReference = imageRef,
                 Success = false,
                 Error = ex.Message,
@@ -85,7 +91,8 @@ public sealed class WorkflowRunner
     /// Runs the pipeline: new run id, optional overrides JSON, compiles, streams step events into <see cref="WorkflowRunResult.Trace"/>.
     /// </summary>
     private async Task<WorkflowRunResult> ExecuteAsync(
-        string workflowId, string imageRef, string? overridesJson)
+        string workflowId, string imageRef, string? overridesJson,
+        IProgress<WorkflowStepProgress>? progress)
     {
         var definition = _catalog.Get(workflowId);
         var overrides = overridesJson != null
@@ -150,6 +157,8 @@ public sealed class WorkflowRunner
                             Success = step.Success,
                             Error = step.Error,
                         });
+                        progress?.Report(new WorkflowStepProgress(
+                            completed, stepCount, step.StepId, step.ToolName, step.Success));
                         break;
 
                     case WorkflowOutputEvent output:
@@ -198,6 +207,7 @@ public sealed class WorkflowRunner
         Name = result.WorkflowId,
         Version = result.Version,
         Source = RunScope.Source,
+        ConversationId = RunScope.ConversationId,
         InputReference = imageRef,
         OutputReference = result.OutputImageRef,
         OutputDirectory = result.OutputDirectory,
