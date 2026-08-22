@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Identity.Web;
 using ModelContextProtocol.AspNetCore;
 using OcrAgent.Agent;
 using OcrAgent.Mcp;
+using OcrAgent.Mcp.Api;
 
 // Two transports, one server:
 //   default          -> ASP.NET Core Streamable HTTP (cloud-ready, reachable by URL)
@@ -37,6 +40,19 @@ if (useStdio)
 else
 {
     var builder = WebApplication.CreateBuilder(args);
+    var auth = toolHost.Configuration.GetSection("Auth").Get<AuthConfiguration>()
+        ?? new AuthConfiguration();
+
+    if (auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId))
+    {
+        builder.Configuration["Auth:Instance"] = auth.Instance;
+        builder.Configuration["Auth:TenantId"] = auth.TenantId;
+        builder.Configuration["Auth:ClientId"] = auth.ClientId;
+        builder.Services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("Auth"));
+        builder.Services.AddAuthorization();
+    }
 
     builder.Services
         .AddMcpServer(options => options.ServerInstructions = AgentInstructions.ForMcpServer)
@@ -48,6 +64,20 @@ else
         .WithPrompts(prompts);
 
     var app = builder.Build();
+    if (auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId))
+    {
+        app.UseAuthentication();
+        app.UseAuthorization();
+    }
+
+    AgentService? agentService = null;
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY")))
+        agentService = AgentService.Create(toolHost.Aggregator.GetAllTools());
+
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapOcrApi(toolHost, agentService, auth);
     app.MapMcp();
+    app.MapFallbackToFile("index.html");
     await app.RunAsync();
 }

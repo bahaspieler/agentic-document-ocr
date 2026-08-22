@@ -1,4 +1,4 @@
-# Cloud Project Plan (v1.1)
+# Cloud Project Plan (v1.2)
 
 Cloud-Native AI Preprocessing Agent for OCR, Cloud Computing phase.
 
@@ -9,6 +9,12 @@ The plan is organised by phase, not by date. Each phase ends in something that r
 Superseded material is struck through and folded into a blockquote rather than deleted, so a decision can be reread and reversed later. Nothing that was once planned is removed from this file.
 
 **What changed in v1.1.** Phase 6 was rewritten a second time and the phase order is unchanged. The `agent_chat` MCP tool is dropped: an MCP client already supplies its own model, so a tool hiding a weaker one behind it bills two models for one turn, hides the tool trace from the client, and returns a single blob where the client would otherwise stream. Phase 6 keeps the MCP work that removing it exposed — stateless transport, server-supplied instructions, workflow progress notifications, and a reference-resolution defect the session design would never have fixed — and adds the natural-language agent as a callable service. Session persistence moves to Phase 7, where the Web UI is its first real consumer, and its backing store is chosen there rather than fixed in advance. Phase 9 gains the detail that a queue message is itself a natural-language command, which is why the agent service is extracted early enough for the worker to reuse it.
+
+**What changed in v1.2.** Phase 7 is complete. React, Vite, and TypeScript provide the same-origin
+Web UI; ASP.NET exposes REST and SSE over the existing serving process; Azure SQL now holds durable
+agent sessions, user profiles, structured receipts, and line items. Anonymous use is complete and
+Microsoft login is implemented but awaits the tenant administrator's app registration. Vector search
+is removed from Phase 8 implementation scope and retained as future work; the phase order is unchanged.
 
 ## 1. Status and Scope
 
@@ -22,7 +28,7 @@ Phases 2 through 5 are also complete: images and run records live in Azure Stora
 
 ### What this plan covers
 
-Everything between that baseline and a deployed cloud system: Azure Blob for images and artifacts, Azure Table for the run log, a Linux container, deployment to Azure, a stateless MCP server and a reusable natural-language agent service, a REST API and Web UI with durable conversations, Azure SQL with vector search, and the course template's queue-triggered path in `MyExperiment`.
+Everything between that baseline and a deployed cloud system: Azure Blob for images and artifacts, Azure Table for the run log, a Linux container, deployment to Azure, a stateless MCP server and a reusable natural-language agent service, a REST API and Web UI with durable conversations, Azure SQL for sessions, users, and receipt data, and the course template's queue-triggered path in `MyExperiment`. Vector similarity is future work.
 
 ### Constraint from the course guide
 
@@ -53,7 +59,7 @@ flowchart TB
         Table[("Table Storage: run log")]
         Queue[("Queue Storage: job triggers")]
         Sessions[("Session store: web conversations")]
-        Sql[("Azure SQL: receipt data and vectors")]
+        Sql[("Azure SQL: sessions, users, receipt data")]
     end
 
     Model["GPT-4o-mini (OpenAI / Azure OpenAI)"]
@@ -86,8 +92,8 @@ Both instances run the same execution core over the same storage. The entry poin
 | Blob Storage | Azure | Input images, intermediate and final artifacts |
 | Table Storage | Azure | One row per run |
 | Queue Storage | Azure | Job triggers for the worker |
-| Session store | Azure | Durable Web UI conversations; backing store chosen in Phase 7 |
-| Azure SQL | Azure | Queryable receipt data and vector similarity |
+| Session store | Azure SQL | Durable Web UI conversations with optimistic concurrency and idempotency |
+| Azure SQL | Azure | Conversations, Microsoft identities, queryable receipts, and line items |
 | Key Vault or app settings | Azure | Storage connection string, model key |
 
 ## 3. Key Design Decisions
@@ -238,7 +244,7 @@ Three items do not belong to any phase and start immediately, because they eithe
 
 **Acceptance.** A connected MCP client lists the tool surface with the server's instructions applied, and completes `receipt_extract_v3` while reporting step progress. A reference produced by a workflow is usable in the next standalone tool call, both in a warm process and after a cold start. Two clients drive the deployed app concurrently with the replica maximum above one and no session affinity. The console chat still works, now driven through the agent service that Phase 7 and Phase 9 will call.
 
-### Phase 7: REST API, Web UI, and durable conversations
+### Phase 7: REST API, Web UI, Azure SQL, and durable conversations (complete)
 
 **Goal.** A browser user can use the system without an MCP client, and a conversation outlives the request and the replica that started it.
 
@@ -253,17 +259,31 @@ Three items do not belong to any phase and start immediately, because they eithe
 
 **Acceptance.** A receipt is processed end to end from the browser through both panels, and the run appears in the history view. A multi-turn conversation continues correctly across a replica that has scaled to zero and cold-started, and across a deployment. Two turns issued concurrently on one conversation leave the history consistent. Every run recorded during a conversation carries its conversation id.
 
-### Phase 8: Azure SQL and vector search
+**Implemented.** The serving host now maps `/api/*`, MCP, and the compiled React SPA on one origin.
+Agent turns stream `token`, `tool`, and workflow `step` events over SSE. Azure SQL Basic stores users,
+conversation metadata and serialized `AgentSession` payloads, idempotency rows, normalized receipt
+fields and line items, while raw receipt JSON preserves the full extraction. SQL `rowversion` rejects
+racing turns without corrupting history. Anonymous conversation ids survive reloads in `localStorage`
+and can be claimed after Microsoft login. The deployed app runs min 1 / max 3 replicas.
 
-**Goal.** Extracted receipt data is queryable across runs.
+> Superseded operational wording from the acceptance above: ~~A multi-turn conversation continues
+> correctly across a replica that has scaled to zero and cold-started~~. The durability requirement
+> remains proven across deployment and replica boundaries, but Phase 7 deliberately keeps one replica
+> live for the final submission.
 
-**Work.**
-- Define the schema for `ReceiptData`: merchant, date, line items, totals, validation state, run id.
-- Persist extraction results after a workflow run.
-- Add an embedding vector column and implement similarity search and duplicate detection.
-- Expose the queries through the REST API and as an MCP tool.
+### ~~Phase 8: Azure SQL and vector search~~ (SQL moved to Phase 7; vectors deferred)
 
-**Acceptance.** Receipts from several runs are queryable by merchant and date range, and similarity search returns a near-duplicate receipt.
+> **Goal.** ~~Extracted receipt data is queryable across runs.~~ Completed in Phase 7.
+
+> **Work.**
+> - ~~Define the schema for `ReceiptData`: merchant, date, line items, totals, validation state, run id.~~
+> - ~~Persist extraction results after a workflow run.~~
+> - ~~Add an embedding vector column and implement similarity search and duplicate detection.~~
+> - ~~Expose the queries through the REST API and as an MCP tool.~~
+
+> **Acceptance.** ~~Receipts from several runs are queryable by merchant and date range, and similarity
+> search returns a near-duplicate receipt.~~ Merchant/date queries are complete. Embeddings, similarity
+> search, duplicate detection, and an MCP receipt-query tool are explicitly retained as future work.
 
 ### Phase 9: Course template path
 
@@ -335,6 +355,7 @@ Three items do not belong to any phase and start immediately, because they eithe
 - Shared execution core covering agent, tool, and workflow modes (Phase 9)
 - Linux container image and Azure deployment for both instances
 - REST API and Web UI with streaming chat and upload-and-run panels
-- Azure SQL receipt store with vector similarity search
+- Azure SQL store for durable conversations, users, structured receipts, and line items
+- Future work: receipt embeddings, vector similarity, and duplicate detection
 
 > Omitted from v1.0: "MCP server exposing the full tool surface, workflows, agent chat, and run lookup" and "Durable agent conversations on Blob and Table, so a session survives the replica that started it". Agent chat is no longer an MCP capability, and the store backing conversations is chosen in Phase 7 rather than named here.

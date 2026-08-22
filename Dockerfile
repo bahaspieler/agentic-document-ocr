@@ -5,6 +5,14 @@
 #
 # See Documentation/CONTAINER.md for the roles and the native dependency reasoning.
 
+FROM node:20-bookworm-slim AS web-build
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
@@ -23,6 +31,7 @@ RUN dotnet publish OcrAgent.Mcp/OcrAgent.Mcp.csproj -c Release -r linux-x64 --se
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim AS runtime
+WORKDIR /app/mcp
 
 # Bookworm is deliberate. The Tesseract wrapper asks for library names that hard-code Leptonica
 # 1.82.0, and bookworm is where Tesseract 5.3 and Leptonica 1.82.0 meet; Ubuntu 22.04 is still on
@@ -40,6 +49,7 @@ RUN apt-get update \
 
 COPY --from=build /out/mcp /app/mcp
 COPY --from=build /out/cli /app/cli
+COPY --from=web-build /web/dist /app/mcp/wwwroot
 COPY entrypoint.sh /app/entrypoint.sh
 
 # Two naming mismatches sit between Debian and the OCR wrapper. It loads Tesseract and Leptonica by

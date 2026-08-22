@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using System.ComponentModel;
 using System.Diagnostics;
 using OcrAgent.Runs;
+using OcrAgent.Sql;
 using OcrAgent.Storage;
 using OcrAgent.Inference;
 using OcrAgent.Ocr;
@@ -37,7 +38,11 @@ public sealed class PluginAggregator : IDisposable
     /// <param name="store">Image store shared by all plugins.</param>
     /// <param name="config">Optional configuration (e.g. Tesseract paths).</param>
     /// <param name="runStore">When set, every tool call and workflow run leaves a record.</param>
-    public PluginAggregator(IImageStore store, IConfiguration? config = null, IRunStore? runStore = null)
+    public PluginAggregator(
+        IImageStore store,
+        IConfiguration? config = null,
+        IRunStore? runStore = null,
+        IReceiptStore? receiptStore = null)
     {
         _store = store;
         _plugins = new List<IImageProcessingTool>();
@@ -83,7 +88,7 @@ public sealed class PluginAggregator : IDisposable
 
         // Receipt extraction (rule-based)
         RegisterPlugin(new Extraction.ParseReceiptPlugin(store));
-        RegisterPlugin(new Extraction.ExportReceiptPlugin(store));
+        RegisterPlugin(new Extraction.ExportReceiptPlugin(store, receiptStore));
 
         var definitionsPath = Path.Combine(AppContext.BaseDirectory, "Workflows", "Definitions");
         var catalog = new WorkflowCatalog(definitionsPath);

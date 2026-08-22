@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using OcrAgent.Hosting;
 using OcrAgent.Plugins;
 using OcrAgent.Runs;
+using OcrAgent.Sql;
 using OcrAgent.Storage;
 using OcrAgent.Workflows.Tools;
 
@@ -20,11 +22,23 @@ public sealed class OcrAgentToolHost : IDisposable
     /// <summary>Backing image store shared by every tool.</summary>
     public IImageStore Store => _engine.Store;
 
+    /// <summary>Merged appsettings and OCR_ environment configuration.</summary>
+    public IConfiguration Configuration => _engine.Configuration;
+
     /// <summary>Registry of all preprocessing, OCR, extraction, and workflow tools.</summary>
     public PluginAggregator Aggregator => _engine.Aggregator;
 
     /// <summary>Store that receives one record per job executed through this host.</summary>
     public IRunStore RunStore => _engine.RunStore;
+
+    /// <summary>Durable conversation store used by REST.</summary>
+    public ISessionStore SessionStore => _engine.SessionStore;
+
+    /// <summary>Authenticated user profiles used by REST.</summary>
+    public IUserStore UserStore => _engine.UserStore;
+
+    /// <summary>Structured receipt query store used by REST.</summary>
+    public IReceiptStore ReceiptStore => _engine.ReceiptStore;
 
     private OcrAgentToolHost(EngineHost engine)
     {

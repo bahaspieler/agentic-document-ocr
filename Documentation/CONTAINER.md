@@ -1,6 +1,6 @@
 # Container
 
-One image carries the engine, its native OCR stack, the assets, and both entry points. The role is
+One image carries the React Web UI, REST/MCP host, engine, native OCR stack, assets, and both entry points. The role is
 chosen when the container starts. `MyCloudProject` is not in the image yet; it joins as a third role
 with the queue path.
 
@@ -15,12 +15,13 @@ without it would be an ARM image that the host refuses. On ARM the flag means QE
 costs build time; `receipt_extract_v3` still finishes in about 12 seconds under it. The deploy script
 avoids that by building in Azure Container Registry, which is already amd64.
 
-The build context is the project root, because the image needs both projects.
+The build context is the project root. A Node 20 stage runs `npm ci` and builds `web/`; its static
+output is copied into `/app/mcp/wwwroot` after the .NET publish.
 
 ## Roles
 
 ```bash
-docker run -p 5290:8080 --env-file .env ocr-agent               # MCP server, the default
+docker run -p 5290:8080 --env-file .env ocr-agent               # Web UI + REST + MCP, the default
 docker run --rm --env-file .env ocr-agent cli runs list         # any CLI command
 docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 CTR001
 ```
@@ -31,8 +32,9 @@ server the default. `worker` is recognised and exits with a message until the qu
 The two roles publish to `/app/mcp` and `/app/cli` and each carries its own copy of the tessdata and
 the U2-Net model, about 27 MB duplicated. Sharing one copy between them was not worth the coupling.
 
-The server role keeps nothing per client between requests: it runs the MCP transport in stateless mode,
-and everything a run leaves behind goes to Blob Storage and the run table, which every container shares.
+The MCP half of the server keeps nothing per client between requests. REST conversation payloads,
+idempotency rows, users, and structured receipts live in SQL; run artifacts and records live in Blob
+and Table. Every replica therefore reads the same durable state.
 So several containers of this image can serve the same set of clients with no routing rules, and one
 container answering a request whose predecessor went elsewhere is not a special case. An image reference
 produced inside a workflow names the run directory it was written to, which is what lets a second

@@ -17,9 +17,15 @@ public static class RunScope
 {
     private static readonly AsyncLocal<int> Depth = new();
     private static readonly AsyncLocal<string?> Conversation = new();
+    private static readonly AsyncLocal<string?> SourceContext = new();
+    private static string _defaultSource = "cli";
 
     /// <summary>Entry point that started this process: <c>cli</c>, <c>chat</c>, or <c>mcp</c>.</summary>
-    public static string Source { get; set; } = "cli";
+    public static string Source
+    {
+        get => SourceContext.Value ?? _defaultSource;
+        set => _defaultSource = value;
+    }
 
     /// <summary>True when a job is already running on this execution path.</summary>
     public static bool IsInsideJob => Depth.Value > 0;
@@ -51,6 +57,14 @@ public static class RunScope
         var previous = Conversation.Value;
         Conversation.Value = conversationId;
         return new Handle(() => Conversation.Value = previous);
+    }
+
+    /// <summary>Attributes jobs on the current async request to a particular entry point.</summary>
+    public static IDisposable EnterSource(string source)
+    {
+        var previous = SourceContext.Value;
+        SourceContext.Value = source;
+        return new Handle(() => SourceContext.Value = previous);
     }
 
     private sealed class Handle : IDisposable

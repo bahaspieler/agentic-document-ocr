@@ -59,15 +59,17 @@ require_az() {
 
 # Resource names. Overridable from .env; defaults match the team's existing group.
 apply_azure_defaults() {
-    # The MCP server serves every request statelessly, so a second replica is free to answer a
-    # request whose predecessor went elsewhere. The ceiling is what lets Container Apps use that;
-    # the floor stays 0, so an idle deployment still costs nothing.
+    # The MCP server serves every request statelessly, while REST conversation state lives in SQL,
+    # so any replica can answer any request.
     : "${AZURE_MAX_REPLICAS:=3}"
     : "${AZURE_RESOURCE_GROUP:=RG_Hidden_Layer}"
     : "${AZURE_ACR_NAME:=acrhiddenlayerocr}"
     : "${AZURE_CONTAINER_APP_NAME:=ca-ocr-agent}"
     : "${AZURE_CONTAINER_APP_ENV:=cae-ocr-agent}"
     : "${AZURE_IMAGE_NAME:=ocr-agent}"
+    : "${AZURE_SQL_SERVER_NAME:=sql-hidden-layer-ocr}"
+    : "${AZURE_SQL_DATABASE_NAME:=ocr-agent}"
+    : "${AZURE_SQL_ADMIN_USER:=ocradmin}"
     : "${OCR_Storage__AzureBlob__ContainerName:=ocr-images}"
     : "${OCR_Runs__Provider:=azuretable}"
     : "${OCR_Runs__TableName:=OcrRuns}"
@@ -156,6 +158,20 @@ container_env_vars() {
         "OCR_Runs__TableName=${OCR_Runs__TableName}"
         "OCR_Runs__GroupId=${OCR_Runs__GroupId}"
     )
+    if [ -n "${OCR_Sql__ConnectionString:-}" ]; then
+        vars+=(
+            "OCR_Sql__Enabled=true"
+            "OCR_Sql__ConnectionString=secretref:sql-cs"
+        )
+    fi
+    if [ -n "${OCR_Auth__ClientId:-}" ]; then
+        vars+=(
+            "OCR_Auth__Enabled=true"
+            "OCR_Auth__ClientId=${OCR_Auth__ClientId}"
+            "OCR_Auth__TenantId=${OCR_Auth__TenantId:-common}"
+            "OCR_Auth__Instance=${OCR_Auth__Instance:-https://login.microsoftonline.com/}"
+        )
+    fi
     if [ -n "${OCR_Storage__AzureBlob__BlobPrefix:-}" ]; then
         vars+=("OCR_Storage__AzureBlob__BlobPrefix=${OCR_Storage__AzureBlob__BlobPrefix}")
     fi

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
+using OcrAgent.Agent;
 using OcrAgent.Workflows.Engine;
 using OcrAgent.Workflows.Model;
 
@@ -83,7 +84,7 @@ public sealed class WorkflowTool
         [Description(WorkflowIdDescription)] string workflowId,
         [Description(ImageReferenceDescription)] string imageReference,
         [Description(OverridesJsonDescription)] string? overridesJson = null)
-        => RunWorkflowWithProgress(workflowId, imageReference, overridesJson, progress: null);
+        => RunWorkflowWithProgress(workflowId, imageReference, overridesJson, AgentProgressScope.Current);
 
     /// <summary>
     /// Runs a workflow, reporting each completed step, and returns the same summary as

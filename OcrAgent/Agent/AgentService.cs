@@ -3,6 +3,7 @@ using Microsoft.Extensions.AI;
 using OcrAgent.Runs;
 using OpenAI;
 using System.ClientModel;
+using System.Text.Json;
 
 namespace OcrAgent.Agent;
 
@@ -55,6 +56,29 @@ public sealed class AgentService
         return new AgentConversation(conversationId ?? RunId.NewId(), session);
     }
 
+    /// <summary>Restores a conversation persisted by <see cref="SerializeConversationAsync"/>.</summary>
+    public async Task<AgentConversation> RestoreConversationAsync(
+        string conversationId,
+        string payloadJson,
+        CancellationToken cancellationToken = default)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var session = await _agent.DeserializeSessionAsync(
+            document.RootElement.Clone(), cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new AgentConversation(conversationId, session);
+    }
+
+    /// <summary>Serializes all model-side conversation state for durable storage.</summary>
+    public async Task<string> SerializeConversationAsync(
+        AgentConversation conversation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(conversation);
+        var element = await _agent.SerializeSessionAsync(
+            conversation.Session, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return element.GetRawText();
+    }
+
     /// <summary>
     /// Runs one turn: the model reads the message, calls whichever tools it needs, and answers.
     /// </summary>
@@ -74,6 +98,24 @@ public sealed class AgentService
         AgentConversation? conversation = null,
         Action<string>? onUpdate = null,
         CancellationToken cancellationToken = default)
+        => await RunTurnStreamingAsync(
+            message,
+            conversation,
+            onUpdate is null
+                ? null
+                : streamEvent =>
+                {
+                    if (streamEvent.Type == "token" && streamEvent.Text is not null)
+                        onUpdate(streamEvent.Text);
+                },
+            cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Runs a turn while exposing model text, tool calls, and workflow steps.</summary>
+    public async Task<string> RunTurnStreamingAsync(
+        string message,
+        AgentConversation? conversation = null,
+        Action<AgentStreamEvent>? onEvent = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentException("Message is required.", nameof(message));
@@ -84,18 +126,27 @@ public sealed class AgentService
         // Tools are invoked below this line, and the recorder reads the id from here rather than
         // taking it as an argument, which is what keeps every tool and workflow signature unchanged.
         using var scope = RunScope.EnterConversation(conversation.Id);
+        using var progressScope = AgentProgressScope.Enter(onEvent);
 
         var answer = new System.Text.StringBuilder();
+        var announcedCalls = new HashSet<string>(StringComparer.Ordinal);
 
         await foreach (var update in _agent
             .RunStreamingAsync(message, conversation.Session, cancellationToken: cancellationToken)
             .ConfigureAwait(false))
         {
+            foreach (var functionCall in update.Contents.OfType<FunctionCallContent>())
+            {
+                var key = $"{functionCall.CallId}:{functionCall.Name}";
+                if (announcedCalls.Add(key))
+                    onEvent?.Invoke(AgentStreamEvent.Tool(functionCall.Name));
+            }
+
             if (string.IsNullOrEmpty(update.Text))
                 continue;
 
             answer.Append(update.Text);
-            onUpdate?.Invoke(update.Text);
+            onEvent?.Invoke(AgentStreamEvent.Token(update.Text));
         }
 
         return answer.ToString();

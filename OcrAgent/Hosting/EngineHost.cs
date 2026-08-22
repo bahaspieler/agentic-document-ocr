@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using OcrAgent.Configuration;
 using OcrAgent.Plugins;
 using OcrAgent.Runs;
+using OcrAgent.Sql;
 using OcrAgent.Storage;
 
 namespace OcrAgent.Hosting;
@@ -33,18 +34,31 @@ public sealed class EngineHost : IDisposable
     /// <summary>Store that receives one record per job executed through this host.</summary>
     public IRunStore RunStore { get; }
 
+    /// <summary>Durable web conversations, disabled when SQL is not configured.</summary>
+    public ISessionStore SessionStore { get; }
+
+    /// <summary>Microsoft identity profiles, disabled when SQL is not configured.</summary>
+    public IUserStore UserStore { get; }
+
+    /// <summary>Queryable structured receipt data, disabled when SQL is not configured.</summary>
+    public IReceiptStore ReceiptStore { get; }
+
     private EngineHost(
         IConfiguration configuration,
         string configBasePath,
         IImageStore store,
         PluginAggregator aggregator,
-        IRunStore runStore)
+        IRunStore runStore,
+        SqlStores sqlStores)
     {
         Configuration = configuration;
         ConfigBasePath = configBasePath;
         Store = store;
         Aggregator = aggregator;
         RunStore = runStore;
+        SessionStore = sqlStores.Sessions;
+        UserStore = sqlStores.Users;
+        ReceiptStore = sqlStores.Receipts;
     }
 
     /// <summary>
@@ -79,11 +93,13 @@ public sealed class EngineHost : IDisposable
 
         var runStore = RunStoreFactory.CreateOrNull(
             config.GetSection("Runs").Get<RunStoreConfiguration>() ?? new RunStoreConfiguration());
+        var sqlStores = SqlStoreFactory.CreateOrNull(
+            config.GetSection("Sql").Get<SqlConfiguration>() ?? new SqlConfiguration());
 
         var store = StorageFactory.Create(storageConfig);
-        var aggregator = new PluginAggregator(store, config, runStore);
+        var aggregator = new PluginAggregator(store, config, runStore, sqlStores.Receipts);
 
-        return new EngineHost(config, configBasePath, store, aggregator, runStore);
+        return new EngineHost(config, configBasePath, store, aggregator, runStore, sqlStores);
     }
 
     /// <summary>Disposes the aggregator and the image store.</summary>

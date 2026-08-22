@@ -18,7 +18,9 @@ All of these live in `RG_Hidden_Layer`. The scripts never create or delete the g
 | Storage account | `sthiddenlayerocr` | Blob images and Table run records; never touched by teardown |
 | Container registry | `acrhiddenlayerocr` | Holds the `ocr-agent` image |
 | Container Apps environment | `cae-ocr-agent` | Hosts the app |
-| Container app | `ca-ocr-agent` | MCP server, HTTPS, scales 0 to `AZURE_MAX_REPLICAS` |
+| Container app | `ca-ocr-agent` | Web UI, REST API, and MCP server over one HTTPS origin |
+| Azure SQL server | `sql-hidden-layer-ocr` | Logical server for Phase 7 data |
+| Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, and line items |
 
 Names are overridable in `.env` (`AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`,
 `AZURE_CONTAINER_APP_NAME`, `AZURE_CONTAINER_APP_ENV`), as is the replica ceiling
@@ -37,25 +39,23 @@ be moved, so the fix is a teardown and a fresh deploy, and the app gets a new ho
 ```bash
 scripts/azure-deploy.sh            # create or update; builds linux/amd64 in ACR
 scripts/azure-deploy.sh --skip-build
-scripts/azure-start.sh             # activate, min 0
-scripts/azure-start.sh --warm      # activate, min 1
+scripts/azure-sql.sh               # create/update the Basic SQL database
+scripts/azure-start.sh             # activate and keep min 1
 scripts/azure-stop.sh              # deactivate the revision; URL stays
 scripts/azure-teardown.sh          # delete app, environment, registry only
 scripts/verify-deployment.sh       # upload a receipt, run MCP checks, assert Blob and Table
+scripts/verify-webui.py URL        # verify SPA, REST, SQL, SSE, idempotency, concurrency
 ```
 
 `azure-deploy.sh` is idempotent. It registers the `Microsoft.App` and `Microsoft.OperationalInsights`
 providers if needed, creates the registry and environment when they are missing, builds a uniquely
 tagged image with `az acr build --platform linux/amd64`, and creates or updates the app. The storage
-connection string is a Container Apps secret, not an image layer. `OPENAI_API_KEY` is stored the same
-way when it is present in `.env`.
+connection string is a Container Apps secret, not an image layer. The model and SQL connection
+strings are stored the same way as `openai-key` and `sql-cs`.
 
-The replica range is min 0 / max `AZURE_MAX_REPLICAS`, which defaults to 3. The MCP server runs in
-stateless mode, so nothing a client sent earlier has to still be held by the replica that answers the
-next request, and Container Apps is free to spread load without session affinity. Anything a run needs
-to outlive the request that started it is in Blob Storage or the run table, both shared by every
-replica. Scale to zero is the idle default, so a ceiling above one costs nothing while the app is
-unused; `--warm` keeps one replica running for a demo.
+The replica range is min 1 / max `AZURE_MAX_REPLICAS`, which defaults to 3, so the submitted Web UI
+stays live. MCP is stateless and REST conversations live in SQL, so Container Apps can spread requests
+without session affinity. Blob, Table, and SQL are shared by every replica.
 
 Container Apps will not accept `max-replicas 0`, so `azure-stop.sh` deactivates the active revision
 instead. That stops compute without deleting the app or its hostname.
@@ -101,15 +101,18 @@ returns nothing.
 servers.
 
 Connecting an MCP client by hand is covered in [MCP_CLIENT_TESTING.md](MCP_CLIENT_TESTING.md).
+The Phase 7 verifier additionally creates an anonymous durable conversation, checks token and tool
+events over SSE, restores a second turn from SQL, retries an idempotency key, and races two turns to
+prove optimistic concurrency leaves one consistent history.
 
 ## Cost
 
-Idle cost is the registry and the Container Apps environment, not a running replica. After a demo:
+Phase 7 intentionally keeps one replica and the Basic SQL database live. To stop compute after a demo:
 
 ```bash
 scripts/azure-stop.sh
 ```
 
-Start it again with `scripts/azure-start.sh --warm` shortly before you need it. Do not delete the
+Start it again with `scripts/azure-start.sh` shortly before you need it. Do not delete the
 resource group or the storage account to save money; those hold the graded artifacts and the run
 history.

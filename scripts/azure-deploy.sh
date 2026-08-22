@@ -146,6 +146,9 @@ SECRET_ARGS=(storage-cs="$AZURE_STORAGE_CONNECTION_STRING")
 if [ -n "${OPENAI_API_KEY:-}" ]; then
     SECRET_ARGS+=(openai-key="$OPENAI_API_KEY")
 fi
+if [ -n "${OCR_Sql__ConnectionString:-}" ]; then
+    SECRET_ARGS+=(sql-cs="$OCR_Sql__ConnectionString")
+fi
 
 ENV_VARS=()
 while IFS= read -r line; do
@@ -165,7 +168,7 @@ if ! az containerapp show --name "$AZURE_CONTAINER_APP_NAME" --resource-group "$
         --ingress external \
         --cpu 1.0 \
         --memory 2.0Gi \
-        --min-replicas 0 \
+        --min-replicas 1 \
         --max-replicas "$AZURE_MAX_REPLICAS" \
         --registry-server "$ACR_LOGIN_SERVER" \
         --registry-username "$ACR_USERNAME" \
@@ -193,7 +196,7 @@ else
         --image "$IMAGE" \
         --cpu 1.0 \
         --memory 2.0Gi \
-        --min-replicas 0 \
+        --min-replicas 1 \
         --max-replicas "$AZURE_MAX_REPLICAS" \
         --set-env-vars "${ENV_VARS[@]}" \
         --output none

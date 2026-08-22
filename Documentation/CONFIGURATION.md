@@ -42,6 +42,11 @@ Keys prefixed `OCR_` override `appsettings.json`, with a double underscore per n
 | `OCR_Runs__Provider` | Run records: `none` to disable, or `azuretable` |
 | `OCR_Runs__TableName` | Table holding run records (default `OcrRuns`) |
 | `OCR_Runs__GroupId` | Partition key for this deployment's records |
+| `OCR_Sql__Enabled` | Enables durable conversations, users, and receipt indexing |
+| `OCR_Sql__ConnectionString` | Encrypted Azure SQL connection string (Container Apps secret `sql-cs`) |
+| `OCR_Auth__Enabled` | Enables optional Microsoft bearer-token validation |
+| `OCR_Auth__ClientId` | Entra application/client ID shared by the SPA and API |
+| `OCR_Auth__TenantId` | `common` for organizational and personal Microsoft accounts |
 
 Neither store needs its connection string set explicitly. When `Storage:AzureBlob:ConnectionString`
 or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CONNECTION_STRING`.
@@ -50,8 +55,8 @@ or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CO
 
 `Storage` selects and configures the image store; see the provider classes in `OcrAgent/Storage/`.
 `Runs` selects and configures the run store and is documented in [RUN_RECORDS.md](RUN_RECORDS.md).
-Both ship with safe defaults: `Storage:Provider` is `local` and `Runs:Provider` is `none`, so a
-checkout with no `.env` still runs.
+`Sql` configures durable conversations, user profiles, and structured receipt data. `Auth` configures
+Microsoft Identity Web. All optional services ship disabled, so a checkout with no `.env` still runs.
 
 ## Scripts
 
@@ -59,6 +64,7 @@ checkout with no `.env` still runs.
 first, and relies on `.env` for everything else. `OCR_PORT`, `OCR_CONTAINER`, and `OCR_BLOB_PREFIX`
 override per invocation.
 
-Azure hosting is documented in [DEPLOYMENT.md](DEPLOYMENT.md). The four `scripts/azure-*.sh` helpers
+`scripts/azure-sql.sh` creates the Basic database and writes its generated credentials only to the
+gitignored `.env`. Azure hosting is documented in [DEPLOYMENT.md](DEPLOYMENT.md). The Azure helpers
 read the same `.env` file. Pointing an MCP client at either server is covered in
 [MCP_CLIENT_TESTING.md](MCP_CLIENT_TESTING.md).

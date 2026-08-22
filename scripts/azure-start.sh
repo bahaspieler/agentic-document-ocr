@@ -4,8 +4,7 @@
 # revision and setting the replica range.
 #
 # Usage:
-#   scripts/azure-start.sh          # min 0 (scale to zero when idle)
-#   scripts/azure-start.sh --warm   # min 1 (keep a replica up for a demo)
+#   scripts/azure-start.sh
 #
 # The maximum comes from AZURE_MAX_REPLICAS and is above one: the server holds no per-client state
 # between requests, so scaling out needs no session affinity.
@@ -16,10 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_azure_common.sh
 source "$SCRIPT_DIR/_azure_common.sh"
 
-WARM=0
 for arg in "$@"; do
     case "$arg" in
-        --warm) WARM=1 ;;
         -h|--help)
             sed -n '2,12p' "$0" | sed 's/^# \?//'
             exit 0
@@ -69,11 +66,8 @@ else
         --output none
 fi
 
-MIN=0
+MIN=1
 MAX="$AZURE_MAX_REPLICAS"
-if [ "$WARM" -eq 1 ]; then
-    MIN=1
-fi
 
 echo "[INFO] Scaling $AZURE_CONTAINER_APP_NAME to min=$MIN max=$MAX"
 az containerapp update \
@@ -89,8 +83,4 @@ FQDN="$(app_fqdn)"
 if [ -n "$FQDN" ]; then
     echo "     Endpoint: https://$FQDN/"
 fi
-if [ "$WARM" -eq 1 ]; then
-    echo "     A replica will stay running until you call scripts/azure-stop.sh"
-else
-    echo "     The first request after idle will cold-start a replica"
-fi
+echo "     A replica will stay running until you call scripts/azure-stop.sh"
