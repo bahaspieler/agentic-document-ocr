@@ -14,8 +14,14 @@ public static class AgentProgressScope
         var previous = CurrentProgress.Value;
         CurrentProgress.Value = onEvent is null
             ? null
-            : new Progress<WorkflowStepProgress>(step => onEvent(AgentStreamEvent.WorkflowStep(step)));
+            : new InlineProgress(step => onEvent(AgentStreamEvent.WorkflowStep(step)));
         return new Handle(() => CurrentProgress.Value = previous);
+    }
+
+    private sealed class InlineProgress(Action<WorkflowStepProgress> report)
+        : IProgress<WorkflowStepProgress>
+    {
+        public void Report(WorkflowStepProgress value) => report(value);
     }
 
     private sealed class Handle(Action dispose) : IDisposable

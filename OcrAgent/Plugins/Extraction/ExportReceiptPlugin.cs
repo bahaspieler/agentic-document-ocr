@@ -39,8 +39,11 @@ public sealed class ExportReceiptPlugin : IImageProcessingTool
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         }) ?? throw new InvalidOperationException("Failed to deserialize receipt data.");
 
-        if (string.IsNullOrEmpty(receipt.ReceiptId))
-            receipt.ReceiptId = imageReference;
+        // Run ids are URL-safe, stable, and unique. Image references can contain scope separators,
+        // which makes them unsuitable as REST resource ids.
+        receipt.ReceiptId = !string.IsNullOrEmpty(runId)
+            ? runId
+            : ImageReferenceGenerator.Split(imageReference).Leaf;
 
         if (!string.IsNullOrEmpty(workflowId))
             receipt.Source.WorkflowId = workflowId;

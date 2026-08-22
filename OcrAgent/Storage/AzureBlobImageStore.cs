@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
 namespace OcrAgent.Storage;
 
@@ -23,7 +24,7 @@ namespace OcrAgent.Storage;
 /// reachable by the reference alone rather than only while the scope that produced it is still active.
 /// </para>
 /// </remarks>
-public sealed class AzureBlobImageStore : IImageStore, IDisposable
+public sealed class AzureBlobImageStore : IImageStore, IArtifactStore, IDisposable
 {
     private static readonly string[] SupportedExtensions = { "png", "jpg", "jpeg", "tif", "tiff", "bmp" };
     private static readonly JsonSerializerOptions MetadataJsonOptions = new() { WriteIndented = true };
@@ -197,6 +198,40 @@ public sealed class AzureBlobImageStore : IImageStore, IDisposable
     /// are uploaded when the scope changes or the store is disposed.
     /// </remarks>
     public string GetWriteDirectory() => EnsureStagingDirectory(_activeSubdirectory.Value);
+
+    public async Task<IReadOnlyList<StoredArtifact>> ListAsync(
+        string scope, CancellationToken cancellationToken = default)
+    {
+        var normalizedScope = ArtifactPath.Scope(scope);
+        Flush(normalizedScope);
+        var prefix = BlobName(normalizedScope, "");
+        var artifacts = new List<StoredArtifact>();
+        await foreach (var blob in _container.GetBlobsAsync(
+            BlobTraits.None, BlobStates.None, prefix, cancellationToken))
+        {
+            var name = blob.Name[prefix.Length..];
+            if (name.Length == 0 || name.Contains('/'))
+                continue;
+            artifacts.Add(new StoredArtifact(
+                name, blob.Properties.ContentLength ?? 0, blob.Properties.LastModified));
+        }
+        return artifacts.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public async Task<Stream> OpenReadAsync(
+        string scope, string name, CancellationToken cancellationToken = default)
+    {
+        var normalizedScope = ArtifactPath.Scope(scope);
+        var normalizedName = ArtifactPath.Name(name);
+        Flush(normalizedScope);
+        var blob = _container.GetBlobClient(BlobName(normalizedScope, normalizedName));
+        if (!await blob.ExistsAsync(cancellationToken).ConfigureAwait(false))
+            throw new FileNotFoundException("Artifact not found.", normalizedName);
+        var stream = new MemoryStream();
+        await blob.DownloadToAsync(stream, cancellationToken).ConfigureAwait(false);
+        stream.Position = 0;
+        return stream;
+    }
 
     /// <summary>Uploads files in a scope's staging directory that this store did not write itself.</summary>
     /// <param name="scope">Subdirectory to flush, or null for the cache root.</param>

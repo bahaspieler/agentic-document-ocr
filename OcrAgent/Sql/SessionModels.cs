@@ -19,7 +19,10 @@ public sealed record ConversationTurnRecord(
     int TurnIndex,
     DateTime CreatedUtc,
     string UserMessage,
-    string Answer);
+    string Answer,
+    string EventsJson,
+    string RunIdsJson,
+    string AttachmentsJson);
 
 /// <summary>Signals that another request updated the conversation before this one saved.</summary>
 public sealed class ConversationConcurrencyException(string conversationId)

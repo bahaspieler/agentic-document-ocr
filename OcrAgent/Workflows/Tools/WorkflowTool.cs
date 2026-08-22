@@ -99,7 +99,8 @@ public sealed class WorkflowTool
         string workflowId, string imageReference, string? overridesJson,
         IProgress<WorkflowStepProgress>? progress)
     {
-        var result = await _runner.RunAsync(workflowId, imageReference, overridesJson, progress);
+        var result = await RunWorkflowDetailed(
+            workflowId, imageReference, overridesJson, progress).ConfigureAwait(false);
 
         if (!result.Success)
             return $"Workflow failed: {result.Error}";
@@ -128,6 +129,14 @@ public sealed class WorkflowTool
 
         return summary;
     }
+
+    /// <summary>Runs a workflow and returns its typed result for REST and other application hosts.</summary>
+    public Task<WorkflowRunResult> RunWorkflowDetailed(
+        string workflowId,
+        string imageReference,
+        string? overridesJson = null,
+        IProgress<WorkflowStepProgress>? progress = null) =>
+        _runner.RunAsync(workflowId, imageReference, overridesJson, progress);
 
     /// <summary>
     /// Builds <see cref="AITool"/> instances for listing and running workflows.

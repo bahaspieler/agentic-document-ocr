@@ -11,7 +11,7 @@ public static class ReceiptValidator
 
     /// <summary>Runs all checks and computes <see cref="ValidationInfo.ValidationScore"/>.</summary>
     /// <param name="receipt">Data after extraction.</param>
-    /// <returns>Checks, warnings, score, and IsValid ≥ 50.</returns>
+    /// <returns>Checks, warnings, normalized consistency score, and review state.</returns>
     public static ValidationInfo Validate(ReceiptData receipt)
     {
         var info = new ValidationInfo { IsValid = true };
@@ -23,34 +23,61 @@ public static class ReceiptValidator
         CheckRequiredFields(receipt, info);
 
         info.ValidationScore = ComputeScore(receipt, info);
-        info.IsValid = info.ValidationScore >= 50;
+        info.ReviewStatus = ComputeReviewStatus(receipt, info);
+        info.IsValid = info.ReviewStatus == "checks_passed";
 
         return info;
     }
 
-    /// <summary>Weighted sum from fields, checks, items, and warnings.</summary>
+    /// <summary>Normalized completeness and consistency score. It is not OCR confidence.</summary>
     private static int ComputeScore(ReceiptData receipt, ValidationInfo info)
     {
         int score = 0;
 
-        // Required fields present (up to 60 points)
-        if (receipt.Totals.Total.HasValue) score += 20;
-        if (!string.IsNullOrEmpty(receipt.Merchant?.Name)) score += 20;
-        if (!string.IsNullOrEmpty(receipt.Transaction?.DateTime)) score += 20;
+        // Required fields present (up to 30 points).
+        if (receipt.Totals.Total.HasValue) score += 10;
+        if (!string.IsNullOrEmpty(receipt.Merchant?.Name)) score += 10;
+        if (!string.IsNullOrEmpty(receipt.Transaction?.DateTime)) score += 10;
 
-        // Mathematical checks passed (up to 45 points)
-        foreach (var check in info.Checks)
-        {
-            if (check.Passed) score += 15;
-        }
+        // Applicable mathematical checks share 50 points. Missing checks do not create phantom
+        // points, and a failed critical check can never be hidden by clamping an oversized total.
+        if (info.Checks.Count > 0)
+            score += (int)Math.Round(50d * info.Checks.Count(check => check.Passed) / info.Checks.Count);
 
-        // Has line items
+        // Has line items (10 points).
         if (receipt.Items.Count > 0) score += 10;
 
-        // No-warnings bonus
-        if (info.Warnings.Count == 0) score += 5;
+        // No-warnings bonus (10 points).
+        if (info.Warnings.Count == 0) score += 10;
+
+        bool criticalFailure = info.Checks.Any(check =>
+            !check.Passed &&
+            check.Name is "subtotal_plus_tax_equals_total" or "items_sum_equals_subtotal");
+        if (criticalFailure)
+            score = Math.Min(score, 69);
 
         return Math.Clamp(score, 0, 100);
+    }
+
+    private static string ComputeReviewStatus(ReceiptData receipt, ValidationInfo info)
+    {
+        bool criticalFailure = info.Checks.Any(check =>
+            !check.Passed &&
+            check.Name is "subtotal_plus_tax_equals_total" or "items_sum_equals_subtotal");
+        double fieldConfidence = new[]
+        {
+            receipt.Merchant.NameConfidence.Value,
+            receipt.Transaction.DateTimeConfidence.Value,
+            receipt.Totals.TotalConfidence.Value,
+        }.Average();
+
+        return !criticalFailure &&
+               info.Warnings.Count == 0 &&
+               info.ValidationScore >= 85 &&
+               receipt.Source.OcrConfidence >= 70 &&
+               fieldConfidence >= 0.55
+            ? "checks_passed"
+            : "needs_review";
     }
 
     /// <summary>Compares subtotal + tax to total within tolerance.</summary>

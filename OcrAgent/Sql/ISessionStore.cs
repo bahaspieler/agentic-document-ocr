@@ -29,5 +29,8 @@ public interface ISessionStore
         string idempotencyKey,
         string userMessage,
         string answer,
+        string eventsJson,
+        string runIdsJson,
+        string attachmentsJson,
         CancellationToken cancellationToken = default);
 }

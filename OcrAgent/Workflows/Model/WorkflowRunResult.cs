@@ -26,6 +26,9 @@ public sealed class WorkflowRunResult
     /// <summary>Non-image result text (e.g. OCR JSON) when different from <see cref="OutputImageRef"/>.</summary>
     public string? FinalOutput { get; set; }
 
+    /// <summary>Structured receipt id when the final output is a receipt export.</summary>
+    public string? ReceiptId { get; set; }
+
     /// <summary>String snapshot of workflow context after the run.</summary>
     public Dictionary<string, string> Context { get; set; } = new();
 
@@ -40,4 +43,7 @@ public sealed class WorkflowRunResult
 
     /// <summary>Error message when <see cref="Success"/> is false.</summary>
     public string? Error { get; set; }
+
+    /// <summary>Stable REST-friendly status label.</summary>
+    public string Status => Success ? "succeeded" : "failed";
 }

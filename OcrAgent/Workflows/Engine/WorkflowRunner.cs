@@ -158,11 +158,20 @@ public sealed class WorkflowRunner
                             Error = step.Error,
                         });
                         progress?.Report(new WorkflowStepProgress(
-                            completed, stepCount, step.StepId, step.ToolName, step.Success));
+                            completed,
+                            stepCount,
+                            step.StepId,
+                            step.ToolName,
+                            step.Success,
+                            step.InputRef,
+                            step.OutputRef,
+                            step.DurationMs,
+                            step.Error));
                         break;
 
                     case WorkflowOutputEvent output:
                         result.FinalOutput = output.Data?.ToString() ?? "";
+                        result.ReceiptId = TryGetReceiptId(result.FinalOutput);
                         break;
 
                     case WorkflowErrorEvent error:
@@ -178,6 +187,8 @@ public sealed class WorkflowRunner
                                     ?? "";
 
             result.Context = new Dictionary<string, string>(context.GetAll());
+            if (result.Context.TryGetValue("receiptJson", out var receiptJson))
+                result.ReceiptId ??= TryGetReceiptId(receiptJson);
             result.Success = string.IsNullOrEmpty(result.Error);
         }
         catch (Exception ex)
@@ -195,6 +206,23 @@ public sealed class WorkflowRunner
         return result;
     }
 
+    private static string? TryGetReceiptId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value[0] != '{')
+            return null;
+        try
+        {
+            using var json = JsonDocument.Parse(value);
+            return json.RootElement.TryGetProperty("receiptId", out var id)
+                ? id.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Maps a finished run onto the record written to the run store.</summary>
     /// <param name="result">Outcome of the run.</param>
     /// <param name="imageRef">Reference the run started from.</param>
@@ -208,6 +236,7 @@ public sealed class WorkflowRunner
         Version = result.Version,
         Source = RunScope.Source,
         ConversationId = RunScope.ConversationId,
+        TurnIdempotencyKey = RunScope.TurnIdempotencyKey,
         InputReference = imageRef,
         OutputReference = result.OutputImageRef,
         OutputDirectory = result.OutputDirectory,

@@ -40,7 +40,8 @@ public sealed class NullSessionStore : ISessionStore
 
     public Task<ConversationRecord> SaveTurnAsync(
         ConversationRecord expected, string payloadJson, string idempotencyKey,
-        string userMessage, string answer, CancellationToken cancellationToken = default) =>
+        string userMessage, string answer, string eventsJson, string runIdsJson,
+        string attachmentsJson, CancellationToken cancellationToken = default) =>
         Task.FromException<ConversationRecord>(Disabled());
 
     private static InvalidOperationException Disabled() =>

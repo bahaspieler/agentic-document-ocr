@@ -14,7 +14,7 @@ namespace OcrAgent.Storage;
 /// reachable by the reference alone rather than only while the scope that produced it is still active.
 /// </para>
 /// </remarks>
-public sealed class LocalFileImageStore : IImageStore
+public sealed class LocalFileImageStore : IImageStore, IArtifactStore
 {
     private static readonly string[] SupportedExtensions = { "png", "jpg", "jpeg", "tif", "tiff", "bmp" };
 
@@ -42,6 +42,33 @@ public sealed class LocalFileImageStore : IImageStore
 
     /// <inheritdoc />
     public string GetWriteDirectory() => ScopeDirectory(_activeSubdirectory.Value);
+
+    public Task<IReadOnlyList<StoredArtifact>> ListAsync(
+        string scope, CancellationToken cancellationToken = default)
+    {
+        var directory = ScopeDirectory(ArtifactPath.Scope(scope));
+        IReadOnlyList<StoredArtifact> result = Directory.Exists(directory)
+            ? Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Select(path =>
+                {
+                    var info = new FileInfo(path);
+                    return new StoredArtifact(info.Name, info.Length, info.LastWriteTimeUtc);
+                })
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+        return Task.FromResult(result);
+    }
+
+    public Task<Stream> OpenReadAsync(
+        string scope, string name, CancellationToken cancellationToken = default)
+    {
+        var path = Path.Combine(
+            ScopeDirectory(ArtifactPath.Scope(scope)), ArtifactPath.Name(name));
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Artifact not found.", name);
+        return Task.FromResult<Stream>(File.OpenRead(path));
+    }
 
     /// <inheritdoc />
     public bool Exists(string reference) => TryResolve(reference, out _, out _, out _);

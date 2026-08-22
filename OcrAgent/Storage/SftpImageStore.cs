@@ -16,7 +16,7 @@ namespace OcrAgent.Storage;
 /// reachable by the reference alone rather than only while the scope that produced it is still active.
 /// </para>
 /// </remarks>
-public sealed class SftpImageStore : IImageStore, IDisposable
+public sealed class SftpImageStore : IImageStore, IArtifactStore, IDisposable
 {
     private readonly SftpStorageConfig _config;
     private readonly SftpConnectionPool _connectionPool;
@@ -393,6 +393,41 @@ public sealed class SftpImageStore : IImageStore, IDisposable
 
     /// <inheritdoc />
     public string GetWriteDirectory() => ScopeBasePath(_activeSubdirectory.Value);
+
+    public Task<IReadOnlyList<StoredArtifact>> ListAsync(
+        string scope, CancellationToken cancellationToken = default)
+    {
+        var normalizedScope = ArtifactPath.Scope(scope);
+        return ExecuteWithRetryAsync<IReadOnlyList<StoredArtifact>>(async client =>
+        {
+            var directory = ScopeBasePath(normalizedScope);
+            if (!await Task.Run(() => client.Exists(directory), cancellationToken))
+                return [];
+            return (await Task.Run(() => client.ListDirectory(directory), cancellationToken))
+                .Where(item => !item.IsDirectory && item.Name is not "." and not "..")
+                .Select(item => new StoredArtifact(
+                    item.Name, item.Attributes.Size, item.Attributes.LastWriteTimeUtc))
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        });
+    }
+
+    public Task<Stream> OpenReadAsync(
+        string scope, string name, CancellationToken cancellationToken = default)
+    {
+        var normalizedScope = ArtifactPath.Scope(scope);
+        var normalizedName = ArtifactPath.Name(name);
+        return ExecuteWithRetryAsync<Stream>(async client =>
+        {
+            var path = RemotePath(normalizedScope, normalizedName);
+            if (!await Task.Run(() => client.Exists(path), cancellationToken))
+                throw new FileNotFoundException("Artifact not found.", normalizedName);
+            var stream = new MemoryStream();
+            await Task.Run(() => client.DownloadFile(path, stream), cancellationToken);
+            stream.Position = 0;
+            return stream;
+        });
+    }
 
     #endregion
 

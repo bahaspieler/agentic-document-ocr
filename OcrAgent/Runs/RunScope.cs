@@ -17,6 +17,7 @@ public static class RunScope
 {
     private static readonly AsyncLocal<int> Depth = new();
     private static readonly AsyncLocal<string?> Conversation = new();
+    private static readonly AsyncLocal<string?> Turn = new();
     private static readonly AsyncLocal<string?> SourceContext = new();
     private static string _defaultSource = "cli";
 
@@ -40,6 +41,7 @@ public static class RunScope
     /// no conversation, and leaves this null.
     /// </remarks>
     public static string? ConversationId => Conversation.Value;
+    public static string? TurnIdempotencyKey => Turn.Value;
 
     /// <summary>Marks the start of a job and restores the previous state when disposed.</summary>
     /// <returns>Handle to dispose at the end of the job.</returns>
@@ -65,6 +67,14 @@ public static class RunScope
         var previous = SourceContext.Value;
         SourceContext.Value = source;
         return new Handle(() => SourceContext.Value = previous);
+    }
+
+    /// <summary>Labels runs with the exact durable turn attempt that produced them.</summary>
+    public static IDisposable EnterTurn(string idempotencyKey)
+    {
+        var previous = Turn.Value;
+        Turn.Value = idempotencyKey;
+        return new Handle(() => Turn.Value = previous);
     }
 
     private sealed class Handle : IDisposable

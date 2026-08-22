@@ -21,7 +21,10 @@ internal static class RunRecording
     public static async Task SafeSaveAsync(IRunStore? store, RunRecord record)
     {
         if (store == null || !store.IsEnabled)
+        {
+            RunEventScope.Report(record);
             return;
+        }
 
         try
         {
@@ -30,6 +33,10 @@ internal static class RunRecording
         catch (Exception ex)
         {
             Debug.WriteLine($"[WARN] Could not record run {record.RunId}: {ex.Message}");
+        }
+        finally
+        {
+            RunEventScope.Report(record);
         }
     }
 

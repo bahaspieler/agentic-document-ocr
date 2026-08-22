@@ -19,4 +19,8 @@ public sealed record WorkflowStepProgress(
     int Total,
     string StepId,
     string ToolName,
-    bool Success);
+    bool Success,
+    string? InputReference = null,
+    string? OutputReference = null,
+    long DurationMs = 0,
+    string? Error = null);

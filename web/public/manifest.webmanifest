@@ -1,0 +1,12 @@
+{
+  "name": "Hidden Layer OCR Studio",
+  "short_name": "OCR Studio",
+  "description": "AI-assisted OCR preprocessing and receipt review.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f4",
+  "theme_color": "#123f32",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

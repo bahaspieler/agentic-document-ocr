@@ -127,6 +127,8 @@ public sealed class AgentService
         // taking it as an argument, which is what keeps every tool and workflow signature unchanged.
         using var scope = RunScope.EnterConversation(conversation.Id);
         using var progressScope = AgentProgressScope.Enter(onEvent);
+        using var runEvents = RunEventScope.Enter(
+            run => onEvent?.Invoke(AgentStreamEvent.RunCompleted(run)));
 
         var answer = new System.Text.StringBuilder();
         var announcedCalls = new HashSet<string>(StringComparer.Ordinal);

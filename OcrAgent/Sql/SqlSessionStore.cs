@@ -141,6 +141,9 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
         string idempotencyKey,
         string userMessage,
         string answer,
+        string eventsJson,
+        string runIdsJson,
+        string attachmentsJson,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);
@@ -171,8 +174,10 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
 
         const string insertSql = """
             INSERT INTO dbo.ConversationTurns
-                (ConversationId, IdempotencyKey, TurnIndex, CreatedUtc, UserMessage, Answer)
-            VALUES (@conversationId, @idempotencyKey, @turnIndex, @now, @userMessage, @answer);
+                (ConversationId, IdempotencyKey, TurnIndex, CreatedUtc, UserMessage, Answer,
+                 EventsJson, RunIdsJson, AttachmentsJson)
+            VALUES (@conversationId, @idempotencyKey, @turnIndex, @now, @userMessage, @answer,
+                    @eventsJson, @runIdsJson, @attachmentsJson);
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             insertSql,
@@ -183,7 +188,10 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
                 turnIndex = updated.TurnCount,
                 now,
                 userMessage,
-                answer
+                answer,
+                eventsJson,
+                runIdsJson,
+                attachmentsJson
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);

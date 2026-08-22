@@ -15,6 +15,10 @@ public sealed class ValidationInfo
     [JsonPropertyName("validationScore")]
     public int ValidationScore { get; set; }
 
+    /// <summary>Human-review state derived from consistency, OCR, and field confidence.</summary>
+    [JsonPropertyName("reviewStatus")]
+    public string ReviewStatus { get; set; } = "needs_review";
+
     /// <summary>Individual rule outcomes.</summary>
     [JsonPropertyName("checks")]
     public List<ValidationCheck> Checks { get; set; } = new();

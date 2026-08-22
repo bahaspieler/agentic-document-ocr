@@ -20,7 +20,7 @@ All of these live in `RG_Hidden_Layer`. The scripts never create or delete the g
 | Container Apps environment | `cae-ocr-agent` | Hosts the app |
 | Container app | `ca-ocr-agent` | Web UI, REST API, and MCP server over one HTTPS origin |
 | Azure SQL server | `sql-hidden-layer-ocr` | Logical server for Phase 7 data |
-| Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, and line items |
+| Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, line items, and correction revisions |
 
 Names are overridable in `.env` (`AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`,
 `AZURE_CONTAINER_APP_NAME`, `AZURE_CONTAINER_APP_ENV`), as is the replica ceiling
@@ -45,6 +45,7 @@ scripts/azure-stop.sh              # deactivate the revision; URL stays
 scripts/azure-teardown.sh          # delete app, environment, registry only
 scripts/verify-deployment.sh       # upload a receipt, run MCP checks, assert Blob and Table
 scripts/verify-webui.py URL        # verify SPA, REST, SQL, SSE, idempotency, concurrency
+scripts/verify-webui.py URL --image receipt.jpg  # also exercise attachments, artifacts, corrections
 ```
 
 `azure-deploy.sh` is idempotent. It registers the `Microsoft.App` and `Microsoft.OperationalInsights`
@@ -101,9 +102,11 @@ returns nothing.
 servers.
 
 Connecting an MCP client by hand is covered in [MCP_CLIENT_TESTING.md](MCP_CLIENT_TESTING.md).
-The Phase 7 verifier additionally creates an anonymous durable conversation, checks token and tool
-events over SSE, restores a second turn from SQL, retries an idempotency key, and races two turns to
-prove optimistic concurrency leaves one consistent history.
+The Web UI verifier additionally creates an anonymous durable conversation, checks token and tool
+events over SSE, verifies stored activity on reload, restores a second turn from SQL, retries an
+idempotency key, and races two turns to prove optimistic concurrency leaves one consistent history.
+With `--image`, it also verifies attachment persistence, structured workflow output, safe artifact
+download, receipt revision auditing, and corrected JSON/CSV exports.
 
 ## Cost
 

@@ -4,12 +4,7 @@ import { PublicClientApplication } from '@azure/msal-browser'
 import { MsalProvider } from '@azure/msal-react'
 import './index.css'
 import App from './App.tsx'
-
-export type RuntimeConfig = {
-  auth: { enabled: boolean; clientId: string; authority: string }
-  sqlEnabled: boolean
-  agentEnabled: boolean
-}
+import type { RuntimeConfig } from './api'
 
 async function bootstrap() {
   const runtimeConfig: RuntimeConfig = await fetch('/api/config')

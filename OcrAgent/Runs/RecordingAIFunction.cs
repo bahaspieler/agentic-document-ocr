@@ -72,6 +72,7 @@ internal sealed class RecordingAIFunction : DelegatingAIFunction
             Name = Name,
             Source = RunScope.Source,
             ConversationId = RunScope.ConversationId,
+            TurnIdempotencyKey = RunScope.TurnIdempotencyKey,
             InputReference = InputReferenceOf(arguments),
             StepCount = 1,
             StartTimeUtc = DateTimeOffset.UtcNow,

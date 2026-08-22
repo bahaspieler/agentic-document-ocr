@@ -41,6 +41,9 @@ public sealed class RunRecord
     /// </remarks>
     public string? ConversationId { get; set; }
 
+    /// <summary>Idempotency key of the exact REST turn attempt that produced the run.</summary>
+    public string? TurnIdempotencyKey { get; set; }
+
     /// <summary>Team or deployment the run belongs to; the table partition key.</summary>
     public string GroupId { get; set; } = "";
 
