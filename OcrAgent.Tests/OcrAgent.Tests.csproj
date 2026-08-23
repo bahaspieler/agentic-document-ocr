@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MyExperiment\MyExperiment.csproj" />
     <ProjectReference Include="..\OcrAgent\OcrAgent.csproj" />
   </ItemGroup>
 

@@ -42,7 +42,7 @@ internal sealed class RecordingAIFunction : DelegatingAIFunction
     }
 
     /// <summary>
-    /// Wraps a tool for recording, or returns it unchanged when its calls are not recorded.
+    /// Wraps a tool for recording and in-process run observation, even when persistence is disabled.
     /// </summary>
     /// <param name="inner">Tool to wrap.</param>
     /// <param name="runStore">Store that receives the records.</param>
@@ -50,7 +50,7 @@ internal sealed class RecordingAIFunction : DelegatingAIFunction
     /// <returns>The wrapped tool, or <paramref name="inner"/>.</returns>
     public static AIFunction Wrap(AIFunction inner, IRunStore? runStore, IImageStore? imageStore)
     {
-        if (runStore == null || !runStore.IsEnabled || NotRecorded.Contains(inner.Name))
+        if (runStore == null || NotRecorded.Contains(inner.Name))
             return inner;
 
         return new RecordingAIFunction(inner, runStore, imageStore);

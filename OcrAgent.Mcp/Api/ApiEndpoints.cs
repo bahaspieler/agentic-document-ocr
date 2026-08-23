@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.AI;
 using OcrAgent.Agent;
+using OcrAgent.Execution;
 using OcrAgent.Extraction.Models;
 using OcrAgent.Runs;
 using OcrAgent.Sql;
@@ -22,6 +23,13 @@ public static class ApiEndpoints
         AuthConfiguration auth)
     {
         var api = app.MapGroup("/api");
+        var executionCore = new ExecutionCore(
+            host.Aggregator,
+            host.Store,
+            host.RunStore,
+            host.ReceiptStore,
+            agentService);
+        var artifactDiscovery = new ArtifactDiscoveryService(host.Store);
 
         api.MapGet("/config", () => Results.Ok(new
         {
@@ -87,19 +95,12 @@ public static class ApiEndpoints
             {
                 if (string.IsNullOrWhiteSpace(request.ImageReference))
                     return Results.BadRequest(new { error = "imageReference is required for a workflow." });
-                var output = await host.Aggregator.Workflows.RunWorkflowDetailed(
-                    request.Name, request.ImageReference, request.OverridesJson);
-                if (host.ReceiptStore.IsEnabled)
-                {
-                    var receipts = await host.ReceiptStore.QueryAsync(top: 200);
-                    output.ReceiptId = receipts.FirstOrDefault(
-                        receipt => receipt.RunId == output.RunId)?.ReceiptId
-                        ?? output.ReceiptId;
-                }
-                var run = await host.RunStore.GetAsync(output.RunId, cancellationToken)
-                    ?? ToRunRecord(output, request.ConversationId);
-                var artifacts = await DescribeRunArtifactsAsync(
-                    host.Store, run, cancellationToken);
+                var workflowExecution = await executionCore.ExecuteAsync(
+                    ToExecutionRequest(request, ExecutionMode.Workflow),
+                    cancellationToken: cancellationToken);
+                var output = workflowExecution.Workflow!;
+                var run = workflowExecution.PrimaryRun ?? ToRunRecord(output, request.ConversationId);
+                var artifacts = workflowExecution.Artifacts;
                 if (!string.IsNullOrWhiteSpace(request.ConversationId))
                 {
                     await PersistJobTurnAsync(
@@ -116,24 +117,15 @@ public static class ApiEndpoints
             if (!request.Mode.Equals("tool", StringComparison.OrdinalIgnoreCase))
                 return Results.BadRequest(new { error = "mode must be 'tool' or 'workflow'." });
 
-            var function = host.Aggregator.GetAllTools()
+            if (!host.Aggregator.GetAllTools()
                 .OfType<AIFunction>()
-                .FirstOrDefault(candidate => candidate.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
-            if (function is null)
+                .Any(candidate => candidate.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase)))
                 return Results.NotFound(new { error = $"Tool '{request.Name}' was not found." });
 
-            var arguments = new AIFunctionArguments();
-            if (request.Arguments is not null)
-            {
-                foreach (var (name, value) in request.Arguments)
-                    arguments[name] = JsonSerializer.Deserialize<object?>(value.GetRawText());
-            }
-            if (!string.IsNullOrWhiteSpace(request.ImageReference) &&
-                !arguments.ContainsKey("imageReference"))
-                arguments["imageReference"] = request.ImageReference;
-
-            var result = await function.InvokeAsync(arguments);
-            return Results.Ok(new { output = result?.ToString() ?? "" });
+            var toolExecution = await executionCore.ExecuteAsync(
+                ToExecutionRequest(request, ExecutionMode.Tool),
+                cancellationToken: cancellationToken);
+            return Results.Ok(new { output = toolExecution.Output });
         });
 
         api.MapPost("/jobs/stream", async (
@@ -174,6 +166,7 @@ public static class ApiEndpoints
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
             var producer = ProduceWorkflowJobAsync(
                 host,
+                executionCore,
                 request,
                 GetUserId(principal),
                 channel.Writer,
@@ -249,8 +242,7 @@ public static class ApiEndpoints
                 host.SessionStore, run, conversationId, principal, cancellationToken);
             if (denied is not null)
                 return denied;
-            return Results.Ok(await DescribeRunArtifactsAsync(
-                host.Store, run, cancellationToken));
+            return Results.Ok(await artifactDiscovery.DiscoverAsync(run, cancellationToken));
         });
 
         api.MapGet("/runs/{runId}/artifacts/{name}", async (
@@ -274,7 +266,7 @@ public static class ApiEndpoints
                     return Results.NotFound();
                 return Results.File(
                     path,
-                    ContentTypeFor(path),
+                    ArtifactDiscoveryService.ContentTypeFor(path),
                     fileDownloadName: download == true ? Path.GetFileName(path) : null,
                     enableRangeProcessing: true);
             }
@@ -286,7 +278,7 @@ public static class ApiEndpoints
                     run.OutputDirectory, name, cancellationToken);
                 return Results.Stream(
                     stream,
-                    ContentTypeFor(name),
+                    ArtifactDiscoveryService.ContentTypeFor(name),
                     fileDownloadName: download == true ? name : null,
                     enableRangeProcessing: true);
             }
@@ -327,7 +319,7 @@ public static class ApiEndpoints
             var path = host.Store.GetImagePath(reference);
             return Results.File(
                 path,
-                ContentTypeFor(path),
+                ArtifactDiscoveryService.ContentTypeFor(path),
                 fileDownloadName: download == true ? Path.GetFileName(path) : null,
                 enableRangeProcessing: true);
         });
@@ -627,6 +619,7 @@ public static class ApiEndpoints
 
     private static async Task ProduceWorkflowJobAsync(
         OcrAgentToolHost host,
+        ExecutionCore executionCore,
         JobRequest request,
         string? userId,
         ChannelWriter<SseEnvelope> writer,
@@ -634,40 +627,19 @@ public static class ApiEndpoints
     {
         try
         {
-            using var source = RunScope.EnterSource("rest");
-            using var conversationScope = string.IsNullOrWhiteSpace(request.ConversationId)
-                ? null
-                : RunScope.EnterConversation(request.ConversationId);
             var activity = new List<AgentStreamEvent>();
-            var progress = new CallbackProgress<WorkflowStepProgress>(step =>
-            {
-                var progressEvent = AgentStreamEvent.WorkflowStep(step);
-                activity.Add(progressEvent);
-                writer.TryWrite(new SseEnvelope("step", progressEvent));
-            });
-            var output = await host.Aggregator.Workflows.RunWorkflowDetailed(
-                request.Name,
-                request.ImageReference!,
-                request.OverridesJson,
-                progress);
-            if (host.ReceiptStore.IsEnabled)
-            {
-                var receipts = await host.ReceiptStore.QueryAsync(top: 200, cancellationToken: cancellationToken);
-                output.ReceiptId = receipts.FirstOrDefault(
-                    receipt => receipt.RunId == output.RunId)?.ReceiptId
-                    ?? output.ReceiptId;
-            }
-            var run = await host.RunStore.GetAsync(output.RunId, cancellationToken)
-                ?? ToRunRecord(output, request.ConversationId);
-            var artifacts = await DescribeRunArtifactsAsync(
-                host.Store, run, cancellationToken);
-
-            var runEvent = AgentStreamEvent.RunCompleted(run);
-            writer.TryWrite(new SseEnvelope("run", runEvent));
-            foreach (var artifact in artifacts)
-                writer.TryWrite(new SseEnvelope(
-                    "artifact",
-                    AgentStreamEvent.ArtifactAvailable(artifact)));
+            var execution = await executionCore.ExecuteAsync(
+                ToExecutionRequest(request, ExecutionMode.Workflow),
+                streamEvent =>
+                {
+                    if (streamEvent.Type == "step")
+                        activity.Add(streamEvent);
+                    writer.TryWrite(new SseEnvelope(streamEvent.Type, streamEvent));
+                },
+                cancellationToken);
+            var output = execution.Workflow!;
+            var run = execution.PrimaryRun ?? ToRunRecord(output, request.ConversationId);
+            var artifacts = execution.Artifacts;
 
             if (!string.IsNullOrWhiteSpace(request.ConversationId))
             {
@@ -734,13 +706,14 @@ public static class ApiEndpoints
                     writer.TryWrite(new SseEnvelope(streamEvent.Type, streamEvent));
                 },
                 cancellationToken);
+            var artifactDiscovery = new ArtifactDiscoveryService(host.Store);
             foreach (var run in activity
                 .Where(item => item.Run is not null)
                 .Select(item => item.Run!)
                 .ToArray())
             {
-                foreach (var artifact in await DescribeRunArtifactsAsync(
-                    host.Store, run, cancellationToken))
+                foreach (var artifact in await artifactDiscovery.DiscoverAsync(
+                    run, cancellationToken))
                 {
                     var artifactEvent = AgentStreamEvent.ArtifactAvailable(artifact);
                     activity.Add(artifactEvent);
@@ -1086,45 +1059,16 @@ public static class ApiEndpoints
         return $"{message.Trim()}\n\nAttached images available to tools:\n{references}".Trim();
     }
 
-    private static async Task<IReadOnlyList<AgentArtifact>> DescribeArtifactsAsync(
-        IImageStore store, string runId, string? scope,
-        CancellationToken cancellationToken = default)
-    {
-        if (store is not IArtifactStore artifacts || string.IsNullOrWhiteSpace(scope))
-            return [];
-        var rows = await artifacts.ListAsync(scope, cancellationToken);
-        return rows.Select(item => new AgentArtifact(
-            runId,
-            item.Name,
-            item.SizeBytes,
-            item.LastModifiedUtc,
-            ContentTypeFor(item.Name),
-            IsPreviewable(item.Name))).ToArray();
-    }
-
-    private static async Task<IReadOnlyList<AgentArtifact>> DescribeRunArtifactsAsync(
-        IImageStore store, RunRecord run, CancellationToken cancellationToken)
-    {
-        var artifacts = await DescribeArtifactsAsync(
-            store, run.RunId, run.OutputDirectory, cancellationToken);
-        if (artifacts.Count > 0 ||
-            string.IsNullOrWhiteSpace(run.OutputReference) ||
-            !store.Exists(run.OutputReference))
-            return artifacts;
-
-        var path = store.GetImagePath(run.OutputReference);
-        var file = new FileInfo(path);
-        return
-        [
-            new AgentArtifact(
-                run.RunId,
-                file.Name,
-                file.Exists ? file.Length : 0,
-                file.Exists ? file.LastWriteTimeUtc : null,
-                ContentTypeFor(path),
-                IsPreviewable(path))
-        ];
-    }
+    private static ExecutionRequest ToExecutionRequest(
+        JobRequest request, ExecutionMode mode) => new(
+        mode,
+        request.Name,
+        request.ImageReference,
+        request.OverridesJson,
+        request.Arguments,
+        request.UserMessage,
+        Source: "rest",
+        ConversationId: request.ConversationId);
 
     private static async Task WriteSseAsync(
         HttpResponse response,
@@ -1137,32 +1081,8 @@ public static class ApiEndpoints
         await response.Body.FlushAsync(cancellationToken);
     }
 
-    private static string ContentTypeFor(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".bmp" => "image/bmp",
-            ".tif" or ".tiff" => "image/tiff",
-            ".json" => "application/json",
-            ".csv" => "text/csv",
-            ".txt" or ".log" => "text/plain",
-            _ => "application/octet-stream"
-        };
-
-    private static bool IsPreviewable(string path) =>
-        ContentTypeFor(path).StartsWith("image/", StringComparison.Ordinal) ||
-        ContentTypeFor(path) is "application/json" or "text/csv" or "text/plain";
-
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
     private sealed record SseEnvelope(string Event, object Data);
-
-    private sealed class CallbackProgress<T>(Action<T> callback) : IProgress<T>
-    {
-        public void Report(T value) => callback(value);
-    }
 }
