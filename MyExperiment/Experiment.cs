@@ -1,53 +1,220 @@
-﻿using Azure.Storage.Queues;
-using Azure.Storage.Queues.Models;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MyCloudProject.Common;
+using OcrAgent.Agent;
+using OcrAgent.Execution;
+using OcrAgent.Hosting;
+using OcrAgent.Runs;
+using OcrAgent.Storage;
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
-using System.Threading;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MyExperiment
 {
-    /// <summary>
-    /// This class implements the ML experiment that will run in the cloud. This is refactored code from my SE project.
-    /// </summary>
+    /// <summary>Runs one natural-language queue command through the existing OCR agent.</summary>
     public class Experiment : IExperiment
     {
-        private IStorageProvider storageProvider;
+        private readonly IQueueCommandStorage _storage;
+        private readonly ILogger _logger;
+        private readonly MyConfig _config;
 
-        private ILogger logger;
-
-        private MyConfig config;
-
-        public Experiment(IConfigurationSection configSection, IStorageProvider storageProvider, ILogger log)
+        public Experiment(
+            IConfigurationSection configSection,
+            IStorageProvider storageProvider,
+            ILogger log)
         {
-            this.storageProvider = storageProvider;
-            this.logger = log;
-
-            config = new MyConfig();
-            configSection.Bind(config);
+            _storage = storageProvider as IQueueCommandStorage
+                ?? throw new ArgumentException(
+                    "The queue worker requires command-aware storage.", nameof(storageProvider));
+            _logger = log;
+            _config = new MyConfig();
+            configSection.Bind(_config);
         }
 
-
-        public Task<IExperimentResult> RunAsync(string inputData)
+        public async Task<IExperimentResult> RunAsync(string inputData)
         {
-            // TODO read file
+            var started = DateTime.UtcNow;
+            var fallbackRunId = RunId.NewId();
+            var commandDirectory = ParentOf(inputData);
+            var command = (await File.ReadAllTextAsync(inputData).ConfigureAwait(false)).Trim();
 
-            // YOU START HERE WITH YOUR SE EXPERIMENT!!!!
+            if (string.IsNullOrWhiteSpace(command))
+                return Failure(fallbackRunId, command, started, "The queue command is empty.",
+                    [commandDirectory]);
 
-            ExperimentResult res = new ExperimentResult(this.config.GroupId, null);
+            _logger?.LogInformation("Processing queue command: {Command}", command);
 
-            // logging, logging and logging
+            ResolvedQueueImage image;
+            try
+            {
+                image = await _storage.ResolveImageAsync(command).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger?.LogWarning(ex, "Could not resolve an image for queue command {Command}.", command);
+                return Failure(fallbackRunId, command, started, ex.Message, [commandDirectory]);
+            }
 
-            res.StartTimeUtc = DateTime.UtcNow;
+            var cleanup = new List<string> { commandDirectory, ParentOf(image.LocalPath) };
+            using var host = EngineHost.Create("queue");
+            host.Store.SetActiveSubdirectory($"queue/{fallbackRunId}");
 
-            // Run your experiment code here.
+            try
+            {
+                var imageReference = host.Store.SaveFromFile(image.LocalPath, image.Reference);
+                var agent = AgentService.Create(host.Aggregator.GetAllTools());
+                var execution = await new ExecutionCore(host, agent).ExecuteAsync(
+                    new ExecutionRequest(
+                        ExecutionMode.Agent,
+                        Message:
+                            $"{command}\n\nUse the exact image reference `{imageReference}` " +
+                            "for every tool or workflow call.",
+                        Source: "queue")).ConfigureAwait(false);
 
-            return Task.FromResult<IExperimentResult>(res); // TODO...
+                var runId = execution.PrimaryRun?.RunId ?? fallbackRunId;
+                var outputDirectory = Path.Combine(
+                    Path.GetFullPath(_config.WorkRoot), "outputs", runId);
+                cleanup.Add(outputDirectory);
+                var files = await CollectArtifactsAsync(
+                    host.Store, execution, outputDirectory).ConfigureAwait(false);
+
+                var ended = DateTime.UtcNow;
+                var success = execution.Runs.All(run => run.Success) &&
+                              !string.IsNullOrWhiteSpace(execution.Output);
+                var error = execution.Runs.FirstOrDefault(run => !run.Success)?.Error;
+
+                _logger?.LogInformation(
+                    "Queue command completed as run {RunId}; success={Success}, artifacts={ArtifactCount}.",
+                    runId, success, files.Count);
+
+                return new ExperimentResult(_config.GroupId, runId)
+                {
+                    ExperimentId = runId,
+                    Name = command,
+                    Description = "Natural-language queue command",
+                    Mode = "agent",
+                    Status = success ? "succeeded" : "failed",
+                    Success = success,
+                    Error = error,
+                    Answer = execution.Output,
+                    PrimaryRunId = execution.PrimaryRun?.RunId,
+                    InputFileUrl = image.BlobName,
+                    StartTimeUtc = started,
+                    EndTimeUtc = ended,
+                    Duration = ended - started,
+                    DurationSec = Math.Max(0, (long)Math.Ceiling((ended - started).TotalSeconds)),
+                    LocalOutputFiles = files.ToArray(),
+                    CleanupDirectories = cleanup.ToArray()
+                };
+            }
+            catch (Exception ex) when (
+                ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
+            {
+                _logger?.LogError(ex, "Queue command failed: {Command}", command);
+                return Failure(
+                    fallbackRunId, command, started, ex.Message, cleanup.ToArray(), image.BlobName);
+            }
+            finally
+            {
+                host.Store.SetActiveSubdirectory(null);
+            }
+        }
+
+        private async Task<List<string>> CollectArtifactsAsync(
+            IImageStore store,
+            ExecutionResult execution,
+            string outputDirectory)
+        {
+            Directory.CreateDirectory(outputDirectory);
+            var files = new List<string>();
+
+            foreach (var artifact in execution.Artifacts)
+            {
+                var run = execution.Runs.FirstOrDefault(item => item.RunId == artifact.RunId);
+                if (run is null)
+                    continue;
+                if (run.Mode.Equals("tool", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(run.OutputReference) &&
+                    !Path.GetFileNameWithoutExtension(artifact.Name).Equals(
+                        Path.GetFileName(run.OutputReference),
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var path = UniquePath(outputDirectory, SafeFileName(artifact.Name));
+                if (!string.IsNullOrWhiteSpace(run.OutputDirectory) &&
+                    store is IArtifactStore artifactStore)
+                {
+                    await using var source = await artifactStore
+                        .OpenReadAsync(run.OutputDirectory, artifact.Name)
+                        .ConfigureAwait(false);
+                    await using var target = File.Create(path);
+                    await source.CopyToAsync(target).ConfigureAwait(false);
+                }
+                else if (!string.IsNullOrWhiteSpace(run.OutputReference) &&
+                         store.Exists(run.OutputReference))
+                {
+                    File.Copy(store.GetImagePath(run.OutputReference), path);
+                }
+                else
+                {
+                    continue;
+                }
+                files.Add(path);
+            }
+
+            return files;
+        }
+
+        private ExperimentResult Failure(
+            string runId,
+            string command,
+            DateTime started,
+            string error,
+            string[] cleanup,
+            string imageBlob = "")
+        {
+            var ended = DateTime.UtcNow;
+            return new ExperimentResult(_config.GroupId, runId)
+            {
+                ExperimentId = runId,
+                Name = command,
+                Description = "Natural-language queue command",
+                Mode = "agent",
+                Status = "failed",
+                Success = false,
+                Error = error,
+                InputFileUrl = imageBlob,
+                StartTimeUtc = started,
+                EndTimeUtc = ended,
+                Duration = ended - started,
+                DurationSec = Math.Max(0, (long)Math.Ceiling((ended - started).TotalSeconds)),
+                CleanupDirectories = cleanup
+            };
+        }
+
+        private static string ParentOf(string path) =>
+            Path.GetDirectoryName(Path.GetFullPath(path)) ?? Path.GetFullPath(".");
+
+        private static string SafeFileName(string value)
+        {
+            var name = Path.GetFileName(value.Replace('\\', '/'));
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                name = name.Replace(invalid, '_');
+            return string.IsNullOrWhiteSpace(name) ? "artifact.bin" : name;
+        }
+
+        private static string UniquePath(string directory, string name)
+        {
+            var path = Path.Combine(directory, name);
+            return !File.Exists(path)
+                ? path
+                : Path.Combine(
+                    directory,
+                    $"{Path.GetFileNameWithoutExtension(name)}-{Guid.NewGuid():N}" +
+                    Path.GetExtension(name));
         }
     }
 }
