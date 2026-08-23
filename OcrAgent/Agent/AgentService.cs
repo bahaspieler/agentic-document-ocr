@@ -110,22 +110,41 @@ public sealed class AgentService
                 },
             cancellationToken).ConfigureAwait(false);
 
+    /// <summary>
+    /// Runs an isolated agent request without assigning its tool calls to a durable conversation.
+    /// </summary>
+    public Task<string> RunOneShotAsync(
+        string message,
+        Action<AgentStreamEvent>? onEvent = null,
+        CancellationToken cancellationToken = default) =>
+        RunStreamingCoreAsync(message, conversation: null, onEvent, cancellationToken);
+
     /// <summary>Runs a turn while exposing model text, tool calls, and workflow steps.</summary>
     public async Task<string> RunTurnStreamingAsync(
         string message,
         AgentConversation? conversation = null,
         Action<AgentStreamEvent>? onEvent = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await RunStreamingCoreAsync(message, conversation, onEvent, cancellationToken)
+            .ConfigureAwait(false);
+
+    private async Task<string> RunStreamingCoreAsync(
+        string message,
+        AgentConversation? conversation,
+        Action<AgentStreamEvent>? onEvent,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentException("Message is required.", nameof(message));
 
-        conversation ??= await StartConversationAsync(cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var session = conversation?.Session ??
+            await _agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
         // Tools are invoked below this line, and the recorder reads the id from here rather than
         // taking it as an argument, which is what keeps every tool and workflow signature unchanged.
-        using var scope = RunScope.EnterConversation(conversation.Id);
+        using var scope = conversation is null
+            ? null
+            : RunScope.EnterConversation(conversation.Id);
         using var progressScope = AgentProgressScope.Enter(onEvent);
         using var runEvents = RunEventScope.Enter(
             run => onEvent?.Invoke(AgentStreamEvent.RunCompleted(run)));
@@ -134,7 +153,7 @@ public sealed class AgentService
         var announcedCalls = new HashSet<string>(StringComparer.Ordinal);
 
         await foreach (var update in _agent
-            .RunStreamingAsync(message, conversation.Session, cancellationToken: cancellationToken)
+            .RunStreamingAsync(message, session, cancellationToken: cancellationToken)
             .ConfigureAwait(false))
         {
             foreach (var functionCall in update.Contents.OfType<FunctionCallContent>())
