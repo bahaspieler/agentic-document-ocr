@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Text;
-
-namespace MyExperiment
+﻿namespace MyExperiment
 {
     /// <summary>
     /// This is the class which describe the project configuration.
@@ -36,6 +31,16 @@ namespace MyExperiment
         /// Set here the name of your group.
         /// </summary>
         public string GroupId { get; set; }
+
+        /// <summary>Root for temporary command, image, and output files.</summary>
+        public string WorkRoot { get; set; } =
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hidden-layer-worker");
+
+        /// <summary>How long a received queue message remains hidden while a job executes.</summary>
+        public int MessageVisibilityTimeoutSeconds { get; set; } = 900;
+
+        /// <summary>Whether configured queue/blob/table resources may be created when absent.</summary>
+        public bool EnsureStorageResources { get; set; } = true;
 
     }
 }
