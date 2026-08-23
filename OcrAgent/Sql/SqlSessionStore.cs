@@ -151,6 +151,8 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
         await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
+        // The rowversion check and turn insert commit together, so concurrent requests cannot
+        // overwrite a newer serialized model session.
         const string updateSql = """
             UPDATE dbo.Conversations
             SET PayloadJson = @payloadJson,

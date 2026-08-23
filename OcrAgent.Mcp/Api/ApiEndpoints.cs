@@ -14,8 +14,14 @@ using OcrAgent.Workflows.Model;
 
 namespace OcrAgent.Mcp.Api;
 
+/// <summary>Maps REST, SSE, conversation, run-history, and receipt endpoints.</summary>
 public static class ApiEndpoints
 {
+    /// <summary>Maps the OCR API onto the serving application.</summary>
+    /// <param name="app">ASP.NET Core application receiving the routes.</param>
+    /// <param name="host">Shared OCR tools and persistence stores.</param>
+    /// <param name="agentService">Agent service, or null when model access is unavailable.</param>
+    /// <param name="auth">Optional Microsoft Entra configuration.</param>
     public static void MapOcrApi(
         this WebApplication app,
         OcrAgentToolHost host,
@@ -23,6 +29,7 @@ public static class ApiEndpoints
         AuthConfiguration auth)
     {
         var api = app.MapGroup("/api");
+        var logger = app.Logger;
         var executionCore = new ExecutionCore(
             host.Aggregator,
             host.Store,
@@ -45,6 +52,7 @@ public static class ApiEndpoints
                 ?? "gpt-4o-mini"
         }));
 
+        // Uploads use bearer tokens rather than cookies, so antiforgery tokens do not apply.
         api.MapPost("/images", async (HttpRequest request, CancellationToken cancellationToken) =>
         {
             if (!request.HasFormContentType)
@@ -169,6 +177,7 @@ public static class ApiEndpoints
                 executionCore,
                 request,
                 GetUserId(principal),
+                logger,
                 channel.Writer,
                 cancellationToken);
             await foreach (var envelope in channel.Reader.ReadAllAsync(cancellationToken))
@@ -591,6 +600,10 @@ public static class ApiEndpoints
                 conversationId, idempotencyKey, cancellationToken);
             if (previousTurn is not null)
             {
+                // A repeated key replays the stored SSE transcript without another model call.
+                logger.LogInformation(
+                    "Replaying completed turn for conversation {ConversationId}.",
+                    conversationId);
                 foreach (var activity in DeserializeEvents(previousTurn.EventsJson))
                     await WriteSseAsync(context.Response, activity.Type, activity, cancellationToken);
                 await WriteSseAsync(context.Response, "token",
@@ -609,7 +622,7 @@ public static class ApiEndpoints
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
             var producer = ProduceTurnAsync(
                 host, agentService, stored, request, idempotencyKey,
-                channel.Writer, cancellationToken);
+                logger, channel.Writer, cancellationToken);
 
             await foreach (var envelope in channel.Reader.ReadAllAsync(cancellationToken))
                 await WriteSseAsync(context.Response, envelope.Event, envelope.Data, cancellationToken);
@@ -622,6 +635,7 @@ public static class ApiEndpoints
         ExecutionCore executionCore,
         JobRequest request,
         string? userId,
+        ILogger logger,
         ChannelWriter<SseEnvelope> writer,
         CancellationToken cancellationToken)
     {
@@ -655,9 +669,19 @@ public static class ApiEndpoints
             writer.TryWrite(new SseEnvelope(
                 "done",
                 new { result = output, artifacts }));
+            logger.LogInformation(
+                "Streaming workflow {WorkflowName} completed as run {RunId} with {ArtifactCount} artifacts.",
+                request.Name,
+                run.RunId,
+                artifacts.Count);
         }
         catch (Exception ex)
         {
+            logger.LogError(
+                ex,
+                "Streaming workflow {WorkflowName} failed for conversation {ConversationId}.",
+                request.Name,
+                request.ConversationId);
             writer.TryWrite(new SseEnvelope(
                 "error",
                 new { message = ex.Message }));
@@ -674,6 +698,7 @@ public static class ApiEndpoints
         ConversationRecord stored,
         ChatMessageRequest request,
         string idempotencyKey,
+        ILogger logger,
         ChannelWriter<SseEnvelope> writer,
         CancellationToken cancellationToken)
     {
@@ -738,9 +763,17 @@ public static class ApiEndpoints
                 JsonSerializer.Serialize(attachments, JsonOptions),
                 cancellationToken);
             writer.TryWrite(new SseEnvelope("done", new { answer, runIds, replayed = false }));
+            logger.LogInformation(
+                "Conversation {ConversationId} completed a turn with {RunCount} runs.",
+                stored.Id,
+                runIds.Length);
         }
         catch (ConversationConcurrencyException exception)
         {
+            logger.LogWarning(
+                exception,
+                "Conversation {ConversationId} rejected a concurrent turn.",
+                stored.Id);
             writer.TryWrite(new SseEnvelope("error", new
             {
                 code = "conversation_conflict",
@@ -749,6 +782,10 @@ public static class ApiEndpoints
         }
         catch (Exception exception)
         {
+            logger.LogError(
+                exception,
+                "Conversation {ConversationId} failed to complete a turn.",
+                stored.Id);
             writer.TryWrite(new SseEnvelope("error", new
             {
                 code = "turn_failed",
@@ -829,6 +866,7 @@ public static class ApiEndpoints
         }
         catch (ConversationConcurrencyException)
         {
+            // Refresh the rowversion once when another request updated the conversation first.
             var refreshed = await sessions.GetAsync(stored.Id, cancellationToken);
             if (refreshed is null)
                 throw;
@@ -868,6 +906,8 @@ public static class ApiEndpoints
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
+        // Anonymous conversations use the conversation id as possession proof.
+        // Owned conversations require the matching authenticated user.
         if (string.IsNullOrWhiteSpace(run.ConversationId))
             return null;
         if (!sessions.IsEnabled)
@@ -918,6 +958,7 @@ public static class ApiEndpoints
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
+        // Unlinked rows are public; linked rows follow the conversation ownership rule.
         if (string.IsNullOrWhiteSpace(linkedConversationId))
             return true;
         if (!sessions.IsEnabled)
@@ -974,6 +1015,7 @@ public static class ApiEndpoints
 
     private static string Csv(string value)
     {
+        // Prefix formula-like values before a spreadsheet opens the generated CSV.
         var safe = value.TrimStart() is { Length: > 0 } trimmed &&
                    trimmed[0] is '=' or '+' or '-' or '@'
             ? "'" + value

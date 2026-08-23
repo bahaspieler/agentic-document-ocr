@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -21,14 +20,14 @@
       Microsoft.Agents.AI.Workflows.Generators is deliberately absent. It writes routing tables for
       executors that declare their handlers with attributes; ours build theirs in ConfigureProtocol
       instead, so it emitted nothing here. It is also compiled against a newer Roslyn than the
-      .NET 8 SDK image carries, so inside the container it failed to load and said so as a warning
+      older SDK images carried, so inside the container it failed to load and said so as a warning
       on every release build, which is a bad thing to have to explain away in a build log.
     -->
     <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.18.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.2" />
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
-    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />

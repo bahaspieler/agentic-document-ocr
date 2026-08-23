@@ -35,15 +35,23 @@ if (useStdio)
         .WithTools(tools)
         .WithPrompts(prompts);
 
-    await builder.Build().RunAsync();
+    using var app = builder.Build();
+    app.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("OcrAgent.Mcp")
+        .LogInformation(
+            "Starting MCP stdio host with {ToolCount} tools and {PromptCount} prompts.",
+            tools.Length,
+            prompts.Length);
+    await app.RunAsync();
 }
 else
 {
     var builder = WebApplication.CreateBuilder(args);
     var auth = toolHost.Configuration.GetSection("Auth").Get<AuthConfiguration>()
         ?? new AuthConfiguration();
+    var authConfigured = auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId);
 
-    if (auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId))
+    if (authConfigured)
     {
         builder.Configuration["Auth:Instance"] = auth.Instance;
         builder.Configuration["Auth:TenantId"] = auth.TenantId;
@@ -64,7 +72,7 @@ else
         .WithPrompts(prompts);
 
     var app = builder.Build();
-    if (auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId))
+    if (authConfigured)
     {
         app.UseAuthentication();
         app.UseAuthorization();
@@ -73,6 +81,25 @@ else
     AgentService? agentService = null;
     if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY")))
         agentService = AgentService.Create(toolHost.Aggregator.GetAllTools());
+
+    app.Logger.LogInformation(
+        "Starting OCR serving host. Storage={StorageProvider}, run store enabled={RunStoreEnabled}, " +
+        "SQL enabled={SqlEnabled}, authentication enabled={AuthEnabled}, agent enabled={AgentEnabled}.",
+        toolHost.Store.GetType().Name,
+        toolHost.RunStore.IsEnabled,
+        toolHost.SessionStore.IsEnabled,
+        authConfigured,
+        agentService is not null);
+    if (auth.Enabled && !authConfigured)
+    {
+        app.Logger.LogWarning(
+            "Authentication was requested but Auth:ClientId is empty; API authentication is disabled.");
+    }
+    if (agentService is null)
+    {
+        app.Logger.LogWarning(
+            "OPENAI_API_KEY is not configured; agent conversation endpoints are disabled.");
+    }
 
     app.UseDefaultFiles();
     app.UseStaticFiles();

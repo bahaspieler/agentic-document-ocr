@@ -14,7 +14,7 @@ import urllib.parse
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-IMAGE = ROOT / "SampleFiles" / "images" / "RCPT001.png"
+DEFAULT_IMAGE = ROOT / "SampleFiles" / "images" / "RCPT001.png"
 COMMANDS = [
     "Remove the background from RCPT001.",
     "Extract receipt data using workflow receipt_extract_v3 from RCPT001.",
@@ -39,7 +39,13 @@ def az(*args: str) -> object:
     return json.loads(completed.stdout) if completed.stdout.strip() else None
 
 
-def prepare(training: str, results: str, queue: str, table: str) -> None:
+def prepare(
+    training: str,
+    results: str,
+    queue: str,
+    table: str,
+    image: pathlib.Path,
+) -> None:
     az("storage", "container", "create", "--name", training)
     az("storage", "container", "create", "--name", results)
     az("storage", "queue", "create", "--name", queue)
@@ -47,8 +53,8 @@ def prepare(training: str, results: str, queue: str, table: str) -> None:
     az(
         "storage", "blob", "upload",
         "--container-name", training,
-        "--name", f"images/{IMAGE.name}",
-        "--file", str(IMAGE),
+        "--name", f"images/RCPT001{image.suffix.lower()}",
+        "--file", str(image),
         "--overwrite", "true",
     )
 
@@ -100,9 +106,13 @@ def main() -> None:
     parser.add_argument("--table", default=os.getenv("COURSE_RESULT_TABLE", "results"))
     parser.add_argument("--group", default=os.getenv("COURSE_GROUP_ID", "HiddenLayer"))
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--image", type=pathlib.Path, default=DEFAULT_IMAGE)
     args = parser.parse_args()
 
-    prepare(args.training, args.results, args.queue, args.table)
+    if not args.image.is_file():
+        raise SystemExit(f"Queue verification image not found: {args.image}")
+
+    prepare(args.training, args.results, args.queue, args.table, args.image)
     started = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=5)
     for command in COMMANDS:
         az("storage", "message", "put", "--queue-name", args.queue, "--content", command)

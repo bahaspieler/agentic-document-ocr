@@ -132,7 +132,7 @@ case where `RegisterImage` with an absolute path works, because the server is on
     "ocr-agent-local": {
       "command": "dotnet",
       "args": [
-        "/absolute/path/to/OcrAgent.Mcp/bin/Debug/net8.0/OcrAgent.Mcp.dll",
+        "/absolute/path/to/OcrAgent.Mcp/bin/Debug/net10.0/OcrAgent.Mcp.dll",
         "--stdio"
       ]
     }

@@ -1,25 +1,26 @@
-﻿using OcrAgent.Extraction.Models;
+using OcrAgent.Extraction.Models;
 using OcrAgent.Extraction.RuleBased;
 
-namespace OcrAgent.Tests;
+namespace UnitTests.Cloud;
 
-public class ReceiptValidatorTests
+[TestClass]
+public sealed class ReceiptValidatorTests
 {
-    [Fact]
-    public void CriticalArithmeticFailureCapsScoreAndRequiresReview()
+    [TestMethod]
+    public void Validate_CriticalArithmeticFailureCapsScoreAndRequiresReview()
     {
         var receipt = ValidReceipt();
         receipt.Totals.Total = 99m;
 
         var result = ReceiptValidator.Validate(receipt);
 
-        Assert.True(result.ValidationScore <= 69);
-        Assert.Equal("needs_review", result.ReviewStatus);
-        Assert.False(result.IsValid);
+        Assert.IsLessThanOrEqualTo(69, result.ValidationScore);
+        Assert.AreEqual("needs_review", result.ReviewStatus);
+        Assert.IsFalse(result.IsValid);
     }
 
-    [Fact]
-    public void LowOcrConfidenceDoesNotChangeConsistencyScore()
+    [TestMethod]
+    public void Validate_LowOcrConfidenceDoesNotChangeConsistencyScore()
     {
         var high = ValidReceipt();
         var low = ValidReceipt();
@@ -28,32 +29,32 @@ public class ReceiptValidatorTests
         var highResult = ReceiptValidator.Validate(high);
         var lowResult = ReceiptValidator.Validate(low);
 
-        Assert.Equal(highResult.ValidationScore, lowResult.ValidationScore);
-        Assert.Equal("checks_passed", highResult.ReviewStatus);
-        Assert.Equal("needs_review", lowResult.ReviewStatus);
+        Assert.AreEqual(highResult.ValidationScore, lowResult.ValidationScore);
+        Assert.AreEqual("checks_passed", highResult.ReviewStatus);
+        Assert.AreEqual("needs_review", lowResult.ReviewStatus);
     }
 
-    [Fact]
-    public void WarningsRemoveBonusAndRequireReview()
+    [TestMethod]
+    public void Validate_WarningsRemoveBonusAndRequireReview()
     {
         var receipt = ValidReceipt();
         receipt.Totals.Currency = "";
 
         var result = ReceiptValidator.Validate(receipt);
 
-        Assert.Contains("Currency not detected", result.Warnings);
-        Assert.True(result.ValidationScore < 100);
-        Assert.Equal("needs_review", result.ReviewStatus);
+        CollectionAssert.Contains(result.Warnings, "Currency not detected");
+        Assert.IsLessThan(100, result.ValidationScore);
+        Assert.AreEqual("needs_review", result.ReviewStatus);
     }
 
-    [Fact]
-    public void PerfectConsistentReceiptPassesChecks()
+    [TestMethod]
+    public void Validate_PerfectConsistentReceiptPassesChecks()
     {
         var result = ReceiptValidator.Validate(ValidReceipt());
 
-        Assert.Equal(100, result.ValidationScore);
-        Assert.Equal("checks_passed", result.ReviewStatus);
-        Assert.True(result.IsValid);
+        Assert.AreEqual(100, result.ValidationScore);
+        Assert.AreEqual("checks_passed", result.ReviewStatus);
+        Assert.IsTrue(result.IsValid);
     }
 
     private static ReceiptData ValidReceipt() => new()

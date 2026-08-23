@@ -1,0 +1,179 @@
+using System.Text.Json;
+using Microsoft.Extensions.AI;
+using OcrAgent.Workflows.Engine;
+using OcrAgent.Workflows.Model;
+
+namespace UnitTests.Workflows;
+
+/// <summary>
+/// Runs WorkflowRunner with mock tools against sample workflows.
+/// </summary>
+[TestClass]
+public class WorkflowRunnerIntegrationTests
+{
+    private string _tempDir = "";
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"workflow_runner_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (Directory.Exists(_tempDir))
+            Directory.Delete(_tempDir, true);
+    }
+
+    private static ToolBindingRegistry CreatePassthroughRegistry(params string[] toolNames)
+    {
+        var registry = new ToolBindingRegistry();
+        foreach (var name in toolNames)
+        {
+            var func = AIFunctionFactory.Create(
+                (string imageReference) => $"{name.ToLower()}_processed_{imageReference}",
+                name);
+            registry.Register(func);
+        }
+        return registry;
+    }
+
+    private void WriteDefinition(string id, params (string stepId, string tool)[] steps)
+    {
+        var def = new WorkflowDefinition
+        {
+            Id = id,
+            Name = $"Test {id}",
+            Description = $"Test workflow {id}",
+            Steps = steps.Select(s => new WorkflowStep
+            {
+                Id = s.stepId,
+                Type = "tool",
+                Tool = s.tool,
+                Enabled = true,
+                Args = new Dictionary<string, object?>()
+            }).ToList()
+        };
+
+        var json = JsonSerializer.Serialize(def);
+        File.WriteAllText(Path.Combine(_tempDir, $"{id}.json"), json);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_SimpleWorkflow_Succeeds()
+    {
+        WriteDefinition("simple_test", ("s1", "StepA"), ("s2", "StepB"));
+        var registry = CreatePassthroughRegistry("StepA", "StepB");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var result = await runner.RunAsync("simple_test", "REF001");
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.AreEqual("simple_test", result.WorkflowId);
+        Assert.AreEqual("REF001", result.InputImageRef);
+        Assert.IsGreaterThan(0, result.OutputImageRef.Length, "OutputImageRef should not be empty");
+        Assert.HasCount(2, result.Trace);
+        Assert.IsGreaterThanOrEqualTo(0, result.TotalDurationMs);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_TraceEntries_HaveCorrectData()
+    {
+        WriteDefinition("trace_test", ("step1", "ToolX"), ("step2", "ToolY"));
+        var registry = CreatePassthroughRegistry("ToolX", "ToolY");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var result = await runner.RunAsync("trace_test", "IMG_123");
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.HasCount(2, result.Trace);
+
+        var firstTrace = result.Trace[0];
+        Assert.AreEqual("step1", firstTrace.StepId);
+        Assert.AreEqual("ToolX", firstTrace.ToolName);
+        Assert.AreEqual("IMG_123", firstTrace.InputRef);
+        Assert.IsTrue(firstTrace.Success);
+        Assert.IsGreaterThanOrEqualTo(0, firstTrace.DurationMs);
+
+        var secondTrace = result.Trace[1];
+        Assert.AreEqual("step2", secondTrace.StepId);
+        Assert.AreEqual("ToolY", secondTrace.ToolName);
+        Assert.IsTrue(secondTrace.Success);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_InvalidWorkflowId_ThrowsOrFails()
+    {
+        var registry = CreatePassthroughRegistry("Tool1");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+        bool thrown = false;
+
+        try
+        {
+            await runner.RunAsync("nonexistent_workflow", "REF001");
+        }
+        catch (InvalidOperationException)
+        {
+            thrown = true;
+        }
+
+        Assert.IsTrue(thrown, "Expected InvalidOperationException for unknown workflow");
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithOverrides_DisablesStep()
+    {
+        var def = new WorkflowDefinition
+        {
+            Id = "override_test",
+            Name = "Override Test",
+            Steps = new List<WorkflowStep>
+            {
+                new() { Id = "s1", Type = "tool", Tool = "ToolA", Enabled = true, Args = new() },
+                new() { Id = "s2", Type = "tool", Tool = "ToolB", Enabled = true, Args = new() },
+                new() { Id = "s3", Type = "tool", Tool = "ToolC", Enabled = true, Args = new() }
+            }
+        };
+
+        File.WriteAllText(
+            Path.Combine(_tempDir, "override_test.json"),
+            JsonSerializer.Serialize(def));
+
+        var registry = CreatePassthroughRegistry("ToolA", "ToolB", "ToolC");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var overridesJson = """{ "steps": { "s2": { "enabled": false } } }""";
+        var result = await runner.RunAsync("override_test", "REF001", overridesJson);
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.HasCount(2, result.Trace);
+        Assert.IsFalse(result.Trace.Any(t => t.ToolName == "ToolB"),
+            "ToolB should have been disabled by override");
+    }
+
+    [TestMethod]
+    public async Task RunAsync_SingleStep_Succeeds()
+    {
+        WriteDefinition("single_step", ("only", "OnlyTool"));
+        var registry = CreatePassthroughRegistry("OnlyTool");
+        var catalog = new WorkflowCatalog(_tempDir);
+        var compiler = new WorkflowCompiler(registry);
+        var runner = new WorkflowRunner(catalog, compiler);
+
+        var result = await runner.RunAsync("single_step", "REF_SINGLE");
+
+        Assert.IsTrue(result.Success, $"Workflow failed: {result.Error}");
+        Assert.HasCount(1, result.Trace);
+        Assert.AreEqual("OnlyTool", result.Trace[0].ToolName);
+    }
+}

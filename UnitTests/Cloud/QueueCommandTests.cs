@@ -5,26 +5,27 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCloudProject.Common;
 using MyExperiment;
 
-namespace OcrAgent.Tests;
+namespace UnitTests.Cloud;
 
+[TestClass]
 public sealed class QueueCommandTests
 {
-    [Theory]
-    [InlineData(nameof(ExperimentResult.OutputFiles))]
-    [InlineData(nameof(ExperimentResult.LocalOutputFiles))]
-    [InlineData(nameof(ExperimentResult.CleanupDirectories))]
-    [InlineData(nameof(ExperimentResult.Duration))]
-    public void RuntimeOnlyResultPropertiesAreNotTableColumns(string propertyName)
+    [TestMethod]
+    [DataRow(nameof(ExperimentResult.OutputFiles))]
+    [DataRow(nameof(ExperimentResult.LocalOutputFiles))]
+    [DataRow(nameof(ExperimentResult.CleanupDirectories))]
+    [DataRow(nameof(ExperimentResult.Duration))]
+    public void RuntimeOnlyResultProperties_AreNotTableColumns(string propertyName)
     {
         var property = typeof(ExperimentResult).GetProperty(
             propertyName, BindingFlags.Instance | BindingFlags.Public);
 
-        Assert.NotNull(property);
-        Assert.NotNull(property!.GetCustomAttribute<IgnoreDataMemberAttribute>());
+        Assert.IsNotNull(property);
+        Assert.IsNotNull(property.GetCustomAttribute<IgnoreDataMemberAttribute>());
     }
 
-    [Fact]
-    public async Task EmptyQueueCommandProducesHandledFailure()
+    [TestMethod]
+    public async Task EmptyQueueCommand_ProducesHandledFailure()
     {
         var path = Path.GetTempFileName();
         try
@@ -40,12 +41,13 @@ public sealed class QueueCommandTests
                 new UnusedCommandStorage(),
                 NullLogger.Instance);
 
-            var result = Assert.IsType<ExperimentResult>(
-                await experiment.RunAsync(path));
+            var untypedResult = await experiment.RunAsync(path);
+            var result = untypedResult as ExperimentResult;
 
-            Assert.False(result.Success);
-            Assert.Equal("failed", result.Status);
-            Assert.Contains("empty", result.Error);
+            Assert.IsNotNull(result);
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("failed", result.Status);
+            StringAssert.Contains(result.Error, "empty");
         }
         finally
         {
@@ -56,7 +58,7 @@ public sealed class QueueCommandTests
     private sealed class UnusedCommandStorage : IStorageProvider, IQueueCommandStorage
     {
         public Task<ResolvedQueueImage> ResolveImageAsync(string command) =>
-            throw new Xunit.Sdk.XunitException(
+            throw new AssertFailedException(
                 "An empty command must fail before image resolution.");
 
         public IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token) =>

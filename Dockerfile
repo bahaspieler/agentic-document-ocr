@@ -5,6 +5,9 @@
 #
 # See Documentation/CONTAINER.md for the roles and the native dependency reasoning.
 
+ARG DOTNET_VERSION=10.0
+ARG OCRAGENT_TARGET_FRAMEWORK=net10.0
+
 FROM node:20-bookworm-slim AS web-build
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
@@ -13,17 +16,19 @@ COPY web/ ./
 RUN npm run build
 
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+ARG OCRAGENT_TARGET_FRAMEWORK
 WORKDIR /src
 
 # Project files first, so a source-only change does not invalidate the restore layer.
+COPY Directory.Build.props ./
 COPY OcrAgent/OcrAgent.csproj OcrAgent/
 COPY OcrAgent.Mcp/OcrAgent.Mcp.csproj OcrAgent.Mcp/
 COPY MyCloudProject.Common/MyCloudProject.Common.csproj MyCloudProject.Common/
 COPY MyExperiment/MyExperiment.csproj MyExperiment/
 COPY MyCloudProject/MyCloudProject.csproj MyCloudProject/
-RUN dotnet restore OcrAgent.Mcp/OcrAgent.Mcp.csproj -r linux-x64
-RUN dotnet restore MyCloudProject/MyCloudProject.csproj -r linux-x64
+RUN dotnet restore OcrAgent.Mcp/OcrAgent.Mcp.csproj -r linux-x64 -p:OcrAgentTargetFramework=${OCRAGENT_TARGET_FRAMEWORK}
+RUN dotnet restore MyCloudProject/MyCloudProject.csproj -r linux-x64 -p:OcrAgentTargetFramework=${OCRAGENT_TARGET_FRAMEWORK}
 
 COPY OcrAgent/ OcrAgent/
 COPY OcrAgent.Mcp/ OcrAgent.Mcp/
@@ -33,19 +38,18 @@ COPY MyCloudProject/ MyCloudProject/
 
 # Naming the runtime identifier leaves out the Android, iOS, macOS, and Windows native binaries that
 # several dependencies carry. That is most of the image.
-RUN dotnet publish OcrAgent.Mcp/OcrAgent.Mcp.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/mcp \
- && dotnet publish OcrAgent/OcrAgent.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/cli \
+RUN dotnet publish OcrAgent.Mcp/OcrAgent.Mcp.csproj -c Release -r linux-x64 --self-contained false --no-restore -p:OcrAgentTargetFramework=${OCRAGENT_TARGET_FRAMEWORK} -o /out/mcp \
+ && dotnet publish OcrAgent/OcrAgent.csproj -c Release -r linux-x64 --self-contained false --no-restore -p:OcrAgentTargetFramework=${OCRAGENT_TARGET_FRAMEWORK} -o /out/cli \
  && dotnet publish MyCloudProject/MyCloudProject.csproj -c Release -r linux-x64 --self-contained false --no-restore \
-      -p:UseAppHost=false -p:ErrorOnDuplicatePublishOutputFiles=false -o /out/worker
+      -p:OcrAgentTargetFramework=${OCRAGENT_TARGET_FRAMEWORK} -p:UseAppHost=false -p:ErrorOnDuplicatePublishOutputFiles=false -o /out/worker
 
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app/mcp
 
-# Bookworm is deliberate. The Tesseract wrapper asks for library names that hard-code Leptonica
-# 1.82.0, and bookworm is where Tesseract 5.3 and Leptonica 1.82.0 meet; Ubuntu 22.04 is still on
-# Tesseract 4.1. GTK3 is not for a user interface: OpenCV links its display module whether or not
-# anything ever draws a window, so the loader has to satisfy it.
+# The .NET 10 runtime image uses Ubuntu 24.04, where Tesseract 5.3 and Leptonica 1.82 match the
+# fixed names expected by the managed wrapper. GTK3 is not for a user interface: OpenCV links its
+# display module whether or not anything ever draws a window, so the loader has to satisfy it.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         libtesseract5 \

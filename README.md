@@ -54,7 +54,7 @@ entities. It does not use the Web UI session database.
 ## Prerequisites
 
 - Docker with Linux `amd64` build support
-- .NET 8 SDK for local backend development
+- .NET 10 SDK for local backend development
 - Node.js 20 for frontend development
 - An Azure Storage connection string for Blob, Table, and queue-backed scenarios
 - An OpenAI API key for agent chat and queue commands
@@ -115,7 +115,19 @@ Build and test the .NET solution:
 ```bash
 dotnet restore MyCloudProject.sln
 dotnet build MyCloudProject.sln
-dotnet test OcrAgent.Tests/OcrAgent.Tests.csproj
+dotnet test UnitTests/UnitTests.csproj
+```
+
+The solution defaults to `net10.0`. A temporary rollback guard remains available while diagnosing
+a runtime or dependency regression:
+
+```bash
+dotnet build MyCloudProject.sln -p:OcrAgentTargetFramework=net8.0
+dotnet test UnitTests/UnitTests.csproj -p:OcrAgentTargetFramework=net8.0
+docker build --platform linux/amd64 \
+  --build-arg DOTNET_VERSION=8.0 \
+  --build-arg OCRAGENT_TARGET_FRAMEWORK=net8.0 \
+  -t ocr-agent:net8-guard .
 ```
 
 Run the ASP.NET REST and MCP host:
@@ -186,7 +198,7 @@ resources.
 ```text
 OcrAgent/              Processing engine, plugins, workflows, execution, stores, and CLI
 OcrAgent.Mcp/          ASP.NET serving host for MCP, REST, SSE, and the compiled SPA
-OcrAgent.Tests/        Backend tests
+UnitTests/             Backend unit and integration tests
 web/                   React, Vite, and TypeScript frontend
 MyCloudProject/        Unchanged course queue host
 MyCloudProject.Common/ Unchanged course contracts

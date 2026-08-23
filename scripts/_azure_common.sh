@@ -72,7 +72,8 @@ apply_azure_defaults() {
     : "${AZURE_SQL_DATABASE_NAME:=ocr-agent}"
     : "${AZURE_SQL_ADMIN_USER:=ocradmin}"
     : "${OCR_Storage__AzureBlob__ContainerName:=ocr-images}"
-    : "${OCR_Runs__Provider:=azuretable}"
+    # Keep the deployed run store independent from a developer's local OCR_Runs__Provider=none.
+    : "${AZURE_OCR_RUNS_PROVIDER:=azuretable}"
     : "${OCR_Runs__TableName:=OcrRuns}"
     : "${OCR_Runs__GroupId:=HiddenLayer}"
     : "${MyConfig__TrainingContainer:=training-files}"
@@ -177,7 +178,7 @@ container_env_vars() {
         "AZURE_STORAGE_CONNECTION_STRING=secretref:storage-cs"
         "OCR_Storage__Provider=azureblob"
         "OCR_Storage__AzureBlob__ContainerName=${OCR_Storage__AzureBlob__ContainerName}"
-        "OCR_Runs__Provider=${OCR_Runs__Provider}"
+        "OCR_Runs__Provider=${AZURE_OCR_RUNS_PROVIDER}"
         "OCR_Runs__TableName=${OCR_Runs__TableName}"
         "OCR_Runs__GroupId=${OCR_Runs__GroupId}"
     )

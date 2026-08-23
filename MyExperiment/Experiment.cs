@@ -21,6 +21,10 @@ namespace MyExperiment
         private readonly ILogger _logger;
         private readonly MyConfig _config;
 
+        /// <summary>Creates the queue experiment adapter over the shared OCR engine.</summary>
+        /// <param name="configSection">The MyConfig worker settings.</param>
+        /// <param name="storageProvider">Storage provider used to resolve command images.</param>
+        /// <param name="log">Worker logger.</param>
         public Experiment(
             IConfigurationSection configSection,
             IStorageProvider storageProvider,
@@ -34,6 +38,7 @@ namespace MyExperiment
             configSection.Bind(_config);
         }
 
+        /// <inheritdoc />
         public async Task<IExperimentResult> RunAsync(string inputData)
         {
             var started = DateTime.UtcNow;
@@ -42,10 +47,18 @@ namespace MyExperiment
             var command = (await File.ReadAllTextAsync(inputData).ConfigureAwait(false)).Trim();
 
             if (string.IsNullOrWhiteSpace(command))
+            {
+                _logger.LogWarning(
+                    "Queue command {RunId} was empty and will be recorded as failed.",
+                    fallbackRunId);
                 return Failure(fallbackRunId, command, started, "The queue command is empty.",
                     [commandDirectory]);
+            }
 
-            _logger?.LogInformation("Processing queue command: {Command}", command);
+            _logger.LogInformation(
+                "Processing queue command {RunId} with {CommandLength} characters.",
+                fallbackRunId,
+                command.Length);
 
             ResolvedQueueImage image;
             try
@@ -54,7 +67,10 @@ namespace MyExperiment
             }
             catch (InvalidOperationException ex)
             {
-                _logger?.LogWarning(ex, "Could not resolve an image for queue command {Command}.", command);
+                _logger.LogWarning(
+                    ex,
+                    "Could not resolve an image for queue command {RunId}.",
+                    fallbackRunId);
                 return Failure(fallbackRunId, command, started, ex.Message, [commandDirectory]);
             }
 
@@ -86,7 +102,7 @@ namespace MyExperiment
                               !string.IsNullOrWhiteSpace(execution.Output);
                 var error = execution.Runs.FirstOrDefault(run => !run.Success)?.Error;
 
-                _logger?.LogInformation(
+                _logger.LogInformation(
                     "Queue command completed as run {RunId}; success={Success}, artifacts={ArtifactCount}.",
                     runId, success, files.Count);
 
@@ -110,15 +126,18 @@ namespace MyExperiment
                     CleanupDirectories = cleanup.ToArray()
                 };
             }
+            // Expected command and tool errors become durable failed result rows.
+            // Other failures propagate so that the queue message remains uncommitted.
             catch (Exception ex) when (
                 ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
             {
-                _logger?.LogError(ex, "Queue command failed: {Command}", command);
+                _logger.LogError(ex, "Queue command {RunId} failed.", fallbackRunId);
                 return Failure(
                     fallbackRunId, command, started, ex.Message, cleanup.ToArray(), image.BlobName);
             }
             finally
             {
+                // Do not leak the queue run scope into a later command.
                 host.Store.SetActiveSubdirectory(null);
             }
         }
@@ -136,6 +155,7 @@ namespace MyExperiment
                 var run = execution.Runs.FirstOrDefault(item => item.RunId == artifact.RunId);
                 if (run is null)
                     continue;
+                // A standalone tool exports its primary output, not intermediate debug files.
                 if (run.Mode.Equals("tool", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(run.OutputReference) &&
                     !Path.GetFileNameWithoutExtension(artifact.Name).Equals(

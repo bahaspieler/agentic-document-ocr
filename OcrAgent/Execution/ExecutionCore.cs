@@ -18,6 +18,9 @@ public sealed class ExecutionCore
     private readonly AgentService? _agentService;
     private readonly ArtifactDiscoveryService _artifacts;
 
+    /// <summary>Creates the execution boundary from a composed engine host.</summary>
+    /// <param name="host">Host containing tools and persistence stores.</param>
+    /// <param name="agentService">Agent service used for agent mode, when configured.</param>
     public ExecutionCore(EngineHost host, AgentService? agentService = null)
         : this(
             host?.Aggregator ?? throw new ArgumentNullException(nameof(host)),
@@ -28,6 +31,12 @@ public sealed class ExecutionCore
     {
     }
 
+    /// <summary>Creates the execution boundary from explicit engine services.</summary>
+    /// <param name="aggregator">Registered tools and workflow engine.</param>
+    /// <param name="store">Image and artifact store.</param>
+    /// <param name="runStore">Store used for run records.</param>
+    /// <param name="receiptStore">Optional structured receipt store.</param>
+    /// <param name="agentService">Agent service used for agent mode, when configured.</param>
     public ExecutionCore(
         PluginAggregator aggregator,
         IImageStore store,
@@ -43,7 +52,11 @@ public sealed class ExecutionCore
         _artifacts = new ArtifactDiscoveryService(store);
     }
 
-    /// <summary>Executes one request and reports the same events included in the returned result.</summary>
+    /// <summary>Executes one agent, tool, or workflow request.</summary>
+    /// <param name="request">Mode-specific request data.</param>
+    /// <param name="onEvent">Optional callback for progress and artifact events.</param>
+    /// <param name="cancellationToken">Stops agent and direct tool operations.</param>
+    /// <returns>The output, runs, events, and discovered artifacts.</returns>
     public async Task<ExecutionResult> ExecuteAsync(
         ExecutionRequest request,
         Action<AgentStreamEvent>? onEvent = null,
@@ -129,6 +142,9 @@ public sealed class ExecutionCore
             artifacts.ToArray());
     }
 
+    /// <summary>Selects the workflow run, or the last run when no workflow ran.</summary>
+    /// <param name="runs">Runs captured during one execution request.</param>
+    /// <returns>The primary run, or null when no run was recorded.</returns>
     public static RunRecord? SelectPrimaryRun(IReadOnlyList<RunRecord> runs) =>
         runs.LastOrDefault(run =>
             run.Mode.Equals("workflow", StringComparison.OrdinalIgnoreCase))

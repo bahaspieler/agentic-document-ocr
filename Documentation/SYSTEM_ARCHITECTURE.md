@@ -19,8 +19,9 @@ and persistence settings.
 
 ## Runtime and deployment
 
-The solution targets .NET 8. The Docker image is built for `linux/amd64` on
-`mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim`. It includes:
+The solution defaults to .NET 10. The Docker image is built for `linux/amd64` on
+`mcr.microsoft.com/dotnet/aspnet:10.0`. `Directory.Build.props` retains an explicit
+`net8.0` override only as a temporary rollback guard. The image includes:
 
 - the published `OcrAgent.Mcp`, `OcrAgent`, and `MyCloudProject` applications;
 - the compiled React, Vite, and TypeScript application;
@@ -338,7 +339,7 @@ web/                 React, Vite, and TypeScript SPA
 MyCloudProject/      Unchanged course polling host
 MyCloudProject.Common/
 MyExperiment/        Course storage provider and experiment adapter
-OcrAgent.Tests/      Backend tests
+UnitTests/           Backend unit and integration tests
 scripts/             Deployment, lifecycle, and verification
 ```
 

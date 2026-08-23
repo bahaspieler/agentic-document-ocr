@@ -1,10 +1,9 @@
 ﻿namespace MyExperiment
 {
-    /// <summary>
-    /// This is the class which describe the project configuration.
-    /// </summary>
+    /// <summary>Azure queue, Blob, and Table settings bound from the MyConfig section.</summary>
     public class MyConfig
     {
+        /// <summary>Connection string for the queue, Blob containers, and result table.</summary>
         public string StorageConnectionString { get; set; }
 
         /// <summary>
@@ -27,9 +26,7 @@
         /// </summary>
         public string Queue{ get; set; }
 
-        /// <summary>
-        /// Set here the name of your group.
-        /// </summary>
+        /// <summary>Partition key for result rows and prefix for result Blob paths.</summary>
         public string GroupId { get; set; }
 
         /// <summary>Root for temporary command, image, and output files.</summary>

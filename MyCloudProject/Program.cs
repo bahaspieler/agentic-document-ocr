@@ -19,8 +19,6 @@ namespace MyCloudProject
         /// </summary>
         private static string _projectName = "ML 25/26-??";
 
-        string test;
-
         static async Task Main(string[] args)
         {
             CancellationTokenSource tokeSrc = new CancellationTokenSource();
@@ -83,7 +81,7 @@ namespace MyCloudProject
                     }
                     catch (Exception ex)
                     {
-                        // logging
+                        logger?.LogError(ex, "Queue experiment failed.");
                     }
                 }
                 else

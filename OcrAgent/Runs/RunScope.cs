@@ -21,7 +21,7 @@ public static class RunScope
     private static readonly AsyncLocal<string?> SourceContext = new();
     private static string _defaultSource = "cli";
 
-    /// <summary>Entry point that started this process: <c>cli</c>, <c>chat</c>, or <c>mcp</c>.</summary>
+    /// <summary>Entry point for the current path: <c>cli</c>, <c>chat</c>, <c>mcp</c>, <c>rest</c>, or <c>queue</c>.</summary>
     public static string Source
     {
         get => SourceContext.Value ?? _defaultSource;
@@ -41,6 +41,8 @@ public static class RunScope
     /// no conversation, and leaves this null.
     /// </remarks>
     public static string? ConversationId => Conversation.Value;
+
+    /// <summary>Idempotency key of the current durable REST turn, when present.</summary>
     public static string? TurnIdempotencyKey => Turn.Value;
 
     /// <summary>Marks the start of a job and restores the previous state when disposed.</summary>

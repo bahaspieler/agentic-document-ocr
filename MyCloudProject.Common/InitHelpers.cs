@@ -21,11 +21,9 @@ namespace MyCloudProject.Common
             //create logger from the appsettings addConsole Debug to Logg 
             return LoggerFactory.Create(logBuilder =>
             {
-                ConsoleLoggerOptions logCfg = new ConsoleLoggerOptions();
-
                 logBuilder.AddConfiguration(configRoot.GetSection("Logging"));
 
-                logBuilder.AddConsole((opts) =>
+                logBuilder.AddSimpleConsole((opts) =>
                 {
                     opts.IncludeScopes = true;
                 }).AddDebug();

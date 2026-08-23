@@ -15,8 +15,10 @@ using System.Threading.Tasks;
 
 namespace MyExperiment
 {
+    /// <summary>Implements queue, Blob, and Table operations for the OCR worker.</summary>
     public class AzureStorageProvider : IStorageProvider, IQueueCommandStorage
     {
+        // Encoded commands use the same file-oriented input contract without creating a command Blob.
         private const string InlineCommandPrefix = "command:";
         private static readonly JsonSerializerOptions JsonOptions =
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -27,6 +29,8 @@ namespace MyExperiment
         private readonly BlobContainerClient _results;
         private readonly TableClient _table;
 
+        /// <summary>Creates clients for the configured queue, Blob containers, and result table.</summary>
+        /// <param name="configSection">The MyConfig configuration section.</param>
         public AzureStorageProvider(IConfigurationSection configSection)
         {
             _config = new MyConfig();
@@ -50,6 +54,9 @@ namespace MyExperiment
             }
         }
 
+        /// <summary>Deletes a queue message after its result has been stored.</summary>
+        /// <param name="request">Request containing the current message id and pop receipt.</param>
+        /// <remarks>Call this only after <see cref="UploadResultAsync"/> succeeds.</remarks>
         public async Task CommitRequestAsync(IExerimentRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
@@ -63,6 +70,9 @@ namespace MyExperiment
                 request.MessageId, request.MessageReceipt).ConfigureAwait(false);
         }
 
+        /// <summary>Materializes an encoded command or training Blob as a local file.</summary>
+        /// <param name="fileName">Encoded command or training-container Blob location.</param>
+        /// <returns>The full path to the local input file.</returns>
         public async Task<string> DownloadInputAsync(string fileName)
         {
             if (fileName.StartsWith(InlineCommandPrefix, StringComparison.Ordinal))
@@ -79,10 +89,14 @@ namespace MyExperiment
             return await DownloadBlobAsync(blobName).ConfigureAwait(false);
         }
 
+        /// <summary>Receives one queue message and converts its body into a worker request.</summary>
+        /// <param name="token">Stops the queue receive operation.</param>
+        /// <returns>The received request, or null when the queue is empty.</returns>
         public IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token)
         {
             var response = _queue.ReceiveMessages(
                 maxMessages: 1,
+                // This window must exceed the longest expected OCR job to avoid parallel redelivery.
                 visibilityTimeout: TimeSpan.FromSeconds(
                     Math.Max(30, _config.MessageVisibilityTimeoutSeconds)),
                 cancellationToken: token);
@@ -106,6 +120,7 @@ namespace MyExperiment
             };
         }
 
+        /// <inheritdoc />
         public async Task<ResolvedQueueImage> ResolveImageAsync(string command)
         {
             var matches = new System.Collections.Generic.List<(string Blob, string Reference)>();
@@ -120,6 +135,7 @@ namespace MyExperiment
                     matches.Add((blob.Name, reference));
             }
 
+            // Prefer the longest match when one reference is a prefix of another.
             var match = matches
                 .OrderByDescending(item => item.Reference.Length)
                 .FirstOrDefault();
@@ -134,11 +150,16 @@ namespace MyExperiment
                 await DownloadBlobAsync(match.Blob).ConfigureAwait(false));
         }
 
+        /// <summary>Uploads a result using the course experiment category.</summary>
         public Task UploadExperimentResult(IExperimentResult result)
         {
             return UploadResultAsync("experiment", result);
         }
 
+        /// <summary>Uploads result artifacts, then upserts the experiment row.</summary>
+        /// <param name="experimentName">Experiment category retained by the storage contract.</param>
+        /// <param name="result">Result containing durable metadata and local artifacts.</param>
+        /// <remarks>Local work directories are removed only after both durable writes succeed.</remarks>
         public async Task UploadResultAsync(string experimentName, IExperimentResult result)
         {
             if (result is not ExperimentResult row)
@@ -300,6 +321,7 @@ namespace MyExperiment
         {
             try
             {
+                // Never delete a path outside the configured temporary work root.
                 var root = Path.GetFullPath(_config.WorkRoot)
                     .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
                 var candidate = Path.GetFullPath(path);

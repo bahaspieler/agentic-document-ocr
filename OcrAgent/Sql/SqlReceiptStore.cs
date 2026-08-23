@@ -27,6 +27,7 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
+        // Receipt ids are immutable; replaying the same export must not create another receipt.
         if (await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT COUNT(1) FROM dbo.Receipts WHERE ReceiptId = @receiptId;",
                 new { receiptId = receipt.ReceiptId }, transaction,

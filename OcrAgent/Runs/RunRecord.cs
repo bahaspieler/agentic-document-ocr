@@ -28,7 +28,7 @@ public sealed class RunRecord
     /// <summary>Workflow definition version; null for a single tool call.</summary>
     public string? Version { get; set; }
 
-    /// <summary>Entry point that started the job: <c>cli</c>, <c>chat</c>, or <c>mcp</c>.</summary>
+    /// <summary>Entry point that started the job: <c>cli</c>, <c>chat</c>, <c>mcp</c>, <c>rest</c>, or <c>queue</c>.</summary>
     public string Source { get; set; } = "";
 
     /// <summary>

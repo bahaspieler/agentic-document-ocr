@@ -150,7 +150,7 @@ public sealed class SftpConnectionPool : IDisposable
             }
             catch (Exception)
             {
-                // Failed to create initial connection, will retry
+                // Warm-up is optional; the next acquire can create a connection.
             }
         }
     }

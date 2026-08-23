@@ -2,15 +2,21 @@ using OcrAgent.Execution;
 using OcrAgent.Runs;
 using OcrAgent.Storage;
 
-namespace OcrAgent.Tests;
+namespace UnitTests.Cloud;
 
-public sealed class ExecutionCoreTests : IDisposable
+[TestClass]
+public sealed class ExecutionCoreTests
 {
-    private readonly string _root = Path.Combine(
-        Path.GetTempPath(), $"ocr-execution-{Guid.NewGuid():N}");
+    private string _root = null!;
 
-    [Fact]
-    public void SelectsLastWorkflowAsPrimaryRun()
+    [TestInitialize]
+    public void SetUp()
+    {
+        _root = Path.Combine(Path.GetTempPath(), $"ocr-execution-{Guid.NewGuid():N}");
+    }
+
+    [TestMethod]
+    public void SelectPrimaryRun_SelectsLastWorkflow()
     {
         var runs = new[]
         {
@@ -21,11 +27,12 @@ public sealed class ExecutionCoreTests : IDisposable
 
         var primary = ExecutionCore.SelectPrimaryRun(runs);
 
-        Assert.Equal("workflow-1", primary?.RunId);
+        Assert.IsNotNull(primary);
+        Assert.AreEqual("workflow-1", primary.RunId);
     }
 
-    [Fact]
-    public async Task DiscoversOutputDirectoryArtifacts()
+    [TestMethod]
+    public async Task DiscoverAsync_DiscoversOutputDirectoryArtifacts()
     {
         var store = new LocalFileImageStore(_root);
         store.SetActiveSubdirectory("wf/run-1");
@@ -41,12 +48,12 @@ public sealed class ExecutionCoreTests : IDisposable
 
         var artifacts = await new ArtifactDiscoveryService(store).DiscoverAsync(run);
 
-        Assert.Contains(artifacts, item =>
-            item.Name == "result.json" && item.ContentType == "application/json");
+        Assert.IsTrue(artifacts.Any(item =>
+            item.Name == "result.json" && item.ContentType == "application/json"));
     }
 
-    [Fact]
-    public async Task FallsBackToSingleToolOutputReference()
+    [TestMethod]
+    public async Task DiscoverAsync_FallsBackToSingleToolOutputReference()
     {
         var store = new LocalFileImageStore(_root);
         var reference = store.SaveBytes([1, 2, 3], "png", desiredReference: "tool-output");
@@ -59,13 +66,15 @@ public sealed class ExecutionCoreTests : IDisposable
 
         var artifacts = await new ArtifactDiscoveryService(store).DiscoverAsync(run);
 
-        var artifact = Assert.Single(artifacts);
-        Assert.Equal("tool-run", artifact.RunId);
-        Assert.Equal("image/png", artifact.ContentType);
-        Assert.True(artifact.Previewable);
+        Assert.HasCount(1, artifacts);
+        var artifact = artifacts[0];
+        Assert.AreEqual("tool-run", artifact.RunId);
+        Assert.AreEqual("image/png", artifact.ContentType);
+        Assert.IsTrue(artifact.Previewable);
     }
 
-    public void Dispose()
+    [TestCleanup]
+    public void TearDown()
     {
         if (Directory.Exists(_root))
             Directory.Delete(_root, recursive: true);
