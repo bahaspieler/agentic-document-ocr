@@ -16,6 +16,15 @@ agent sessions, user profiles, structured receipts, and line items. Anonymous us
 Microsoft login is implemented but awaits the tenant administrator's app registration. Vector search
 is removed from Phase 8 implementation scope and retained as future work; the phase order is unchanged.
 
+~~**What changed in v1.3.** Phase 9 is complete. The unchanged course host now runs as a separate
+no-ingress Container App, while `MyExperiment` adapts versioned queue descriptors to the shared
+agent/tool/workflow execution core. Real Azure acceptance produced durable result rows and 5, 5, and
+18 result artifacts for the agent, tool, and workflow samples respectively.~~
+
+**What changed in v1.4.** Phase 9 was simplified to the course template's natural shape. A queue
+message is now a plain-language agent command, not a JSON descriptor. The worker resolves the named
+image from `training-files`, reuses `AgentService`, and keys Blob/Table results by the OCR run ID.
+
 ## 1. Status and Scope
 
 ### What already works
@@ -104,7 +113,11 @@ Both instances run the same execution core over the same storage. The entry poin
 
 **Store scope becomes per job.** `IImageStore.SetActiveSubdirectory` is mutable state, and the MCP host shares one `PluginAggregator` across requests. That is safe for a single console user and unsafe for concurrent cloud requests. Scoping moves to a per-job store instance in the Blob phase, before anything multi-user is added.
 
-**The queue message points at a job descriptor.** `Experiment.RunAsync` receives the path of a file the worker has already downloaded, so the input file is a small JSON descriptor holding the mode and, depending on it, either a natural-language command such as "binarize RCPT001" or the tool or workflow name with its arguments and input image blob name. All three modes travel through the fixed template contract without touching `MyCloudProject`. A message is single-shot, so the descriptor carries no conversation id.
+~~**The queue message points at a job descriptor.** `Experiment.RunAsync` receives the path of a file the worker has already downloaded, so the input file is a small JSON descriptor holding the mode and, depending on it, either a natural-language command such as "binarize RCPT001" or the tool or workflow name with its arguments and input image blob name. All three modes travel through the fixed template contract without touching `MyCloudProject`. A message is single-shot, so the descriptor carries no conversation id.~~
+
+**The queue message is the command.** `AzureStorageProvider` exposes the message through the
+template's input-file contract, then `Experiment.RunAsync` resolves the image name it contains and
+passes the command to the existing one-shot agent. No additional queue protocol is needed.
 
 > Omitted from v1.0: the descriptor was described as "holding the mode, the tool or workflow name, the arguments, and the input image blob name". Still exactly right for tool and workflow modes. Agent mode carries a command instead, and the command names its own image reference.
 
@@ -285,25 +298,35 @@ and can be claimed after Microsoft login. The deployed app runs min 1 / max 3 re
 > search returns a near-duplicate receipt.~~ Merchant/date queries are complete. Embeddings, similarity
 > search, duplicate detection, and an MCP receipt-query tool are explicitly retained as future work.
 
-### Phase 9: Course template path
+### Phase 9: Course template path (complete)
 
 **Goal.** A queue message drives a complete run through the template contracts.
 
 **Why this phase sits late in the order.** The template is shaped for a model-training experiment: one input file, one algorithm, one result row, one score. This project is an interactive preprocessing service, so putting it through that contract is adaptation work rather than discovery, and adaptation is cheapest once there is something finished to adapt. Everything the phase needs — Blob and Table, the container, the deployment, the agent service, the three execution modes — is proven by the phases ahead of it, and none of those phases has to distort itself to fit a contract it does not share. The guide requires the path regardless, so it ships, and section 6 records the exposure that leaving it late creates.
 
-**The queue message is a natural-language command.** A message carries what a user would type at the agent: "binarize RCPT001", "remove the background of RCPT002". `Experiment.RunAsync` hands it to the `AgentService` from Phase 6, the model selects and chains the tools, and the artifacts and the run record land exactly where a REST or MCP job's would. Tool and workflow modes stay available for deterministic messages. Each message is single-shot — one message, one run, no continuity — so the session store from Phase 7 plays no part here and the descriptor carries no conversation id. The template's contract is satisfied by reusing components, not by writing a second engine behind it.
+**The queue message is a natural-language command.** A message carries what a user would type at the agent: "binarize RCPT001", "remove the background of RCPT002". `Experiment.RunAsync` hands it to the `AgentService` from Phase 6, the model selects and chains the tools, and the artifacts and the run record land exactly where a REST or MCP job's would. ~~Tool and workflow modes stay available for deterministic messages. Each message is single-shot — one message, one run, no continuity — so the session store from Phase 7 plays no part here and the descriptor carries no conversation id.~~ Every queue message uses the same one-shot agent path; the command may ask that agent to invoke a specific tool or workflow. There is no conversation continuity or descriptor. The template's contract is satisfied by reusing components, not by writing a second engine behind it.
 
 **Work.**
 - Implement `AzureStorageProvider` fully: receive and deserialise the queue message, download the input file, upload result files to Blob, write the result row to Table, delete the message on completion.
-- Define the job descriptor schema here, where `Experiment.RunAsync` reads it, rather than guessing at it in Phase 6. It carries the mode; for agent mode, the natural-language message, which names its own image reference; for tool and workflow modes, the tool or workflow name with its arguments and the input image blob name. All three modes travel through the fixed template contract.
+- ~~Define the job descriptor schema here, where `Experiment.RunAsync` reads it, rather than guessing at it in Phase 6. It carries the mode; for agent mode, the natural-language message, which names its own image reference; for tool and workflow modes, the tool or workflow name with its arguments and the input image blob name. All three modes travel through the fixed template contract.~~ Use the raw queue message as the template input.
 - Extract the shared execution core, deferred from Phase 6. This is the third entry point, so the abstraction now has three real callers instead of two and an assumption. Phase 6 already reduced the engine bootstrap to one `EngineHost.Create()` and extracted the agent service, and Phase 7 has already put a second caller in front of that service, which is what this builds on.
-- Implement `Experiment.RunAsync` to parse the downloaded job descriptor, call the execution core, and map the core's result onto `ExperimentResult`, including output file references and duration.
-- Handle a missing model key without losing the deliverable. Agent mode needs `OPENAI_API_KEY`, which lives in the team's own configuration rather than the shared storage account the graded path depends on. A message asking for agent mode with no key configured must produce a recorded failure row rather than a crashed worker, so the required queue-to-Blob-to-Table evidence stands on the workflow and tool messages alone.
+- ~~Implement `Experiment.RunAsync` to parse the downloaded job descriptor, call the execution core, and map the core's result onto `ExperimentResult`, including output file references and duration.~~ Keep `Experiment.RunAsync` as a small adapter from one command to `AgentService`, with the primary run ID as the result key.
+- Handle a missing model key as a recorded failure row rather than a crashed worker. The simplified queue path always uses `AgentService`, so successful command execution requires `OPENAI_API_KEY`.
 - Run the worker instance against the real queue.
-- Commit `SampleFiles` with test images and one example message per mode.
+- ~~Commit `SampleFiles` with test images and one example message per mode.~~ Commit one test image and document plain-language queue examples.
 - Leave `MyCloudProject` and `MyCloudProject.Common` untouched.
 
-**Acceptance.** A message placed in the team's queue produces artifacts in Blob and a row in Table, for a workflow job, a single-tool job, and a natural-language agent command such as "binarize RCPT001".
+**Acceptance.** Plain queue commands for a single tool and a workflow resolve their referenced image,
+produce artifacts in Blob, and write run-ID-keyed rows in Table.
+
+~~**Acceptance evidence (v1.3).** `ca-ocr-worker` runs the shared image with no ingress and one
+replica. The real-Azure verifier committed all three descriptor-based messages, found successful
+fixed-ID rows, and verified their result blobs.~~
+
+**Acceptance evidence (v1.4).** The real-Azure verifier posted the two plain commands above.
+Run `01a02e06-12e1-7000-8549-627c0837e8ed` published the background-removal image and sidecar, and
+run `01a02e06-38a7-7000-8365-19b16d5dde31` published seventeen receipt-workflow artifacts. Both
+run-ID-keyed Table rows succeeded and every referenced result blob exists.
 
 ### Phase 10: Hardening, documentation, demo
 
@@ -328,7 +351,7 @@ and can be claimed after Microsoft login. The deployed app runs min 1 / max 3 re
 
 **Azure resources beyond the shared account.** The course provides a shared storage account for the container, queue, and table. Azure SQL, container hosting, Key Vault, and the model endpoint need the team's own subscription and may hit quota or cost limits. The graded path depends only on the shared storage account, so a shortfall in the team subscription cannot take the required deliverable down with it.
 
-**The graded path runs last.** Phase 9 is the deliverable the course explicitly requires, and it is scheduled after the additive work. Four things reduce the exposure: the specification document and storage entities are done in the continuous tracks, the Table write logic is already built and reused from Phase 3, Phase 6 leaves the engine bootstrap de-duplicated so the adapter has one thing to call, and the agent service that `Experiment.RunAsync` needs for natural-language messages is built in Phase 6 and already has a second caller in front of it from Phase 7. The job descriptor schema is defined in Phase 9 itself rather than frozen ahead of it, which accepts a little rework in exchange for a schema shaped by the consumer that actually reads it.
+**The graded path runs last.** Phase 9 is the deliverable the course explicitly requires, and it is scheduled after the additive work. Four things reduce the exposure: the specification document and storage entities are done in the continuous tracks, the Table write logic is already built and reused from Phase 3, Phase 6 leaves the engine bootstrap de-duplicated so the adapter has one thing to call, and the agent service that `Experiment.RunAsync` needs for natural-language messages is built in Phase 6 and already has a second caller in front of it from Phase 7. ~~The job descriptor schema is defined in Phase 9 itself rather than frozen ahead of it, which accepts a little rework in exchange for a schema shaped by the consumer that actually reads it.~~ The queue message itself is now the command, which removes that schema entirely.
 
 **Two SDK upgrades land in one phase.** Phase 6 moves `ModelContextProtocol` from 1.4.1 to the 2.x line and `Microsoft.Agents.AI` off `1.0.0-rc4`. The MCP jump changes the transport default and deprecates the stateful-only surface; the agent jump crosses a release-candidate boundary, and the session-serialization surface the Phase 7 design assumes may have moved. Both are done at the start of Phase 6 rather than discovered inside Phase 7, and the deployed endpoint plus `verify-deployment.sh` are the regression test. Staying on a release candidate is the alternative risk, and it is the worse one for a graded submission.
 

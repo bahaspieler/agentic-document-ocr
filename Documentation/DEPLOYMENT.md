@@ -1,8 +1,8 @@
 # Deployment
 
-The serving instance of the OCR engine runs as an Azure Container App, pulled from a container
-registry in the same resource group as the storage account. There is no worker instance yet; that
-role is a placeholder until the queue path.
+The serving instance and course queue worker run as separate Azure Container Apps pulled from one
+image. The serving app has HTTPS ingress; the worker has no ingress and continuously polls the
+configured course queue.
 
 Images enter through Blob Storage. A file named `DEPLOY01.jpg` in the configured container is the
 reference `DEPLOY01`. `RegisterImage` is a local convenience that needs a path the server can read,
@@ -19,6 +19,7 @@ All of these live in `RG_Hidden_Layer`. The scripts never create or delete the g
 | Container registry | `acrhiddenlayerocr` | Holds the `ocr-agent` image |
 | Container Apps environment | `cae-ocr-agent` | Hosts the app |
 | Container app | `ca-ocr-agent` | Web UI, REST API, and MCP server over one HTTPS origin |
+| Worker container app | `ca-ocr-worker` | Course Queue → Blob → experiment → Blob/Table path |
 | Azure SQL server | `sql-hidden-layer-ocr` | Logical server for Phase 7 data |
 | Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, line items, and correction revisions |
 
@@ -39,6 +40,7 @@ be moved, so the fix is a teardown and a fresh deploy, and the app gets a new ho
 ```bash
 scripts/azure-deploy.sh            # create or update; builds linux/amd64 in ACR
 scripts/azure-deploy.sh --skip-build
+scripts/azure-worker-deploy.sh     # create/update the no-ingress worker
 scripts/azure-sql.sh               # create/update the Basic SQL database
 scripts/azure-start.sh             # activate and keep min 1
 scripts/azure-stop.sh              # deactivate the revision; URL stays
@@ -46,6 +48,7 @@ scripts/azure-teardown.sh          # delete app, environment, registry only
 scripts/verify-deployment.sh       # upload a receipt, run MCP checks, assert Blob and Table
 scripts/verify-webui.py URL        # verify SPA, REST, SQL, SSE, idempotency, concurrency
 scripts/verify-webui.py URL --image receipt.jpg  # also exercise attachments, artifacts, corrections
+scripts/verify-queue-worker.py     # enqueue and verify agent/tool/workflow jobs
 ```
 
 `azure-deploy.sh` is idempotent. It registers the `Microsoft.App` and `Microsoft.OperationalInsights`
@@ -53,6 +56,10 @@ providers if needed, creates the registry and environment when they are missing,
 tagged image with `az acr build --platform linux/amd64`, and creates or updates the app. The storage
 connection string is a Container Apps secret, not an image layer. The model and SQL connection
 strings are stored the same way as `openai-key` and `sql-cs`.
+
+`azure-worker-deploy.sh` reuses the image already selected by the serving app, unless an explicit
+worker image is configured. It supplies the course `MyConfig__*` values, local OCR work storage, and
+the optional model key. It does not supply SQL or authentication settings.
 
 The replica range is min 1 / max `AZURE_MAX_REPLICAS`, which defaults to 3, so the submitted Web UI
 stays live. MCP is stateless and REST conversations live in SQL, so Container Apps can spread requests
@@ -108,6 +115,10 @@ idempotency key, and races two turns to prove optimistic concurrency leaves one 
 With `--image`, it also verifies attachment persistence, structured workflow output, safe artifact
 download, receipt revision auditing, and corrected JSON/CSV exports.
 
+The queue verifier uploads the sample receipt, sends plain-language tool and workflow commands,
+waits for their run-ID-keyed result rows, and checks every output URL. Details are in
+[QUEUE_WORKER.md](QUEUE_WORKER.md).
+
 ## Cost
 
 Phase 7 intentionally keeps one replica and the Basic SQL database live. To stop compute after a demo:
@@ -115,6 +126,9 @@ Phase 7 intentionally keeps one replica and the Basic SQL database live. To stop
 ```bash
 scripts/azure-stop.sh
 ```
+
+The worker has its own start/stop controls because stopping the serving app should not silently stop
+course queue processing.
 
 Start it again with `scripts/azure-start.sh` shortly before you need it. Do not delete the
 resource group or the storage account to save money; those hold the graded artifacts and the run

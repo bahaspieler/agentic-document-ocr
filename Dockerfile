@@ -19,15 +19,24 @@ WORKDIR /src
 # Project files first, so a source-only change does not invalidate the restore layer.
 COPY OcrAgent/OcrAgent.csproj OcrAgent/
 COPY OcrAgent.Mcp/OcrAgent.Mcp.csproj OcrAgent.Mcp/
+COPY MyCloudProject.Common/MyCloudProject.Common.csproj MyCloudProject.Common/
+COPY MyExperiment/MyExperiment.csproj MyExperiment/
+COPY MyCloudProject/MyCloudProject.csproj MyCloudProject/
 RUN dotnet restore OcrAgent.Mcp/OcrAgent.Mcp.csproj -r linux-x64
+RUN dotnet restore MyCloudProject/MyCloudProject.csproj -r linux-x64
 
 COPY OcrAgent/ OcrAgent/
 COPY OcrAgent.Mcp/ OcrAgent.Mcp/
+COPY MyCloudProject.Common/ MyCloudProject.Common/
+COPY MyExperiment/ MyExperiment/
+COPY MyCloudProject/ MyCloudProject/
 
 # Naming the runtime identifier leaves out the Android, iOS, macOS, and Windows native binaries that
 # several dependencies carry. That is most of the image.
 RUN dotnet publish OcrAgent.Mcp/OcrAgent.Mcp.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/mcp \
- && dotnet publish OcrAgent/OcrAgent.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/cli
+ && dotnet publish OcrAgent/OcrAgent.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/cli \
+ && dotnet publish MyCloudProject/MyCloudProject.csproj -c Release -r linux-x64 --self-contained false --no-restore \
+      -p:UseAppHost=false -p:ErrorOnDuplicatePublishOutputFiles=false -o /out/worker
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim AS runtime
@@ -49,6 +58,7 @@ RUN apt-get update \
 
 COPY --from=build /out/mcp /app/mcp
 COPY --from=build /out/cli /app/cli
+COPY --from=build /out/worker /app/worker
 COPY --from=web-build /web/dist /app/mcp/wwwroot
 COPY entrypoint.sh /app/entrypoint.sh
 
@@ -60,7 +70,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 # what COPY --chmod needs.
 RUN chmod +x /app/entrypoint.sh \
  && ln -s /usr/lib/x86_64-linux-gnu/libdl.so.2 /usr/lib/x86_64-linux-gnu/libdl.so \
- && for app in /app/mcp /app/cli; do \
+ && for app in /app/mcp /app/cli /app/worker; do \
         mkdir -p "$app/x64"; \
         ln -s /usr/lib/x86_64-linux-gnu/libtesseract.so.5 "$app/x64/libtesseract50.so"; \
         ln -s /usr/lib/x86_64-linux-gnu/liblept.so.5 "$app/x64/libleptonica-1.82.0.so"; \

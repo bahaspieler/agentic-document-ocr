@@ -1,7 +1,7 @@
 # Configuration
 
-How `OcrAgent` (console) and `OcrAgent.Mcp` (MCP server) are configured. The sample template's
-`MyCloudProject` keeps its own `MyConfig` section and is not covered here.
+How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the Phase 9 queue worker are configured.
+The unchanged template host retains its `MyConfig` section alongside the engine's `OCR_*` settings.
 
 ## Sources, in precedence order
 
@@ -21,8 +21,8 @@ deliberate choice, so it wins; the copy beside the assembly is the one that ship
 container uses, where the working directory is the filesystem root. Relative storage paths resolve
 against whichever of the two was used, not against the working directory.
 
-Every entry point loads configuration through one `EngineHost.Create()`, so the console, the MCP
-server, and later the queue worker cannot disagree about any of the above.
+Every engine entry point loads configuration through one `EngineHost.Create()`, so the console,
+server, and queue worker cannot disagree about engine settings.
 
 Copy `.env.example` to `.env` and fill it in. `.env` is gitignored.
 
@@ -47,6 +47,23 @@ Keys prefixed `OCR_` override `appsettings.json`, with a double underscore per n
 | `OCR_Auth__Enabled` | Enables optional Microsoft bearer-token validation |
 | `OCR_Auth__ClientId` | Entra application/client ID shared by the SPA and API |
 | `OCR_Auth__TenantId` | `common` for organizational and personal Microsoft accounts |
+
+The queue host also reads these unprefixed variables through the course template:
+
+| Key | Purpose |
+|-----|---------|
+| `MyConfig__StorageConnectionString` | Course Queue, training/result Blob containers, and result Table |
+| `MyConfig__GroupId` | Result row partition key |
+| `MyConfig__TrainingContainer` | Source images named in queue commands |
+| `MyConfig__ResultContainer` | Graded output artifacts |
+| `MyConfig__ResultTable` | One `ExperimentResult` row per queue message |
+| `MyConfig__Queue` | Trigger queue |
+| `MyConfig__WorkRoot` | Writable temporary worker files |
+| `MyConfig__MessageVisibilityTimeoutSeconds` | Queue message processing lease |
+
+The deployment helpers accept `COURSE_STORAGE_CONNECTION_STRING` as a worker-only override and
+otherwise reuse `AZURE_STORAGE_CONNECTION_STRING`. Course entity names are independently
+overridable; see [QUEUE_WORKER.md](QUEUE_WORKER.md).
 
 Neither store needs its connection string set explicitly. When `Storage:AzureBlob:ConnectionString`
 or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CONNECTION_STRING`.

@@ -1,8 +1,7 @@
 # Container
 
-One image carries the React Web UI, REST/MCP host, engine, native OCR stack, assets, and both entry points. The role is
-chosen when the container starts. `MyCloudProject` is not in the image yet; it joins as a third role
-with the queue path.
+One image carries the React Web UI, REST/MCP host, engine, native OCR stack, assets, and all three
+entry points. The role is chosen when the container starts.
 
 ## Build
 
@@ -24,13 +23,15 @@ output is copied into `/app/mcp/wwwroot` after the .NET publish.
 docker run -p 5290:8080 --env-file .env ocr-agent               # Web UI + REST + MCP, the default
 docker run --rm --env-file .env ocr-agent cli runs list         # any CLI command
 docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 CTR001
+docker run --rm --env-file .env ocr-agent worker                # course queue loop
 ```
 
 `entrypoint.sh` reads the first argument and passes the rest through, with `CMD ["mcp"]` making the
-server the default. `worker` is recognised and exits with a message until the queue path lands.
+server the default. `worker` starts the unchanged `MyCloudProject` polling host.
 
-The two roles publish to `/app/mcp` and `/app/cli` and each carries its own copy of the tessdata and
-the U2-Net model, about 27 MB duplicated. Sharing one copy between them was not worth the coupling.
+The roles publish to `/app/mcp`, `/app/cli`, and `/app/worker`; each carries the native aliases it
+needs. The worker reuses the same OCR engine assemblies and model assets through its project
+dependency.
 
 The MCP half of the server keeps nothing per client between requests. REST conversation payloads,
 idempotency rows, users, and structured receipts live in SQL; run artifacts and records live in Blob
@@ -40,9 +41,13 @@ container answering a request whose predecessor went elsewhere is not a special 
 produced inside a workflow names the run directory it was written to, which is what lets a second
 container resolve it without having taken part in the run.
 
-Both are published for `linux-x64` rather than portable. Several dependencies ship native binaries
+All .NET roles are published for `linux-x64` rather than portable. Several dependencies ship native binaries
 for Android, iOS, macOS, and Windows that a Linux container can never load, and naming the runtime
 identifier leaves them out. That alone is the difference between a 1.65 GB image and a 315 MB one.
+
+The worker is a separate no-ingress Container App. It uses local job-scoped engine storage under
+`/var/ocr`, uploads graded artifacts through the template provider, and does not connect to the Web
+UI's SQL session store. See [QUEUE_WORKER.md](QUEUE_WORKER.md).
 
 ## Configuration
 
