@@ -19,8 +19,7 @@ case "$role" in
         exec dotnet /app/cli/OcrAgent.dll "$@"
         ;;
     worker)
-        echo "The worker role arrives with the queue path in Phase 9." >&2
-        exit 64
+        exec dotnet /app/worker/MyCloudProject.dll "$@"
         ;;
     *)
         echo "Unknown role '$role'. Use mcp, cli, or worker." >&2

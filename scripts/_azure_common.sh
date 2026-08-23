@@ -65,6 +65,7 @@ apply_azure_defaults() {
     : "${AZURE_RESOURCE_GROUP:=RG_Hidden_Layer}"
     : "${AZURE_ACR_NAME:=acrhiddenlayerocr}"
     : "${AZURE_CONTAINER_APP_NAME:=ca-ocr-agent}"
+    : "${AZURE_WORKER_APP_NAME:=ca-ocr-worker}"
     : "${AZURE_CONTAINER_APP_ENV:=cae-ocr-agent}"
     : "${AZURE_IMAGE_NAME:=ocr-agent}"
     : "${AZURE_SQL_SERVER_NAME:=sql-hidden-layer-ocr}"
@@ -74,6 +75,12 @@ apply_azure_defaults() {
     : "${OCR_Runs__Provider:=azuretable}"
     : "${OCR_Runs__TableName:=OcrRuns}"
     : "${OCR_Runs__GroupId:=HiddenLayer}"
+    : "${MyConfig__TrainingContainer:=training-files}"
+    : "${MyConfig__ResultContainer:=result-files}"
+    : "${MyConfig__ResultTable:=results}"
+    : "${MyConfig__Queue:=trigger-queue}"
+    : "${MyConfig__GroupId:=HiddenLayer}"
+    : "${MyConfig__MessageVisibilityTimeoutSeconds:=900}"
 }
 
 resource_group_location() {
@@ -147,6 +154,22 @@ replica_range() {
         -o tsv 2>/dev/null || true
 }
 
+worker_replica_range() {
+    az containerapp show \
+        --name "$AZURE_WORKER_APP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --query "{min:properties.template.scale.minReplicas, max:properties.template.scale.maxReplicas}" \
+        -o tsv 2>/dev/null || true
+}
+
+worker_active_revisions() {
+    az containerapp revision list \
+        --name "$AZURE_WORKER_APP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --query "[?properties.active].name" \
+        -o tsv
+}
+
 # Environment variables applied to the container. The connection string (and the
 # model key, when present) are secret references rather than plaintext values.
 container_env_vars() {
@@ -177,6 +200,32 @@ container_env_vars() {
     fi
     if [ -n "${OPENAI_API_KEY:-}" ]; then
         vars+=("OPENAI_API_KEY=secretref:openai-key")
+    fi
+    printf '%s\n' "${vars[@]}"
+}
+
+# The worker intentionally receives no serving-only SQL or authentication settings.
+# Both consumers use the same storage and model secrets, while MyCloudProject binds
+# its course-template settings from the unprefixed MyConfig section.
+worker_env_vars() {
+    local vars=(
+        "MyConfig__StorageConnectionString=secretref:course-storage-cs"
+        "MyConfig__TrainingContainer=${MyConfig__TrainingContainer}"
+        "MyConfig__ResultContainer=${MyConfig__ResultContainer}"
+        "MyConfig__ResultTable=${MyConfig__ResultTable}"
+        "MyConfig__Queue=${MyConfig__Queue}"
+        "MyConfig__GroupId=${MyConfig__GroupId}"
+        "MyConfig__WorkRoot=/var/ocr/worker"
+        "MyConfig__MessageVisibilityTimeoutSeconds=${MyConfig__MessageVisibilityTimeoutSeconds:-900}"
+        "MyConfig__EnsureStorageResources=true"
+        "OCR_Storage__Provider=local"
+        "OCR_Runs__Provider=none"
+    )
+    if [ -n "${OPENAI_API_KEY:-}" ]; then
+        vars+=("OPENAI_API_KEY=secretref:openai-key")
+    fi
+    if [ -n "${OPENAI_CHATCOMPLETION_DEPLOYMENT:-}" ]; then
+        vars+=("OPENAI_CHATCOMPLETION_DEPLOYMENT=${OPENAI_CHATCOMPLETION_DEPLOYMENT}")
     fi
     printf '%s\n' "${vars[@]}"
 }
