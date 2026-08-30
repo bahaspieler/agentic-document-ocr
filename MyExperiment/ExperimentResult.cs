@@ -53,10 +53,10 @@ namespace MyExperiment
         public string Status { get; set; } = "failed";
         public bool Success { get; set; }
         public string Mode { get; set; } = "";
-        public string Error { get; set; }
-        public string Answer { get; set; }
-        public string PrimaryRunId { get; set; }
-        public string PrimaryOutputFileUrl { get; set; }
+        public string? Error { get; set; }
+        public string? Answer { get; set; }
+        public string? PrimaryRunId { get; set; }
+        public string? PrimaryOutputFileUrl { get; set; }
         public string OutputFilesJson { get; set; } = "[]";
 
         [IgnoreDataMember]

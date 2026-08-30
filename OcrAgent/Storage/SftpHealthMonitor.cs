@@ -156,37 +156,3 @@ public sealed class SftpHealthMonitor : IDisposable
         _logger?.LogInformation("SftpHealthMonitor disposed");
     }
 }
-
-/// <summary>Running stats for a single operation name.</summary>
-public sealed class HealthMetrics
-{
-    /// <summary>Same label used when recording.</summary>
-    public required string OperationName { get; init; }
-
-    /// <summary>Successful plus failed invocations.</summary>
-    public int TotalCalls { get; set; }
-
-    /// <summary>Count of successful invocations.</summary>
-    public int SuccessfulCalls { get; set; }
-
-    /// <summary>Count of failed invocations.</summary>
-    public int FailedCalls { get; set; }
-
-    /// <summary>Sum of durations for successful calls only.</summary>
-    public long TotalDurationMs { get; set; }
-
-    /// <summary>Shortest successful duration seen; zero if none.</summary>
-    public long MinDurationMs { get; set; }
-
-    /// <summary>Longest successful duration seen.</summary>
-    public long MaxDurationMs { get; set; }
-
-    /// <summary>UTC time of the last recorded call.</summary>
-    public DateTime LastCallTime { get; set; }
-
-    /// <summary>SuccessfulCalls divided by TotalCalls, or 1.0 when TotalCalls is zero.</summary>
-    public double SuccessRate => TotalCalls > 0 ? (double)SuccessfulCalls / TotalCalls : 1.0;
-
-    /// <summary>Mean duration over successful calls only.</summary>
-    public long AverageDurationMs => SuccessfulCalls > 0 ? TotalDurationMs / SuccessfulCalls : 0;
-}

@@ -13,6 +13,8 @@ namespace OcrAgent.Plugins.Ocr;
 /// </summary>
 public sealed partial class OcrScoringPlugin : IImageProcessingTool
 {
+    #region Score Model
+
     /// <summary>Breakdown of a single OCR run used for ranking variants.</summary>
     public sealed class OcrScore
     {
@@ -37,6 +39,10 @@ public sealed partial class OcrScoringPlugin : IImageProcessingTool
         /// <summary>PSM label for logging.</summary>
         public string Psm { get; set; } = "";
     }
+
+    #endregion
+
+    #region Scoring
 
     /// <summary>
     /// Deserializes OCR JSON, computes a 0–100 score, and returns JSON of <see cref="OcrScore"/>.
@@ -137,10 +143,16 @@ public sealed partial class OcrScoringPlugin : IImageProcessingTool
     [GeneratedRegex(@"\bTOTAL\b", RegexOptions.IgnoreCase)]
     private static partial Regex TotalPattern();
 
+    #endregion
+
+    #region Tool Registration
+
     /// <summary>Exposes <see cref="ScoreOcrResult"/> as an AI-callable tool.</summary>
     /// <returns>Sequence containing the ScoreOcrResult tool.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ScoreOcrResult);
     }
+
+    #endregion
 }

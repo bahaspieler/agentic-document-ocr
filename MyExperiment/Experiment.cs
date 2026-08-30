@@ -17,6 +17,8 @@ namespace MyExperiment
     /// <summary>Runs one natural-language queue command through the existing OCR agent.</summary>
     public class Experiment : IExperiment
     {
+        #region Construction
+
         private readonly IQueueCommandStorage _storage;
         private readonly ILogger _logger;
         private readonly MyConfig _config;
@@ -37,6 +39,10 @@ namespace MyExperiment
             _config = new MyConfig();
             configSection.Bind(_config);
         }
+
+        #endregion
+
+        #region Execution
 
         /// <inheritdoc />
         public async Task<IExperimentResult> RunAsync(string inputData)
@@ -142,6 +148,10 @@ namespace MyExperiment
             }
         }
 
+        #endregion
+
+        #region Artifact Collection
+
         private async Task<List<string>> CollectArtifactsAsync(
             IImageStore store,
             ExecutionResult execution,
@@ -187,6 +197,10 @@ namespace MyExperiment
 
             return files;
         }
+
+        #endregion
+
+        #region Result and Path Helpers
 
         private ExperimentResult Failure(
             string runId,
@@ -236,5 +250,7 @@ namespace MyExperiment
                     $"{Path.GetFileNameWithoutExtension(name)}-{Guid.NewGuid():N}" +
                     Path.GetExtension(name));
         }
+
+        #endregion
     }
 }

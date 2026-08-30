@@ -19,9 +19,8 @@ and persistence settings.
 
 ## Runtime and deployment
 
-The solution defaults to .NET 10. The Docker image is built for `linux/amd64` on
-`mcr.microsoft.com/dotnet/aspnet:10.0`. `Directory.Build.props` retains an explicit
-`net8.0` override only as a temporary rollback guard. The image includes:
+The solution targets .NET 10. The Docker image is built for `linux/amd64` on
+`mcr.microsoft.com/dotnet/aspnet:10.0`. The image includes:
 
 - the published `OcrAgent.Mcp`, `OcrAgent`, and `MyCloudProject` applications;
 - the compiled React, Vite, and TypeScript application;

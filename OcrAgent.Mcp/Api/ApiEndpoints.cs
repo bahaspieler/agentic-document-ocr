@@ -38,6 +38,8 @@ public static class ApiEndpoints
             agentService);
         var artifactDiscovery = new ArtifactDiscoveryService(host.Store);
 
+        #region Configuration and Job Endpoints
+
         api.MapGet("/config", () => Results.Ok(new
         {
             auth = new
@@ -189,6 +191,10 @@ public static class ApiEndpoints
             await producer;
         });
 
+        #endregion
+
+        #region Run and Artifact Endpoints
+
         api.MapGet("/runs", async (
             int? top, string? mode, string? conversationId, string? name, string? status,
             string? source, DateTimeOffset? from, DateTimeOffset? to, string? cursor,
@@ -333,6 +339,10 @@ public static class ApiEndpoints
                 enableRangeProcessing: true);
         });
 
+        #endregion
+
+        #region Receipt Endpoints
+
         api.MapGet("/receipts", async (
             string? merchant, DateTime? from, DateTime? to, int? top,
             string? conversationId, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
@@ -447,6 +457,10 @@ public static class ApiEndpoints
             await ReceiptExportAsync(
                 host, receiptId, conversationId, principal, original: false,
                 csv: true, cancellationToken));
+
+        #endregion
+
+        #region Conversation Endpoints
 
         api.MapPost("/conversations", async (
             CreateConversationRequest request,
@@ -628,7 +642,11 @@ public static class ApiEndpoints
                 await WriteSseAsync(context.Response, envelope.Event, envelope.Data, cancellationToken);
             await producer;
         });
+
+        #endregion
     }
+
+    #region Streaming Producers
 
     private static async Task ProduceWorkflowJobAsync(
         OcrAgentToolHost host,
@@ -797,6 +815,10 @@ public static class ApiEndpoints
             writer.TryComplete();
         }
     }
+
+    #endregion
+
+    #region Persistence and Access Control
 
     private static async Task<IResult?> CheckConversationAsync(
         ISessionStore store,
@@ -972,6 +994,10 @@ public static class ApiEndpoints
             : possessionConversationId == linkedConversationId;
     }
 
+    #endregion
+
+    #region Receipt Exports
+
     private static async Task<IResult> ReceiptExportAsync(
         OcrAgentToolHost host,
         string receiptId,
@@ -1025,6 +1051,10 @@ public static class ApiEndpoints
 
     private static string CsvNumber(decimal? value) =>
         value?.ToString(CultureInfo.InvariantCulture) ?? "";
+
+    #endregion
+
+    #region Identity and Serialization
 
     private static async Task<string?> UpsertUserAsync(
         IUserStore store, ClaimsPrincipal principal, CancellationToken cancellationToken)
@@ -1127,4 +1157,6 @@ public static class ApiEndpoints
         new(JsonSerializerDefaults.Web);
 
     private sealed record SseEnvelope(string Event, object Data);
+
+    #endregion
 }

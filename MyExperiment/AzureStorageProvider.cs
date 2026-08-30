@@ -54,6 +54,8 @@ namespace MyExperiment
             }
         }
 
+        #region Queue and Input Operations
+
         /// <summary>Deletes a queue message after its result has been stored.</summary>
         /// <param name="request">Request containing the current message id and pop receipt.</param>
         /// <remarks>Call this only after <see cref="UploadResultAsync"/> succeeds.</remarks>
@@ -100,7 +102,7 @@ namespace MyExperiment
                 visibilityTimeout: TimeSpan.FromSeconds(
                     Math.Max(30, _config.MessageVisibilityTimeoutSeconds)),
                 cancellationToken: token);
-            QueueMessage message = response.Value.FirstOrDefault();
+            QueueMessage? message = response.Value.FirstOrDefault();
             if (message is null)
                 return null!;
 
@@ -149,6 +151,10 @@ namespace MyExperiment
                 match.Blob,
                 await DownloadBlobAsync(match.Blob).ConfigureAwait(false));
         }
+
+        #endregion
+
+        #region Result Persistence
 
         /// <summary>Uploads a result using the course experiment category.</summary>
         public Task UploadExperimentResult(IExperimentResult result)
@@ -199,6 +205,10 @@ namespace MyExperiment
                          .Distinct(StringComparer.OrdinalIgnoreCase))
                 TryDeleteWorkDirectory(directory);
         }
+
+        #endregion
+
+        #region Validation and Path Helpers
 
         private void ValidateConfiguration()
         {
@@ -338,5 +348,7 @@ namespace MyExperiment
                 // Cleanup is best effort after durable upload.
             }
         }
+
+        #endregion
     }
 }

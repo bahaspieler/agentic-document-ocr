@@ -13,6 +13,8 @@ namespace OcrAgent.Execution;
 /// <summary>Shared execution path for HTTP, queue, and other application hosts.</summary>
 public sealed class ExecutionCore
 {
+    #region Construction
+
     private readonly PluginAggregator _aggregator;
     private readonly IReceiptStore? _receiptStore;
     private readonly AgentService? _agentService;
@@ -51,6 +53,10 @@ public sealed class ExecutionCore
         _agentService = agentService;
         _artifacts = new ArtifactDiscoveryService(store);
     }
+
+    #endregion
+
+    #region Execution
 
     /// <summary>Executes one agent, tool, or workflow request.</summary>
     /// <param name="request">Mode-specific request data.</param>
@@ -150,6 +156,10 @@ public sealed class ExecutionCore
             run.Mode.Equals("workflow", StringComparison.OrdinalIgnoreCase))
         ?? runs.LastOrDefault();
 
+    #endregion
+
+    #region Helpers
+
     private async Task<string> RunToolAsync(
         ExecutionRequest request,
         CancellationToken cancellationToken)
@@ -200,4 +210,6 @@ public sealed class ExecutionCore
     {
         public void Report(T value) => callback(value);
     }
+
+    #endregion
 }

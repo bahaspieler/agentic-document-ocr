@@ -41,6 +41,8 @@ public sealed class AgentService
     /// <exception cref="InvalidOperationException">No model credentials in the environment.</exception>
     public static AgentService Create(IEnumerable<AITool> tools) => new(CreateAgent(tools));
 
+    #region Conversation Lifecycle
+
     /// <summary>Starts a conversation the caller can carry across turns.</summary>
     /// <param name="conversationId">
     /// Id to record the turns under. A new one is generated when null, which is the usual case; a
@@ -78,6 +80,10 @@ public sealed class AgentService
             conversation.Session, cancellationToken: cancellationToken).ConfigureAwait(false);
         return element.GetRawText();
     }
+
+    #endregion
+
+    #region Turn Execution
 
     /// <summary>
     /// Runs one turn: the model reads the message, calls whichever tools it needs, and answers.
@@ -173,6 +179,10 @@ public sealed class AgentService
         return answer.ToString();
     }
 
+    #endregion
+
+    #region Agent Configuration
+
     /// <summary>
     /// Builds the chat agent from OPENAI_API_KEY and optional OPENAI_CHATCOMPLETION_DEPLOYMENT.
     /// </summary>
@@ -201,4 +211,6 @@ public sealed class AgentService
             throw new InvalidOperationException($"Missing {key} environment variable.");
         return value;
     }
+
+    #endregion
 }

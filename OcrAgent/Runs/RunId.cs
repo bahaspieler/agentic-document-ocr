@@ -8,9 +8,9 @@ namespace OcrAgent.Runs;
 /// from them.
 /// </summary>
 /// <remarks>
-/// The engine targets net8.0, which has no <c>Guid.CreateVersion7</c>, so the id is built here
-/// instead. That also keeps the millisecond timestamp readable out of an existing id, which is what
-/// allows <see cref="ToRowKey"/> to address a stored record without a lookup.
+/// The custom layout reserves the UUIDv7 <c>rand_a</c> field for an intra-millisecond counter. It
+/// also keeps the timestamp readable from an existing id, which lets <see cref="ToRowKey"/> address
+/// a stored record without a lookup.
 /// </remarks>
 public static class RunId
 {

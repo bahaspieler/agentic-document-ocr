@@ -19,17 +19,3 @@ public sealed class WorkflowOverrides
     [JsonPropertyName("initialContext")]
     public Dictionary<string, string>? InitialContext { get; set; }
 }
-
-/// <summary>
-/// Overrides for a single step: skip or replace args.
-/// </summary>
-public sealed class StepOverride
-{
-    /// <summary>When false, the step is skipped if the engine supports it.</summary>
-    [JsonPropertyName("enabled")]
-    public bool? Enabled { get; set; }
-
-    /// <summary>Merged into the step argument template.</summary>
-    [JsonPropertyName("args")]
-    public Dictionary<string, object?>? Args { get; set; }
-}

@@ -8,6 +8,8 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
 {
     public bool IsEnabled => true;
 
+    #region Conversation Operations
+
     public async Task<ConversationRecord> CreateAsync(
         string conversationId,
         string? ownerUserId,
@@ -106,6 +108,10 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    #endregion
+
+    #region Turn Operations
+
     public async Task<ConversationTurnRecord?> GetTurnAsync(
         string conversationId,
         string idempotencyKey,
@@ -202,9 +208,15 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
         return updated;
     }
 
+    #endregion
+
+    #region Mapping Helpers
+
     private static string NormalizeTitle(string title)
     {
         var normalized = string.IsNullOrWhiteSpace(title) ? "New conversation" : title.Trim();
         return normalized.Length <= 200 ? normalized : normalized[..200];
     }
+
+    #endregion
 }

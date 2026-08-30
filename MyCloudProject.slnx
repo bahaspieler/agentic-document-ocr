@@ -1,0 +1,32 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Documentation/">
+    <File Path="Documentation/Experiment Specification - Hidden Layer.md" />
+    <File Path="Documentation/PROMPT.md" />
+    <File Path="Documentation/QUEUE_WORKER.md" />
+    <File Path="Documentation/SYSTEM_ARCHITECTURE.md" />
+  </Folder>
+  <Folder Name="/SampleFiles/">
+    <File Path="SampleFiles/images/RCPT001.png" />
+    <File Path="SampleFiles/queue/extract-receipt.txt" />
+    <File Path="SampleFiles/queue/remove-background.txt" />
+    <File Path="SampleFiles/README.md" />
+    <File Path="SampleFiles/workflows/receipt_extract_v3.json" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Dockerfile" />
+    <File Path=".editorconfig" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="MyCloudProject.Common/MyCloudProject.Common.csproj" />
+  <Project Path="MyCloudProject/MyCloudProject.csproj" />
+  <Project Path="MyExperiment/MyExperiment.csproj" />
+  <Project Path="OcrAgent.Mcp/OcrAgent.Mcp.csproj" />
+  <Project Path="OcrAgent/OcrAgent.csproj" />
+  <Project Path="UnitTests/UnitTests.csproj" />
+</Solution>

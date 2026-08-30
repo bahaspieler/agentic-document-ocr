@@ -11,6 +11,8 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
 {
     public bool IsEnabled => true;
 
+    #region Receipt Operations
+
     public async Task SaveAsync(
         ReceiptData receipt,
         string? runId,
@@ -218,6 +220,10 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         return rows.AsList();
     }
 
+    #endregion
+
+    #region Validation and Mapping
+
     private static DateTime? ParseDate(string? value)
     {
         if (!DateTimeOffset.TryParse(
@@ -277,4 +283,6 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
 
     private static string? Limit(string? value, int max) =>
         value is null || value.Length <= max ? value : value[..max];
+
+    #endregion
 }

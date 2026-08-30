@@ -27,21 +27,3 @@ public sealed class ValidationInfo
     [JsonPropertyName("warnings")]
     public List<string> Warnings { get; set; } = new();
 }
-
-/// <summary>
-/// One validation rule: name, pass/fail, optional detail string.
-/// </summary>
-public sealed class ValidationCheck
-{
-    /// <summary>Stable id for the rule (e.g. subtotal_plus_tax).</summary>
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    /// <summary>Whether the check passed.</summary>
-    [JsonPropertyName("passed")]
-    public bool Passed { get; set; }
-
-    /// <summary>Human-readable numbers or explanation.</summary>
-    [JsonPropertyName("detail")]
-    public string? Detail { get; set; }
-}

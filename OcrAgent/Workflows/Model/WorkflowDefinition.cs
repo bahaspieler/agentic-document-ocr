@@ -35,25 +35,3 @@ public sealed class WorkflowDefinition
     [JsonPropertyName("steps")]
     public List<WorkflowStep> Steps { get; set; } = new();
 }
-
-/// <summary>
-/// Caps on step count, variants, and wall-clock time for a workflow run.
-/// </summary>
-public sealed class WorkflowBudget
-{
-    /// <summary>Maximum tool steps to run.</summary>
-    [JsonPropertyName("maxSteps")]
-    public int MaxSteps { get; set; } = 20;
-
-    /// <summary>Maximum parallel or candidate variants allowed by the engine.</summary>
-    [JsonPropertyName("maxVariants")]
-    public int MaxVariants { get; set; } = 6;
-
-    /// <summary>Overall timeout in seconds.</summary>
-    [JsonPropertyName("timeoutSeconds")]
-    public int TimeoutSeconds { get; set; } = 120;
-
-    /// <summary>Optional hard time limit in milliseconds (engine-specific).</summary>
-    [JsonPropertyName("timeLimitMs")]
-    public int? TimeLimitMs { get; set; }
-}

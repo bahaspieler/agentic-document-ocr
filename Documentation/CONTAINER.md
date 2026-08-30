@@ -96,11 +96,10 @@ at the other is the whole fix.
 
 Both mismatches fail silently. The engine starts normally and simply has no OCR tools.
 
-This is why the base image is pinned to `8.0-bookworm-slim` rather than left at `8.0`. Bookworm is
-where Tesseract 5.3 meets Leptonica 1.82.0, the version written into the name the wrapper wants.
-Ubuntu 22.04 ships Tesseract 4.1 and does not work at all, and a future default move to trixie would
-change the Leptonica version and break the symlink silently. The bundled `eng.traineddata` is used
-rather than Debian's `tesseract-ocr-eng`, which is still 4.1-era data.
+The runtime uses `mcr.microsoft.com/dotnet/aspnet:10.0`, currently based on Ubuntu 24.04. Its
+Tesseract 5.3 and Leptonica 1.82 libraries match the compatibility aliases created by the
+Dockerfile. The bundled `eng.traineddata` is used instead of relying on a distribution-specific
+language-data package.
 
 **ONNX Runtime.** `Microsoft.ML.OnnxRuntime` already carries its Linux native library and needs
 nothing beyond `libgomp1`. Debian installs that anyway as a dependency of Tesseract, so it is named

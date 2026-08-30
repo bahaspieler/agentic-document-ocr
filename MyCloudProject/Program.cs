@@ -1,99 +1,73 @@
-﻿using MyCloudProject.Common;
-using System;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
-using System.Threading;
+using MyCloudProject.Common;
 using MyExperiment;
-using System.Threading.Tasks;
-using Azure.Storage.Queues.Models;
-using Azure.Storage.Queues;
-using System.Text.Json;
-using System.Text;
 
 namespace MyCloudProject
 {
-    class Program
+    internal static class Program
     {
-        /// <summary>
-        /// Your project ID from the last semester.
-        /// </summary>
-        private static string _projectName = "ML 25/26-??";
+        private const string ProjectName = "ML 25/26-01";
 
-        static async Task Main(string[] args)
+        private static async Task Main(string[] args)
         {
-            CancellationTokenSource tokeSrc = new CancellationTokenSource();
-
+            using var cancellationSource = new CancellationTokenSource();
             Console.CancelKeyPress += (sender, e) =>
             {
                 e.Cancel = true;
-                tokeSrc.Cancel();
+                cancellationSource.Cancel();
             };
 
-            Console.WriteLine($"Started experiment: {_projectName}");
-
-            // Init configuration
             var cfgRoot = Common.InitHelpers.InitConfiguration(args);
-
             var cfgSec = cfgRoot.GetSection("MyConfig");
-
-            // InitLogging
-            var logFactory = InitHelpers.InitLogging(cfgRoot);
-          
+            using var logFactory = InitHelpers.InitLogging(cfgRoot);
             var logger = logFactory.CreateLogger("Train.Console");
 
-            logger?.LogInformation($"{DateTime.Now} -  Started experiment: {_projectName}");
-        
+            logger.LogInformation("Started experiment {ProjectName}.", ProjectName);
+
             IStorageProvider storageProvider = new AzureStorageProvider(cfgSec);
+            IExperiment experiment = new Experiment(cfgSec, storageProvider, logger);
 
-            IExperiment experiment = new Experiment(cfgSec, storageProvider, logger/* put some additional config here */);
-
-            //
-            // Implements the step 3 in the architecture picture.
-            while (tokeSrc.Token.IsCancellationRequested == false)
+            try
             {
-                // Step 3
-                IExerimentRequest request = storageProvider.ReceiveExperimentRequestAsync(tokeSrc.Token);
-
-                if (request != null)
+                while (!cancellationSource.Token.IsCancellationRequested)
                 {
-                    try
+                    var request =
+                        storageProvider.ReceiveExperimentRequestAsync(cancellationSource.Token);
+
+                    if (request != null)
                     {
-                        // logging
-
-                        // Step 4.
-                        var localFileWithInputArgs = await storageProvider.DownloadInputAsync(request.InputFile);
-
-                        // logging
-
-                        // Here is your SE Project code started.(Between steps 4 and 5).
-                        IExperimentResult result = await experiment.RunAsync(localFileWithInputArgs);
-
-                        // logging
-
-                        // Step 5.
-                        await storageProvider.UploadResultAsync("outputfile", result);
-
-                        // logging
-
-                        await storageProvider.CommitRequestAsync(request);
-
-                        // loggingx
+                        try
+                        {
+                            var localFileWithInputArgs =
+                                await storageProvider.DownloadInputAsync(request.InputFile);
+                            var result = await experiment.RunAsync(localFileWithInputArgs);
+                            await storageProvider.UploadResultAsync("outputfile", result);
+                            await storageProvider.CommitRequestAsync(request);
+                        }
+                        catch (OperationCanceledException)
+                            when (cancellationSource.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            // The message stays uncommitted and becomes visible for a Queue retry.
+                            logger.LogError(ex, "Queue experiment failed.");
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        logger?.LogError(ex, "Queue experiment failed.");
+                        await Task.Delay(500, cancellationSource.Token);
                     }
-                }
-                else
-                {
-                    await Task.Delay(500);
-                    logger?.LogTrace("Queue empty...");
                 }
             }
+            catch (OperationCanceledException) when (cancellationSource.IsCancellationRequested)
+            {
+                // Ctrl+C requests an orderly worker shutdown.
+            }
 
-            logger?.LogInformation($"{DateTime.Now} -  Experiment exit: {_projectName}");
+            logger.LogInformation("Experiment {ProjectName} stopped.", ProjectName);
         }
-
-
     }
 }

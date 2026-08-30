@@ -19,11 +19,3 @@ public sealed record AgentStreamEvent(
     public static AgentStreamEvent ArtifactAvailable(AgentArtifact artifact) =>
         new("artifact", Artifact: artifact);
 }
-
-public sealed record AgentArtifact(
-    string RunId,
-    string Name,
-    long SizeBytes,
-    DateTimeOffset? LastModifiedUtc,
-    string ContentType,
-    bool Previewable);

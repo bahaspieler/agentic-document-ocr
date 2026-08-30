@@ -35,6 +35,8 @@ public sealed class WorkflowRunner
         _runStore = runStore;
     }
 
+    #region Workflow Execution
+
     /// <summary>
     /// Executes one run and records it.
     /// </summary>
@@ -206,6 +208,10 @@ public sealed class WorkflowRunner
         return result;
     }
 
+    #endregion
+
+    #region Result Mapping
+
     private static string? TryGetReceiptId(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value[0] != '{')
@@ -249,4 +255,6 @@ public sealed class WorkflowRunner
         StorageProvider = RunRecording.DescribeProvider(_store),
         TraceJson = JsonSerializer.Serialize(result.Trace),
     };
+
+    #endregion
 }

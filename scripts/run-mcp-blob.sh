@@ -19,7 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="$SCRIPT_DIR/../OcrAgent.Mcp/OcrAgent.Mcp.csproj"
-APP_DIR="$SCRIPT_DIR/../OcrAgent.Mcp/bin/Debug/net8.0"
+APP_DIR="$SCRIPT_DIR/../OcrAgent.Mcp/bin/Debug/net10.0"
 ENV_FILE="$SCRIPT_DIR/../.env"
 
 if [ ! -f "$ENV_FILE" ]; then

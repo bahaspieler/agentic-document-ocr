@@ -113,21 +113,15 @@ Container details and native dependency decisions are documented in
 Build and test the .NET solution:
 
 ```bash
-dotnet restore MyCloudProject.sln
-dotnet build MyCloudProject.sln
+dotnet restore MyCloudProject.slnx
+dotnet build MyCloudProject.slnx
 dotnet test UnitTests/UnitTests.csproj
 ```
 
-The solution defaults to `net10.0`. A temporary rollback guard remains available while diagnosing
-a runtime or dependency regression:
+All six .NET projects target .NET 10 through `Directory.Build.props`. Build the Linux image with:
 
 ```bash
-dotnet build MyCloudProject.sln -p:OcrAgentTargetFramework=net8.0
-dotnet test UnitTests/UnitTests.csproj -p:OcrAgentTargetFramework=net8.0
-docker build --platform linux/amd64 \
-  --build-arg DOTNET_VERSION=8.0 \
-  --build-arg OCRAGENT_TARGET_FRAMEWORK=net8.0 \
-  -t ocr-agent:net8-guard .
+docker build --platform linux/amd64 -t ocr-agent .
 ```
 
 Run the ASP.NET REST and MCP host:
@@ -230,7 +224,10 @@ Documentation/         Architecture and operational documentation
 - [MCP Client Testing](Documentation/MCP_CLIENT_TESTING.md)
 - [Run Records](Documentation/RUN_RECORDS.md)
 - [Queue Worker](Documentation/QUEUE_WORKER.md)
-- [Cloud Project Plan](Documentation/CLOUD_PROJECT_PLAN_V1.md)
+- [Experiment Specification](Documentation/Experiment%20Specification%20-%20Hidden%20Layer.md)
+- [Reproducible Samples](SampleFiles/README.md)
+- [AI Usage Log](Documentation/PROMPT.md)
+- [Cloud Project Plan](Documentation/plans/CLOUD_PROJECT_PLAN_V1.md)
 
 The `Documentation/SE_Course_*` files and previous paper describe the earlier console project. They
 remain historical sources rather than current cloud setup instructions.
