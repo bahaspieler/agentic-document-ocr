@@ -16,6 +16,23 @@ classical image-processing fallbacks for other inputs.
 
 The Web UI and stateless MCP server share the same HTTPS origin and serving Container App.
 
+## Architecture
+
+The deployment view shows the public clients, the two Azure Container Apps, the external model
+service, and the persistence services used by the serving and worker roles.
+
+![Cloud deployment architecture for the OCR preprocessing agent](Documentation/images/cloud-architecture-ocr-agent.png)
+
+The component view distinguishes the four entry paths and shows how their path-specific adapters
+reuse the shared OCR processing implementation. Direct REST and MCP requests invoke deterministic
+tools or workflows without a server-side model call. Web conversations and queue commands use
+`AgentService`, while only direct REST jobs and queue commands pass through `ExecutionCore`.
+
+![Component flow through the shared OCR processing engine](Documentation/images/cloud-component-flow-diagram.png)
+
+See [System Architecture](Documentation/SYSTEM_ARCHITECTURE.md) for detailed component boundaries,
+runtime flows, and persistence responsibilities.
+
 ## Implemented access paths
 
 - **Web UI:** upload images, stream agent responses, run workflows, inspect artifacts, edit receipt
@@ -30,9 +47,6 @@ The Web UI and stateless MCP server share the same HTTPS origin and serving Cont
 
 The Web UI calls REST, not MCP. The server-side agent is used by REST chat and the queue worker; it
 is intentionally not wrapped in an `agent_chat` MCP tool.
-
-See [System Architecture](Documentation/SYSTEM_ARCHITECTURE.md) for component boundaries and data
-flows.
 
 ## Deployment shape
 
