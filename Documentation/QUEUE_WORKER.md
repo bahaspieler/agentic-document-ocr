@@ -1,7 +1,7 @@
 # Course Queue Worker
 
-Phase 9 keeps the course template's processing loop and supplies the missing storage and experiment
-implementations. `MyCloudProject` and `MyCloudProject.Common` remain unchanged.
+The implementation keeps the course template's processing loop and supplies its storage and
+experiment adapters. `MyCloudProject` and `MyCloudProject.Common` remain unchanged.
 
 ## Message format
 
@@ -20,11 +20,13 @@ folder such as `images/RCPT001.png`; matching uses the filename without its exte
 
 ## Processing
 
-1. The unchanged template receives the queue message.
-2. `AzureStorageProvider` exposes the message as the template's downloaded input file.
-3. `Experiment.RunAsync` reads the command and resolves its image from `training-files`.
-4. The existing one-shot `AgentService` chooses the OCR tool or workflow.
-5. Produced files are uploaded to `result-files`.
+1. `MyCloudProject` polls the queue and gives one message to the experiment as one independent job.
+2. `AzureStorageProvider` materializes the message body as the template's local input file.
+3. `MyExperiment` reads the command, asks the provider to resolve and download its named image, and
+   maps both to an agent-mode execution request.
+4. `ExecutionCore` invokes `AgentService`, which creates a one-shot model session and calls the
+   shared OCR tools or workflow.
+5. `AzureStorageProvider` uploads the collected files to `result-files`.
 6. One result row is written to the configured Table, using the primary OCR run ID as both
    `ExperimentId` and `RowKey`.
 7. The queue message is deleted only after Blob and Table writes succeed.
@@ -59,12 +61,36 @@ image references, and missing model configuration produce a failure row and are 
 
 ## Run and verify
 
+Deploy or start the no-ingress worker, then submit a manual command:
+
 ```bash
-docker run --rm --env-file .env ocr-agent worker
 scripts/azure-worker-deploy.sh
-scripts/verify-queue-worker.py
+scripts/azure-queue-produce.sh \
+  --image SampleFiles/images/RCPT001.png \
+  --message "Remove the background from RCPT001."
 ```
 
-The deployed `ca-ocr-worker` Container App has no ingress and one replica. The verifier uploads
-`SampleFiles/images/RCPT001.png`, posts the two example commands, and checks their Table rows and
-every referenced result blob.
+`azure-queue-produce.sh` uses `COURSE_STORAGE_CONNECTION_STRING`, falling back to
+`AZURE_STORAGE_CONNECTION_STRING`. It creates the selected container and queue if needed, verifies
+the uploaded Blob, and only then publishes one plain-text message per `--message` or non-empty
+`--message-file` line. It overwrites an existing Blob with the selected name, but does not delete
+existing messages or results, and it does not wait for a result.
+
+Use the separate verifier for a repeatable end-to-end assertion:
+
+```bash
+python3 scripts/verify-queue-worker.py --image SampleFiles/images/RCPT001.png
+```
+
+The deployed `ca-ocr-worker` Container App has no ingress and one replica. The verifier uploads the
+sample, publishes two commands, waits for their Table rows, and checks every referenced result Blob.
+
+For local container execution, build and start the serving role with `docker compose up --build`.
+The worker is opt-in because it consumes the Azure queue named in `.env`:
+
+```bash
+docker compose --profile worker up --build worker
+```
+
+Stop it with `docker compose --profile worker stop worker`. This changes the local worker container
+only; it does not stop or remove the deployed Container App.

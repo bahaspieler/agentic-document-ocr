@@ -2,9 +2,9 @@
 #
 # Creates or updates the Azure Container Apps serving instance.
 #
-# Idempotent: re-running after a code change builds a new uniquely tagged image and
-# rolls a new revision. Never creates a worker instance; that role is a placeholder
-# until the queue path lands.
+# Idempotent: re-running after a code change builds a uniquely tagged image and
+# rolls a serving revision. The separate azure-worker-deploy.sh script assigns
+# that same image to the no-ingress queue worker.
 #
 # Usage:
 #   scripts/azure-deploy.sh
@@ -49,7 +49,7 @@ fi
 LOCATION="$(deployment_location)"
 echo "[INFO] Subscription : $(az account show --query name -o tsv)"
 echo "[INFO] Group        : $AZURE_RESOURCE_GROUP ($(resource_group_location))"
-echo "[INFO] Location     : $LOCATION (where the storage account is)"
+echo "[INFO] Location     : $LOCATION (storage region when resolvable)"
 echo "[INFO] Registry     : $AZURE_ACR_NAME"
 echo "[INFO] Environment  : $AZURE_CONTAINER_APP_ENV"
 echo "[INFO] App          : $AZURE_CONTAINER_APP_NAME"

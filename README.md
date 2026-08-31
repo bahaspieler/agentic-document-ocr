@@ -94,11 +94,17 @@ OCR_Runs__Provider=none
 OCR_Sql__Enabled=false
 ```
 
-Build and start the serving role:
+Build and start the serving role directly with Docker:
 
 ```bash
 docker build --platform linux/amd64 -t ocr-agent .
 docker run --rm -p 5290:8080 --env-file .env ocr-agent
+```
+
+Alternatively, build and start the same role with Docker Compose:
+
+```bash
+docker compose up --build
 ```
 
 Open `http://localhost:5290`. The same origin serves the SPA, `/api/*`, and MCP.
@@ -107,6 +113,8 @@ Check that the native OCR stack loaded:
 
 ```bash
 docker run --rm ocr-agent cli list-tools | grep -E "RunOcr|ScoreOcrResult"
+# Compose equivalent:
+docker compose run --rm serving cli list-tools | grep -E "RunOcr|ScoreOcrResult"
 ```
 
 Run a workflow against an image reference already present in the configured store:
@@ -114,10 +122,21 @@ Run a workflow against an image reference already present in the configured stor
 ```bash
 docker run --rm --env-file .env ocr-agent \
   cli workflow receipt_extract_v3 RCPT001
+# Compose equivalent:
+docker compose run --rm serving cli workflow receipt_extract_v3 RCPT001
 ```
 
 For a local image, mount its directory and register it first. Persistent local storage also needs a
 mounted writable directory when separate container invocations must share the reference.
+
+The queue worker is an opt-in Compose profile because it consumes the real Azure queue configured in
+`.env`. Start it only when this side effect is intended:
+
+```bash
+docker compose --profile worker up --build worker
+```
+
+Use `docker compose down` to stop local services. This does not change Azure resources.
 
 Container details and native dependency decisions are documented in
 [CONTAINER.md](Documentation/CONTAINER.md).
@@ -181,22 +200,27 @@ the complete key list.
 
 ## Azure deployment and verification
 
-The scripts use the existing `RG_Hidden_Layer` resource group and place new compute resources in the
-storage account's region.
+The scripts use the existing `RG_Hidden_Layer` resource group and place new compute resources in the storage account's region.
 
 ```bash
-scripts/azure-sql.sh
+scripts/azure-sql.sh               # when SQL is not already provisioned
 scripts/azure-deploy.sh
 scripts/azure-worker-deploy.sh
 
+scripts/azure-queue-produce.sh \
+  --image SampleFiles/images/RCPT001.png \
+  --message "Remove the background from RCPT001."
+
 scripts/verify-deployment.sh
-scripts/verify-webui.py https://<container-app-hostname>
-scripts/verify-queue-worker.py
+python3 scripts/verify-webui.py https://<container-app-hostname>
+python3 scripts/verify-queue-worker.py
 ```
 
 `azure-deploy.sh` builds the Linux image in Azure Container Registry and creates or updates the
 serving app. `azure-worker-deploy.sh` assigns that same image to the no-ingress worker. The scripts
-do not create or delete the course resource group or storage account.
+do not create or delete the course resource group or storage account. The manual queue producer
+uploads and enqueues but does not wait for results; the queue verifier performs that end-to-end
+assertion.
 
 See [DEPLOYMENT.md](Documentation/DEPLOYMENT.md) before creating, stopping, or removing Azure
 resources.

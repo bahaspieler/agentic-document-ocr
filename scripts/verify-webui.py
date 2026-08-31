@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Verify the deployed Phase 7 SPA, REST API, SQL stores, and durable SSE chat."""
+"""Verify the deployed SPA, REST API, SQL stores, and durable SSE chat.
+
+The verifier creates anonymous users, conversations, turns, jobs, and receipt
+corrections in the configured deployment. It does not delete those records.
+
+Usage:
+    python3 scripts/verify-webui.py --url https://app.azurecontainerapps.io/
+"""
 
 from __future__ import annotations
 
@@ -111,7 +118,7 @@ def main():
     print("[OK] REST, run history, and SQL receipt query")
 
     conversation = request(
-        base, "/api/conversations", "POST", {"title": "Automated Phase 7 verification"}
+        base, "/api/conversations", "POST", {"title": "Automated web deployment verification"}
     )
     conversation_id = conversation["id"]
     try:
@@ -314,7 +321,7 @@ def main():
     finally:
         request(base, f"/api/conversations/{concurrent_id}", "DELETE")
 
-    print("All Phase 7 web checks passed.")
+    print("All deployed web checks passed.")
 
 
 if __name__ == "__main__":

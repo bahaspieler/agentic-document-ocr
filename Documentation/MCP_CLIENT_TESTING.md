@@ -7,12 +7,11 @@ project root, the folder holding `.env`.
 ## 1. Get the endpoint and wake it up
 
 ```bash
-scripts/azure-start.sh --warm
+scripts/azure-start.sh
 ```
 
-`--warm` holds one replica up. Without it the app scales to zero and the first request pays a cold
-start, which Cursor usually reports as a failed connection rather than waiting. The script prints the
-endpoint; the URL is the plain hostname with a trailing slash, no `/mcp` path:
+The start script activates the latest revision and sets the serving replica range to min 1 and max
+`AZURE_MAX_REPLICAS`. The URL is the plain hostname with a trailing slash, with no `/mcp` path:
 
 ```
 https://ca-ocr-agent.blackglacier-c262b0d9.germanywestcentral.azurecontainerapps.io/
@@ -50,28 +49,28 @@ say what you want in the request itself.
 ## 3. Put an image where the server can reach it
 
 The deployed server has no filesystem in common with you, so `RegisterImage` is useless against it.
-Upload to the blob container instead. A blob named `RCPT001.jpg` is the reference `RCPT001`.
+Upload to the blob container instead. A blob named `RCPT001.png` is the reference `RCPT001`.
 
-The connection string holds semicolons, so `source .env` would silently cut it at the first one. Read
-the key out instead, the way the scripts do:
+The connection string holds semicolons, so do not execute `.env` as shell code. Use the shared loader,
+which preserves existing exported values:
 
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="$(sed -n 's/^AZURE_STORAGE_CONNECTION_STRING=//p' .env)"
+source scripts/_azure_common.sh
+load_env
 
 az storage blob upload \
   --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
   --container-name ocr-images \
-  --name RCPT001.jpg \
-  --file ../ML-25-26-01-AI-Preprocessing-Agent-Plugin-for-Improving-OCR-Performance/samples/receipt-1.jpg \
+  --name RCPT001.png \
+  --file SampleFiles/images/RCPT001.png \
   --overwrite
 ```
 
-The sample receipts live in the original course project next door; any photo of a receipt works.
-Accepted extensions are `png`, `jpg`, `jpeg`, `tif`, `tiff`, and `bmp`.
+Any receipt image works. Accepted extensions are `png`, `jpg`, `jpeg`, `tif`, `tiff`, and `bmp`.
 
 Uploading different bytes under a name the server has already read is the one thing to avoid: each
 replica caches images by reference and will keep serving the first copy it downloaded. Use a new name,
-or `scripts/azure-stop.sh` and `scripts/azure-start.sh --warm` to start over with empty caches.
+or stop and restart the serving app to start with empty replica caches.
 
 ## 4. Drive it from chat
 
@@ -147,7 +146,7 @@ settings without anything being passed in.
 
 | Symptom | Cause |
 |---------|-------|
-| Server never connects, or shows no tools | Replica asleep. `scripts/azure-start.sh --warm`, wait for it, then re-add the server. |
+| Server never connects, or shows no tools | Start the serving app with `scripts/azure-start.sh`, wait for it, then re-add the server. |
 | Tools listed but every call fails | Check **Output → MCP Logs** (`Cmd+Shift+U`). |
 | `No stored image found for reference` | The blob is not in the container the app is configured with, its extension is not one of the accepted ones, or a workflow output reference was shortened to its last segment. |
 | A workflow completes but the text is empty | A stale cached copy of the reference. See step 3. |

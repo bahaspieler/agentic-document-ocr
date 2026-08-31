@@ -1,8 +1,37 @@
-version: '3.4'
-
 services:
-  mycloudproject:
-    image: ${DOCKER_REGISTRY-}mycloudproject
+  serving:
+    image: ocr-agent:local
+    platform: linux/amd64
     build:
       context: .
-      dockerfile: MyCloudProject/Dockerfile
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: ["mcp"]
+    ports:
+      - "5290:8080"
+
+  # Opt-in because this service consumes messages from the configured queue.
+  # Run it only with: docker compose --profile worker up worker
+  worker:
+    profiles: ["worker"]
+    image: ocr-agent:local
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: ["worker"]
+    environment:
+      MyConfig__StorageConnectionString: "${COURSE_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
+      MyConfig__TrainingContainer: "${MyConfig__TrainingContainer:-training-files}"
+      MyConfig__ResultContainer: "${MyConfig__ResultContainer:-result-files}"
+      MyConfig__ResultTable: "${MyConfig__ResultTable:-results}"
+      MyConfig__Queue: "${MyConfig__Queue:-trigger-queue}"
+      MyConfig__GroupId: "${MyConfig__GroupId:-HiddenLayer}"
+      MyConfig__WorkRoot: "/var/ocr/worker"
+      MyConfig__MessageVisibilityTimeoutSeconds: "${MyConfig__MessageVisibilityTimeoutSeconds:-900}"
+      MyConfig__EnsureStorageResources: "true"
+      OCR_Storage__Provider: "local"
+      OCR_Runs__Provider: "none"

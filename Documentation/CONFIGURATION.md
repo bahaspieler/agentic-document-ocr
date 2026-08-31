@@ -1,6 +1,6 @@
 # Configuration
 
-How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the Phase 9 queue worker are configured.
+How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the queue worker are configured.
 The unchanged template host retains its `MyConfig` section alongside the engine's `OCR_*` settings.
 
 ## Sources, in precedence order
@@ -65,6 +65,11 @@ The deployment helpers accept `COURSE_STORAGE_CONNECTION_STRING` as a worker-onl
 otherwise reuse `AZURE_STORAGE_CONNECTION_STRING`. Course entity names are independently
 overridable; see [QUEUE_WORKER.md](QUEUE_WORKER.md).
 
+`scripts/azure-queue-produce.sh` uses the same connection-string order and the canonical
+`MyConfig__TrainingContainer` and `MyConfig__Queue` names. Command-line options can override the two
+entity names for one invocation. `verify-queue-worker.py` also reads the `MyConfig__*` names, with
+the older `COURSE_*` entity-name aliases retained as fallbacks.
+
 Neither store needs its connection string set explicitly. When `Storage:AzureBlob:ConnectionString`
 or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CONNECTION_STRING`.
 
@@ -85,3 +90,7 @@ override per invocation.
 gitignored `.env`. Azure hosting is documented in [DEPLOYMENT.md](DEPLOYMENT.md). The Azure helpers
 read the same `.env` file. Pointing an MCP client at either server is covered in
 [MCP_CLIENT_TESTING.md](MCP_CLIENT_TESTING.md).
+
+Docker Compose passes `.env` to both roles. It explicitly maps the worker's course settings because
+the worker uses `MyConfig__StorageConnectionString`, while the serving role uses
+`AZURE_STORAGE_CONNECTION_STRING`.

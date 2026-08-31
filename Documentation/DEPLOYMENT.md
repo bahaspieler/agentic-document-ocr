@@ -20,35 +20,40 @@ All of these live in `RG_Hidden_Layer`. The scripts never create or delete the g
 | Container Apps environment | `cae-ocr-agent` | Hosts the app |
 | Container app | `ca-ocr-agent` | Web UI, REST API, and MCP server over one HTTPS origin |
 | Worker container app | `ca-ocr-worker` | Course Queue → Blob → experiment → Blob/Table path |
-| Azure SQL server | `sql-hidden-layer-ocr` | Logical server for Phase 7 data |
+| Azure SQL server | `sql-hidden-layer-ocr` | Logical server for serving-application data |
 | Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, line items, and correction revisions |
 
 Names are overridable in `.env` (`AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`,
-`AZURE_CONTAINER_APP_NAME`, `AZURE_CONTAINER_APP_ENV`), as is the replica ceiling
-(`AZURE_MAX_REPLICAS`).
+`AZURE_CONTAINER_APP_NAME`, `AZURE_WORKER_APP_NAME`, `AZURE_CONTAINER_APP_ENV`, and the SQL names),
+as is the replica ceiling (`AZURE_MAX_REPLICAS`).
 
-New resources are created in the storage account's region, not the resource group's. Every workflow
-step reads an image and writes another, so a container in a second region pays a round trip on each
-one. `RG_Hidden_Layer` is registered in East US, `sthiddenlayerocr` is in Germany West Central, and
-everything above sits in Germany West Central with it. A group's location is only the default for
-new resources and is not where the data is. `azure-deploy.sh` warns if it ever finds an existing
-environment somewhere other than the storage account's region; a Container Apps environment cannot
-be moved, so the fix is a teardown and a fresh deploy, and the app gets a new hostname.
+The scripts resolve the storage account's region for new resources and fall back to the resource
+group's location only when the account cannot be resolved. Every workflow step reads an image and
+writes another, so a container in a second region pays a round trip on each one.
+`RG_Hidden_Layer` is registered in East US, `sthiddenlayerocr` is in Germany West Central, and the
+deployed resources sit in Germany West Central with the data. A group's location is only the default
+for new resources and is not where the data is. `azure-deploy.sh` warns if it finds an existing
+environment somewhere other than the selected region; a Container Apps environment cannot be moved,
+so the fix is a teardown and fresh deploy, and the app gets a new hostname.
 
 ## Scripts
 
 ```bash
-scripts/azure-deploy.sh            # create or update; builds linux/amd64 in ACR
+scripts/azure-sql.sh               # create/update SQL when durable Web data is required
+scripts/azure-deploy.sh            # create/update serving; builds linux/amd64 in ACR
 scripts/azure-deploy.sh --skip-build
 scripts/azure-worker-deploy.sh     # create/update the no-ingress worker
-scripts/azure-sql.sh               # create/update the Basic SQL database
+scripts/azure-queue-produce.sh     # upload an image and enqueue manual commands
 scripts/azure-start.sh             # activate and keep min 1
 scripts/azure-stop.sh              # deactivate the revision; URL stays
-scripts/azure-teardown.sh          # delete app, environment, registry only
+scripts/azure-worker-start.sh      # activate the worker after it was stopped
+scripts/azure-worker-stop.sh       # deactivate only the worker
 scripts/verify-deployment.sh       # upload a receipt, run MCP checks, assert Blob and Table
-scripts/verify-webui.py URL        # verify SPA, REST, SQL, SSE, idempotency, concurrency
-scripts/verify-webui.py URL --image receipt.jpg  # also exercise attachments, artifacts, corrections
-scripts/verify-queue-worker.py     # enqueue and verify agent/tool/workflow jobs
+python3 scripts/verify-webui.py URL # verify SPA, REST, SQL, SSE, idempotency, concurrency
+python3 scripts/verify-webui.py URL --image receipt.jpg  # also verify artifacts and corrections
+python3 scripts/verify-queue-worker.py  # enqueue two commands and verify Blob/Table results
+scripts/azure-worker-teardown.sh   # delete only the worker
+scripts/azure-teardown.sh          # delete serving, environment, and registry
 ```
 
 `azure-deploy.sh` is idempotent. It registers the `Microsoft.App` and `Microsoft.OperationalInsights`
@@ -57,9 +62,32 @@ tagged image with `az acr build --platform linux/amd64`, and creates or updates 
 connection string is a Container Apps secret, not an image layer. The model and SQL connection
 strings are stored the same way as `openai-key` and `sql-cs`.
 
-`azure-worker-deploy.sh` reuses the image already selected by the serving app, unless an explicit
-worker image is configured. It supplies the course `MyConfig__*` values, local OCR work storage, and
-the optional model key. It does not supply SQL or authentication settings.
+`azure-worker-deploy.sh` reuses the image already selected by the serving app. It supplies the course
+`MyConfig__*` values, local OCR work storage, and the optional model key. It does not supply SQL or
+authentication settings.
+
+The supported operational order is:
+
+1. Run `azure-sql.sh` when SQL does not already exist.
+2. Run `azure-deploy.sh`, then `azure-worker-deploy.sh`.
+3. Run `azure-worker-start.sh` only when a previously stopped worker must be reactivated.
+4. Submit manual work with `azure-queue-produce.sh`, or run the queue verifier.
+5. Run the serving and Web verifiers.
+6. Stop each role independently, or use the explicit teardown scripts when deletion is intended.
+
+The manual producer uploads one image and publishes only the commands supplied by the operator. It
+does not poll for results:
+
+```bash
+scripts/azure-queue-produce.sh \
+  --image SampleFiles/images/RCPT001.png \
+  --message-file SampleFiles/queue/remove-background.txt \
+  --message-file SampleFiles/queue/extract-receipt.txt
+```
+
+Use `verify-queue-worker.py` instead when an end-to-end assertion is required. It creates the course
+entities if missing, uploads the image, publishes its two built-in commands, waits for both rows, and
+checks every output Blob.
 
 The replica range is min 1 / max `AZURE_MAX_REPLICAS`, which defaults to 3, so the submitted Web UI
 stays live. MCP is stateless and REST conversations live in SQL, so Container Apps can spread requests
@@ -79,7 +107,7 @@ scripts/verify-deployment.sh
 scripts/verify-deployment.sh --image /path/to/receipt.jpg
 ```
 
-The script uploads the file to Blob twice, as `DEPLOY01.jpg` and `DEPLOY02.jpg`, drives
+The script uploads the file to Blob twice, as `DEPLOY01.<extension>` and `DEPLOY02.<extension>`, drives
 [verify-blob-store.py](../scripts/verify-blob-store.py) against the deployed HTTPS URL, then lists
 blobs under each run's `wf_receipt_extract_v3/<runId>/` prefix and queries the `OcrRuns` table for
 the matching row.
@@ -119,9 +147,31 @@ The queue verifier uploads the sample receipt, sends plain-language tool and wor
 waits for their run-ID-keyed result rows, and checks every output URL. Details are in
 [QUEUE_WORKER.md](QUEUE_WORKER.md).
 
+## Local Compose
+
+`docker compose up --build` starts only the serving role at `http://localhost:5290`. It uses the same
+root Dockerfile and `ocr-agent:local` image as direct Docker commands. One-off CLI commands can reuse
+that image:
+
+```bash
+docker compose run --rm serving cli list-tools
+docker compose run --rm serving cli workflow receipt_extract_v3 RCPT001
+```
+
+The worker is intentionally behind a profile because it consumes the real Azure queue configured in
+`.env`:
+
+```bash
+docker compose --profile worker up --build worker
+```
+
+Do not enable the profile merely to test the serving app. Stop Compose with `docker compose down`;
+this removes local containers and networks only and does not delete Azure resources.
+
 ## Cost
 
-Phase 7 intentionally keeps one replica and the Basic SQL database live. To stop compute after a demo:
+The deployment intentionally keeps one serving replica and the Basic SQL database live. To stop
+serving compute after a demo:
 
 ```bash
 scripts/azure-stop.sh

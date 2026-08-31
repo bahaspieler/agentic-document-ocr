@@ -8,6 +8,7 @@
 #   scripts/verify-deployment.sh
 #   scripts/verify-deployment.sh --image /path/to/receipt.jpg
 #   scripts/verify-deployment.sh --url https://ca-ocr-agent....azurecontainerapps.io/
+#   scripts/verify-deployment.sh --workflow receipt_extract_v3
 #
 set -euo pipefail
 
@@ -61,9 +62,8 @@ find_sample() {
         return
     fi
     local candidates=(
+        "$ROOT/SampleFiles/images/RCPT001.png"
         "$ROOT/samples/receipt-1.jpg"
-        "$ROOT/../ML-25-26-01-AI-Preprocessing-Agent-Plugin-for-Improving-OCR-Performance/samples/receipt-1.jpg"
-        "$ROOT/../ML-25-26-01-AI-Preprocessing-Agent-Plugin-for-Improving-OCR-Performance/OcrAgent/local-storage/RCPT001.jpg"
     )
     local path
     for path in "${candidates[@]}"; do

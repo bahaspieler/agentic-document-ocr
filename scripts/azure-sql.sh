@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Creates the Phase 7 Azure SQL server and Basic database.
-# The resource group is never created or deleted by this script.
+# Creates the Azure SQL server and Basic database used by the serving app.
+# The resource group is never created or deleted. A generated password and the
+# resulting connection string are written only to the gitignored project .env.
 #
 # Usage:
 #   scripts/azure-sql.sh

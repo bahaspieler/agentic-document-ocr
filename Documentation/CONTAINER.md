@@ -29,6 +29,25 @@ docker run --rm --env-file .env ocr-agent worker                # course queue l
 `entrypoint.sh` reads the first argument and passes the rest through, with `CMD ["mcp"]` making the
 server the default. `worker` starts the unchanged `MyCloudProject` polling host.
 
+Docker Compose builds the same Dockerfile and tags the shared image `ocr-agent:local`. The default
+service starts only the serving role:
+
+```bash
+docker compose up --build
+docker compose run --rm serving cli list-tools
+docker compose down
+```
+
+The worker has no host port and belongs to an explicit profile because it consumes the real Queue,
+Blob, and Table account configured in `.env`:
+
+```bash
+docker compose --profile worker up --build worker
+```
+
+Starting the default Compose application does not start the worker. Compose does not emulate Azure
+Storage or change the separately deployed Azure Container Apps.
+
 The roles publish to `/app/mcp`, `/app/cli`, and `/app/worker`; each carries the native aliases it
 needs. The worker reuses the same OCR engine assemblies and model assets through its project
 dependency.
