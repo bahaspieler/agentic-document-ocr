@@ -20,20 +20,6 @@ internal sealed class BranchDispatcherExecutor : Executor
     private readonly Dictionary<string, List<BranchToolStep>> _branches;
 
     /// <summary>
-    /// One tool invocation inside a branch: id, tool name, args, passthrough, and optional context outputs.
-    /// </summary>
-    /// <param name="StepId">Step id for tracing.</param>
-    /// <param name="ToolName">Registered tool name.</param>
-    /// <param name="Args">Argument template for the tool.</param>
-    /// <param name="Passthrough">When true, branch keeps the previous image reference as output.</param>
-    /// <param name="Outputs">Optional context keys; <c>$result</c> maps to tool output.</param>
-    internal record BranchToolStep(
-        string StepId, string ToolName,
-        Dictionary<string, object?> Args,
-        bool Passthrough,
-        Dictionary<string, string>? Outputs);
-
-    /// <summary>
     /// Creates a branch dispatcher for the given condition variable and branch map.
     /// </summary>
     /// <param name="executorId">Host executor id.</param>
