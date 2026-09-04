@@ -17,11 +17,21 @@ public sealed class ParseReceiptPlugin : IImageProcessingTool
     private readonly IImageStore _store;
     private readonly IReceiptExtractor _extractor = new RuleBasedReceiptExtractor();
 
+    /// <summary>
+    /// Creates a receipt parsing plugin.
+    /// </summary>
+    /// <param name="store">Image store associated with the receipt workflow.</param>
     public ParseReceiptPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Parses OCR output into structured receipt data.
+    /// </summary>
+    /// <param name="imageReference">Reference of the source receipt image.</param>
+    /// <param name="ocrJson">Serialized OCR result to parse.</param>
+    /// <returns>JSON containing the extracted receipt data.</returns>
     [Description("Parses OCR JSON output into structured receipt data (merchant, items, totals, validation) using rule-based extraction.")]
     public async Task<string> ParseReceipt(
         [Description("The reference of the image.")] string imageReference,
@@ -41,6 +51,10 @@ public sealed class ParseReceiptPlugin : IImageProcessingTool
         });
     }
 
+    /// <summary>
+    /// Gets the AI-callable receipt parsing tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ParseReceipt);

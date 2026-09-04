@@ -16,12 +16,22 @@ public sealed class AutoOrientPlugin : IImageProcessingTool
     private readonly IImageStore _store;
     private readonly string? _tesseractPath;
 
+    /// <summary>
+    /// Creates an automatic orientation plugin.
+    /// </summary>
+    /// <param name="store">Image store used to load and save images.</param>
+    /// <param name="tesseractPath">Optional path to the Tesseract executable.</param>
     public AutoOrientPlugin(IImageStore store, string? tesseractPath = null)
     {
         _store = store;
         _tesseractPath = tesseractPath ?? FindTesseract();
     }
 
+    /// <summary>
+    /// Detects a document's orientation and rotates it upright.
+    /// </summary>
+    /// <param name="imageReference">Reference of the image to orient.</param>
+    /// <returns>The oriented image reference, or the input reference when detection is unavailable.</returns>
     [Description("Auto-detects document orientation using Tesseract OSD and rotates to upright. Fixes 90/180/270 degree rotations.")]
     public Task<string> AutoOrient(
         [Description("The reference number of the image to orient.")] string imageReference)
@@ -176,6 +186,10 @@ public sealed class AutoOrientPlugin : IImageProcessingTool
         return null;
     }
 
+    /// <summary>
+    /// Gets the AI-callable automatic orientation tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.AutoOrient);

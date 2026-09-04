@@ -19,6 +19,11 @@ public sealed class ExportReceiptPlugin : IImageProcessingTool
     private readonly ReceiptCsvExporter _csvExporter;
     private readonly IReceiptStore _receiptStore;
 
+    /// <summary>
+    /// Creates a receipt export plugin.
+    /// </summary>
+    /// <param name="store">Image store that supplies the active export directory.</param>
+    /// <param name="receiptStore">Optional store used to index exported receipts.</param>
     public ExportReceiptPlugin(IImageStore store, IReceiptStore? receiptStore = null)
     {
         _jsonExporter = new ReceiptJsonExporter(store);
@@ -26,6 +31,14 @@ public sealed class ExportReceiptPlugin : IImageProcessingTool
         _receiptStore = receiptStore ?? NullReceiptStore.Instance;
     }
 
+    /// <summary>
+    /// Exports structured receipt data to JSON and CSV and optionally indexes it.
+    /// </summary>
+    /// <param name="imageReference">Source image reference used as a fallback receipt identifier.</param>
+    /// <param name="receiptJson">Structured receipt JSON to export.</param>
+    /// <param name="workflowId">Optional workflow identifier recorded in the receipt source.</param>
+    /// <param name="runId">Optional run identifier used as the receipt identifier.</param>
+    /// <returns>A summary of the exported files and receipt totals.</returns>
     [Description("Exports parsed receipt data as JSON and CSV files (receipt.json, receipt_summary.csv, receipt_items.csv). " +
                  "Returns a summary of exported files.")]
     public async Task<string> ExportReceiptData(
@@ -75,6 +88,10 @@ public sealed class ExportReceiptPlugin : IImageProcessingTool
         return summary;
     }
 
+    /// <summary>
+    /// Gets the AI-callable receipt export tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.ExportReceiptData);

@@ -6,15 +6,27 @@ using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Analysis;
 
+/// <summary>
+/// Analyzes document images and reports OCR-relevant quality metrics.
+/// </summary>
 public sealed class QualityAssessmentPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates an image quality assessment plugin.
+    /// </summary>
+    /// <param name="store">Image store used to resolve image references.</param>
     public QualityAssessmentPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Computes blur, noise, lighting, skew, and resolution metrics for an image.
+    /// </summary>
+    /// <param name="imageReference">Reference of the image to assess.</param>
+    /// <returns>JSON containing the computed quality profile.</returns>
     [Description("Analyzes image quality and returns a JSON profile with blur score, noise level, brightness, contrast, illumination uniformity, dark background detection, skew estimate, and resolution adequacy. Does not modify the image.")]
     public Task<string> AssessQuality(
         [Description("The reference number of the image to analyze.")] string imageReference)
@@ -170,6 +182,10 @@ public sealed class QualityAssessmentPlugin : IImageProcessingTool
         return angles[angles.Count / 2];
     }
 
+    /// <summary>
+    /// Gets the AI-callable quality assessment tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.AssessQuality);

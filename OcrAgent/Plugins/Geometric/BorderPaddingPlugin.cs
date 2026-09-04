@@ -14,11 +14,22 @@ public sealed class BorderPaddingPlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates a border padding plugin.
+    /// </summary>
+    /// <param name="store">Image store used to load and save images.</param>
     public BorderPaddingPlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Adds a solid border around an image.
+    /// </summary>
+    /// <param name="imageReference">Reference of the image to pad.</param>
+    /// <param name="pixels">Border width in pixels on each side.</param>
+    /// <param name="color">Border color, either <c>white</c> or <c>black</c>.</param>
+    /// <returns>The reference of the padded image.</returns>
     [Description("Adds a solid border around the image. Tesseract needs at least ~10px of border to avoid clipping text at edges.")]
     public Task<string> AddBorderPadding(
         [Description("The reference number of the image to pad.")] string imageReference,
@@ -56,6 +67,10 @@ public sealed class BorderPaddingPlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    /// <summary>
+    /// Gets the AI-callable border padding tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.AddBorderPadding);

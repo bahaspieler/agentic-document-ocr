@@ -6,15 +6,30 @@ using OpenCvSharp;
 
 namespace OcrAgent.Plugins.Enhancement;
 
+/// <summary>
+/// Normalizes uneven illumination and shadows in document images.
+/// </summary>
 public sealed class IlluminationNormalizePlugin : IImageProcessingTool
 {
     private readonly IImageStore _store;
 
+    /// <summary>
+    /// Creates an illumination normalization plugin.
+    /// </summary>
+    /// <param name="store">Image store used to load and save images.</param>
     public IlluminationNormalizePlugin(IImageStore store)
     {
         _store = store;
     }
 
+    /// <summary>
+    /// Estimates and removes uneven illumination from an image.
+    /// </summary>
+    /// <param name="imageReference">Reference of the image to normalize.</param>
+    /// <param name="kernelSize">Odd Gaussian kernel size used to estimate illumination.</param>
+    /// <param name="strength">Blend strength between the source and normalized images.</param>
+    /// <param name="qualityProfile">Optional quality profile used to skip already-uniform images.</param>
+    /// <returns>The source reference when skipped; otherwise, the normalized image reference.</returns>
     [Description("Removes shadows and normalizes uneven illumination from document images. Skips processing if illumination is already uniform. Returns the image reference (unchanged if skipped, or new reference).")]
     public Task<string> NormalizeIllumination(
         [Description("The reference number of the image to normalize.")] string imageReference,
@@ -90,6 +105,10 @@ public sealed class IlluminationNormalizePlugin : IImageProcessingTool
         return Task.FromResult(newRef);
     }
 
+    /// <summary>
+    /// Gets the AI-callable illumination normalization tool.
+    /// </summary>
+    /// <returns>The tools exposed by this plugin.</returns>
     public IEnumerable<AITool> GetAITools()
     {
         yield return AIFunctionFactory.Create(this.NormalizeIllumination);

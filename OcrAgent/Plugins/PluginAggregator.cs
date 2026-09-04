@@ -38,6 +38,7 @@ public sealed class PluginAggregator : IDisposable
     /// <param name="store">Image store shared by all plugins.</param>
     /// <param name="config">Optional configuration (e.g. Tesseract paths).</param>
     /// <param name="runStore">When set, every tool call and workflow run leaves a record.</param>
+    /// <param name="receiptStore">Optional store used to index extracted receipts.</param>
     public PluginAggregator(
         IImageStore store,
         IConfiguration? config = null,
