@@ -41,6 +41,15 @@ public sealed class AgentService
     /// <exception cref="InvalidOperationException">No model credentials in the environment.</exception>
     public static AgentService Create(IEnumerable<AITool> tools) => new(CreateAgent(tools));
 
+    /// <summary>Builds an isolated agent with task-specific instructions and tools.</summary>
+    /// <param name="tools">Tools available to the specialized agent.</param>
+    /// <param name="instructions">System instructions for the specialized task.</param>
+    /// <returns>Service ready to run isolated turns.</returns>
+    public static AgentService Create(
+        IEnumerable<AITool> tools,
+        string instructions) =>
+        new(CreateAgent(tools, instructions));
+
     #region Conversation Lifecycle
 
     /// <summary>Starts a conversation the caller can carry across turns.</summary>
@@ -187,8 +196,11 @@ public sealed class AgentService
     /// Builds the chat agent from OPENAI_API_KEY and optional OPENAI_CHATCOMPLETION_DEPLOYMENT.
     /// </summary>
     /// <param name="tools">Tools registered on the agent.</param>
+    /// <param name="instructions">Optional task-specific system instructions.</param>
     /// <returns>Configured agent with the shared system instructions.</returns>
-    private static AIAgent CreateAgent(IEnumerable<AITool> tools)
+    private static AIAgent CreateAgent(
+        IEnumerable<AITool> tools,
+        string? instructions = null)
     {
         string apiKey = GetEnvOrThrow("OPENAI_API_KEY");
         string deployment = Environment.GetEnvironmentVariable("OPENAI_CHATCOMPLETION_DEPLOYMENT")
@@ -198,7 +210,7 @@ public sealed class AgentService
         var chatClient = client.GetChatClient(deployment);
 
         return chatClient.AsIChatClient().AsAIAgent(
-            instructions: AgentInstructions.ForAgent,
+            instructions: instructions ?? AgentInstructions.ForAgent,
             name: AgentInstructions.Name,
             tools: tools.ToArray()
         );
