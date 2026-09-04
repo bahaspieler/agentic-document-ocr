@@ -17,6 +17,7 @@ public sealed class ReceiptJsonExporter
 
     private readonly IImageStore _store;
 
+    /// <summary>Creates an exporter that writes JSON through the supplied image store.</summary>
     /// <param name="store">Target for <see cref="IImageStore.GetWriteDirectory"/>.</param>
     public ReceiptJsonExporter(IImageStore store) => _store = store;
 

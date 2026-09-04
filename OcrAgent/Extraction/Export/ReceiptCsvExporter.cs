@@ -12,6 +12,7 @@ public sealed class ReceiptCsvExporter
 {
     private readonly IImageStore _store;
 
+    /// <summary>Creates an exporter that writes CSV files through the supplied image store.</summary>
     /// <param name="store">Target for <see cref="IImageStore.GetWriteDirectory"/>.</param>
     public ReceiptCsvExporter(IImageStore store) => _store = store;
 
