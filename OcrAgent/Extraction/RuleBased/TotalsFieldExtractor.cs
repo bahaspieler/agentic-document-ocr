@@ -31,7 +31,7 @@ public static partial class TotalsFieldExtractor
     /// <summary>Scans totals and body lines for labeled amounts and payment type.</summary>
     /// <param name="zonedLines">Classifier output.</param>
     /// <returns>Filled totals; missing fields stay null.</returns>
-    public static TotalsInfo Extract(List<ZoneClassifier.ZonedLine> zonedLines)
+    public static TotalsInfo Extract(List<ZonedLine> zonedLines)
     {
         var info = new TotalsInfo();
 
@@ -99,7 +99,7 @@ public static partial class TotalsFieldExtractor
         => FindMatchingKeyword(upperText, keywords) != null;
 
     /// <summary>Rightmost parseable amount on the line.</summary>
-    private static decimal? FindAmount(OcrTokenNormalizer.NormalizedLine line)
+    private static decimal? FindAmount(NormalizedLine line)
     {
         // Search right-to-left for amounts (right-aligned column)
         for (int i = line.Words.Count - 1; i >= 0; i--)
@@ -112,7 +112,7 @@ public static partial class TotalsFieldExtractor
     }
 
     /// <summary>First amount after the keyword word; else rightmost amount on the line.</summary>
-    private static decimal? FindAmountNearKeyword(OcrTokenNormalizer.NormalizedLine line, string keyword)
+    private static decimal? FindAmountNearKeyword(NormalizedLine line, string keyword)
     {
         int kwWordIdx = -1;
         for (int i = 0; i < line.Words.Count; i++)
@@ -264,7 +264,7 @@ public static partial class TotalsFieldExtractor
     }
 
     /// <summary>USD, EUR, or GBP from first symbol in words.</summary>
-    private static string DetectCurrency(List<ZoneClassifier.ZonedLine> lines)
+    private static string DetectCurrency(List<ZonedLine> lines)
     {
         foreach (var zl in lines)
         {
@@ -279,7 +279,7 @@ public static partial class TotalsFieldExtractor
     }
 
     /// <summary>Infers subtotal from total minus tax when subtotal missing.</summary>
-    private static void EnsureTotalVsSubtotal(TotalsInfo info, List<OcrTokenNormalizer.NormalizedLine> lines)
+    private static void EnsureTotalVsSubtotal(TotalsInfo info, List<NormalizedLine> lines)
     {
         if (info.Total == null || info.Subtotal != null) return;
 

@@ -50,7 +50,7 @@ public static class RunScope
     public static IDisposable Enter()
     {
         Depth.Value++;
-        return new Handle(() => Depth.Value--);
+        return new RunScopeHandle(() => Depth.Value--);
     }
 
     /// <summary>Attributes every job raised on this path to a conversation.</summary>
@@ -60,7 +60,7 @@ public static class RunScope
     {
         var previous = Conversation.Value;
         Conversation.Value = conversationId;
-        return new Handle(() => Conversation.Value = previous);
+        return new RunScopeHandle(() => Conversation.Value = previous);
     }
 
     /// <summary>Attributes jobs on the current async request to a particular entry point.</summary>
@@ -68,7 +68,7 @@ public static class RunScope
     {
         var previous = SourceContext.Value;
         SourceContext.Value = source;
-        return new Handle(() => SourceContext.Value = previous);
+        return new RunScopeHandle(() => SourceContext.Value = previous);
     }
 
     /// <summary>Labels runs with the exact durable turn attempt that produced them.</summary>
@@ -76,24 +76,6 @@ public static class RunScope
     {
         var previous = Turn.Value;
         Turn.Value = idempotencyKey;
-        return new Handle(() => Turn.Value = previous);
-    }
-
-    private sealed class Handle : IDisposable
-    {
-        private readonly Action _release;
-        private bool _released;
-
-        public Handle(Action release)
-        {
-            _release = release;
-        }
-
-        public void Dispose()
-        {
-            if (_released) return;
-            _released = true;
-            _release();
-        }
+        return new RunScopeHandle(() => Turn.Value = previous);
     }
 }

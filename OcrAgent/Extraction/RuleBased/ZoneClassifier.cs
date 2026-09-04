@@ -7,20 +7,10 @@ namespace OcrAgent.Extraction.RuleBased;
 /// </summary>
 public static partial class ZoneClassifier
 {
-    /// <summary>One OCR line plus its assigned <see cref="ReceiptZone"/>.</summary>
-    public sealed class ZonedLine
-    {
-        /// <summary>Normalized text, words, and geometry.</summary>
-        public OcrTokenNormalizer.NormalizedLine Line { get; set; } = null!;
-
-        /// <summary>Header, body, totals, or footer.</summary>
-        public ReceiptZone Zone { get; set; }
-    }
-
     /// <summary>Sorts by Y, finds total anchors, then maps each line to a zone.</summary>
     /// <param name="lines">Output of <see cref="OcrTokenNormalizer.Normalize"/>.</param>
     /// <returns>Same lines in top-to-bottom order with zones.</returns>
-    public static List<ZonedLine> Classify(List<OcrTokenNormalizer.NormalizedLine> lines)
+    public static List<ZonedLine> Classify(List<NormalizedLine> lines)
     {
         if (lines.Count == 0) return new();
 
@@ -78,7 +68,7 @@ public static partial class ZoneClassifier
     }
 
     /// <summary>First line index that looks like subtotal, total, or a late tax line.</summary>
-    private static int? FindFirstTotalsAnchor(List<OcrTokenNormalizer.NormalizedLine> sorted)
+    private static int? FindFirstTotalsAnchor(List<NormalizedLine> sorted)
     {
         // Pass 1: SUBTOTAL (most precise anchor)
         for (int i = 0; i < sorted.Count; i++)
@@ -104,7 +94,7 @@ public static partial class ZoneClassifier
 
     /// <summary>Upper Y bound for the header; capped so it does not cross into totals.</summary>
     private static int FindHeaderEnd(
-        List<OcrTokenNormalizer.NormalizedLine> sorted, int defaultEnd, int totalsStartY)
+        List<NormalizedLine> sorted, int defaultEnd, int totalsStartY)
     {
         // Header shouldn't exceed 35% of receipt or cross into totals
         int maxHeader = Math.Min(defaultEnd + (int)((totalsStartY - sorted[0].BoundingBox.Y) * 0.1), totalsStartY);
@@ -124,7 +114,7 @@ public static partial class ZoneClassifier
 
     /// <summary>Y where footer starts: after the last totals-related line.</summary>
     private static int FindFooterStart(
-        List<OcrTokenNormalizer.NormalizedLine> sorted, int totalIdx, int maxY, int minY, int totalHeight)
+        List<NormalizedLine> sorted, int totalIdx, int maxY, int minY, int totalHeight)
     {
         // Find the last totals-related line, footer starts after it
         int lastTotalIdx = totalIdx;
@@ -143,7 +133,7 @@ public static partial class ZoneClassifier
     }
 
     /// <summary>True if any word matches the amount pattern.</summary>
-    private static bool HasAmountToken(OcrTokenNormalizer.NormalizedLine line)
+    private static bool HasAmountToken(NormalizedLine line)
     {
         return line.Words.Any(w => AmountPattern().IsMatch(w.Text));
     }

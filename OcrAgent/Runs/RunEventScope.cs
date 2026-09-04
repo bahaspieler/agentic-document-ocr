@@ -5,11 +5,14 @@ public static class RunEventScope
 {
     private static readonly AsyncLocal<Action<RunRecord>?> Observer = new();
 
+    /// <summary>Sets the completed-run observer for the current asynchronous flow.</summary>
+    /// <param name="observer">Callback invoked when a run completes, or null to suppress reporting.</param>
+    /// <returns>A scope that restores the previous observer when disposed.</returns>
     public static IDisposable Enter(Action<RunRecord>? observer)
     {
         var previous = Observer.Value;
         Observer.Value = observer;
-        return new Handle(() => Observer.Value = previous);
+        return new RunEventScopeHandle(() => Observer.Value = previous);
     }
 
     internal static void Report(RunRecord record)
@@ -24,9 +27,4 @@ public static class RunEventScope
         }
     }
 
-    private sealed class Handle(Action dispose) : IDisposable
-    {
-        private Action? _dispose = dispose;
-        public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
-    }
 }

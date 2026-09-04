@@ -8,38 +8,6 @@ namespace OcrAgent.Extraction.RuleBased;
 /// </summary>
 public static partial class OcrTokenNormalizer
 {
-    /// <summary>One receipt line after word-level cleanup.</summary>
-    public sealed class NormalizedLine
-    {
-        /// <summary>Full line text from joined words.</summary>
-        public string Text { get; set; } = "";
-
-        /// <summary>Line confidence from OCR.</summary>
-        public double Confidence { get; set; }
-
-        /// <summary>Union box for the line.</summary>
-        public OcrBoundingBox BoundingBox { get; set; } = new();
-
-        /// <summary>Words left to right.</summary>
-        public List<NormalizedWord> Words { get; set; } = new();
-
-        /// <summary>Index in <see cref="OcrResult.Lines"/>.</summary>
-        public int OriginalIndex { get; set; }
-    }
-
-    /// <summary>Single word token after normalization.</summary>
-    public sealed class NormalizedWord
-    {
-        /// <summary>Cleaned word text.</summary>
-        public string Text { get; set; } = "";
-
-        /// <summary>Word confidence from OCR.</summary>
-        public double Confidence { get; set; }
-
-        /// <summary>Word bounding box.</summary>
-        public OcrBoundingBox BoundingBox { get; set; } = new();
-    }
-
     /// <summary>Builds normalized lines; drops empty lines after word merge.</summary>
     /// <param name="ocrResult">Raw OCR document.</param>
     /// <returns>Lines with merged amounts and collapsed spaces.</returns>

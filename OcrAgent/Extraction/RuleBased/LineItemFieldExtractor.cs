@@ -11,7 +11,7 @@ public static partial class LineItemFieldExtractor
     /// <summary>Body lines only; merges detail and continuation rows.</summary>
     /// <param name="zonedLines">Output of <see cref="ZoneClassifier.Classify"/>.</param>
     /// <returns>Ordered <see cref="ReceiptLineItem"/> list.</returns>
-    public static List<ReceiptLineItem> Extract(List<ZoneClassifier.ZonedLine> zonedLines)
+    public static List<ReceiptLineItem> Extract(List<ZonedLine> zonedLines)
     {
         var bodyLines = zonedLines
             .Where(z => z.Zone == ReceiptZone.Body)
@@ -118,7 +118,7 @@ public static partial class LineItemFieldExtractor
     /// <summary>Median X of rightmost amount-like words per line.</summary>
     /// <param name="lines">Body lines with words.</param>
     /// <returns>Column X or null when too few samples.</returns>
-    private static int? DetectAmountColumn(List<OcrTokenNormalizer.NormalizedLine> lines)
+    private static int? DetectAmountColumn(List<NormalizedLine> lines)
     {
         var amountXPositions = new List<int>();
 
@@ -143,7 +143,7 @@ public static partial class LineItemFieldExtractor
 
     /// <summary>Qty@price, qty×price, or description + trailing amount.</summary>
     private static ReceiptLineItem? ParseItemLine(
-        OcrTokenNormalizer.NormalizedLine line, int? amountColumnX)
+        NormalizedLine line, int? amountColumnX)
     {
         // Try quantity pattern first: "2 @ $10.00 ea $20.00" or "2x $10.00"
         var qtyMatch = QtyAtPattern().Match(line.Text);
@@ -228,7 +228,7 @@ public static partial class LineItemFieldExtractor
     }
 
     /// <summary>Builds item from <c>qty @ unit [total]</c> regex match.</summary>
-    private static ReceiptLineItem? ParseQtyPattern(Match match, OcrTokenNormalizer.NormalizedLine line)
+    private static ReceiptLineItem? ParseQtyPattern(Match match, NormalizedLine line)
     {
         if (!decimal.TryParse(match.Groups["qty"].Value, out var qty)) return null;
         if (!IsReasonableQuantity(qty, match.Groups["qty"].Value)) return null;
@@ -262,7 +262,7 @@ public static partial class LineItemFieldExtractor
     }
 
     /// <summary>Builds item from <c>qty x price</c> pattern and trailing amounts.</summary>
-    private static ReceiptLineItem? ParseQtyXPattern(Match match, OcrTokenNormalizer.NormalizedLine line)
+    private static ReceiptLineItem? ParseQtyXPattern(Match match, NormalizedLine line)
     {
         if (!decimal.TryParse(match.Groups["qty"].Value, out var qty)) return null;
         if (!IsReasonableQuantity(qty, match.Groups["qty"].Value)) return null;
@@ -309,7 +309,7 @@ public static partial class LineItemFieldExtractor
 
     /// <summary>True when a text-only line should append to the previous description.</summary>
     private static bool IsMultiLineContinuation(
-        OcrTokenNormalizer.NormalizedLine line, int? amountColumnX)
+        NormalizedLine line, int? amountColumnX)
     {
         var text = line.Text.Trim();
         if (text.Length <= 1) return false;

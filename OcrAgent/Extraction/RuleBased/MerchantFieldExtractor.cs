@@ -11,7 +11,7 @@ public static partial class MerchantFieldExtractor
     /// <summary>Reads header-zone lines for name, phone, and address.</summary>
     /// <param name="headerLines">All zoned lines; only <see cref="ReceiptZone.Header"/> are used.</param>
     /// <returns>Filled <see cref="MerchantInfo"/>; empty when no header lines.</returns>
-    public static MerchantInfo Extract(List<ZoneClassifier.ZonedLine> headerLines)
+    public static MerchantInfo Extract(List<ZonedLine> headerLines)
     {
         var info = new MerchantInfo();
         if (headerLines.Count == 0) return info;
@@ -32,7 +32,7 @@ public static partial class MerchantFieldExtractor
 
     /// <summary>Picks first strong uppercase line or falls back to first long line.</summary>
     private static void ExtractMerchantName(
-        List<OcrTokenNormalizer.NormalizedLine> lines, MerchantInfo info)
+        List<NormalizedLine> lines, MerchantInfo info)
     {
         // Merchant name is typically the first strong, mostly-uppercase line
         foreach (var line in lines)
@@ -64,7 +64,7 @@ public static partial class MerchantFieldExtractor
 
     /// <summary>First phone-shaped match in header lines.</summary>
     private static void ExtractPhone(
-        List<OcrTokenNormalizer.NormalizedLine> lines, MerchantInfo info)
+        List<NormalizedLine> lines, MerchantInfo info)
     {
         foreach (var line in lines)
         {
@@ -80,7 +80,7 @@ public static partial class MerchantFieldExtractor
 
     /// <summary>Collects street/city lines and parses city, state, ZIP when possible.</summary>
     private static void ExtractAddress(
-        List<OcrTokenNormalizer.NormalizedLine> lines, MerchantInfo info)
+        List<NormalizedLine> lines, MerchantInfo info)
     {
         var addressLines = new List<string>();
         double avgConfidence = 0;

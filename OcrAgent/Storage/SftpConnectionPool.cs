@@ -361,12 +361,4 @@ public sealed class SftpConnectionPool : IDisposable
         
         _connectionSemaphore.Dispose();
     }
-
-    private sealed class PooledConnection
-    {
-        public int Id { get; init; }
-        public required SftpClient Client { get; init; }
-        public DateTime Created { get; init; }
-        public DateTime LastUsed { get; set; }
-    }
 }

@@ -9,19 +9,10 @@ namespace OcrAgent.Extraction.RuleBased;
 /// </summary>
 public static partial class DateTimeFieldExtractor
 {
-    private sealed class DateCandidate
-    {
-        public string RawDate { get; set; } = "";
-        public string? RawTime { get; set; }
-        public DateTime Parsed { get; set; }
-        public double Confidence { get; set; }
-        public double Score { get; set; }
-    }
-
     /// <summary>Best date/time candidate plus receipt number scan.</summary>
     /// <param name="allLines">Zoned lines from the classifier.</param>
     /// <returns>Transaction fields; empty when no date found.</returns>
-    public static TransactionInfo Extract(List<ZoneClassifier.ZonedLine> allLines)
+    public static TransactionInfo Extract(List<ZonedLine> allLines)
     {
         var info = new TransactionInfo();
         var candidates = new List<DateCandidate>();
@@ -114,7 +105,7 @@ public static partial class DateTimeFieldExtractor
     }
 
     /// <summary>Maps original line index to first time match on that line.</summary>
-    private static Dictionary<int, string> BuildTimeMap(List<ZoneClassifier.ZonedLine> allLines)
+    private static Dictionary<int, string> BuildTimeMap(List<ZonedLine> allLines)
     {
         var map = new Dictionary<int, string>();
         foreach (var zl in allLines)

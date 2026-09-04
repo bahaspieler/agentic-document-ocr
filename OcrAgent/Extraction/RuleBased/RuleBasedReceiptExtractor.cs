@@ -9,6 +9,7 @@ namespace OcrAgent.Extraction.RuleBased;
 /// </summary>
 public sealed class RuleBasedReceiptExtractor : IReceiptExtractor
 {
+    /// <summary>Extracts and validates receipt fields with the rule-based pipeline.</summary>
     /// <param name="ocrResult">Engine output with lines and words.</param>
     /// <param name="imagePath">Unused; reserved for image-aware extractors.</param>
     /// <returns>Receipt data, overall confidence, name, and elapsed ms.</returns>
