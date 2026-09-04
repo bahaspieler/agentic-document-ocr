@@ -44,9 +44,14 @@ Keys prefixed `OCR_` override `appsettings.json`, with a double underscore per n
 | `OCR_Runs__GroupId` | Partition key for this deployment's records |
 | `OCR_Sql__Enabled` | Enables durable conversations, users, and receipt indexing |
 | `OCR_Sql__ConnectionString` | Encrypted Azure SQL connection string (Container Apps secret `sql-cs`) |
-| `OCR_Auth__Enabled` | Enables optional Microsoft bearer-token validation |
-| `OCR_Auth__ClientId` | Entra application/client ID shared by the SPA and API |
-| `OCR_Auth__TenantId` | `common` for organizational and personal Microsoft accounts |
+| `OCR_Auth__Enabled` | Requires either a scoped Auth0 JWT or valid API key on production REST and HTTP MCP |
+| `OCR_Auth__Domain` | Auth0 tenant domain without a scheme, for example `tenant.eu.auth0.com` |
+| `OCR_Auth__ClientId` | Public Auth0 SPA client ID used by the Web UI |
+| `OCR_Auth__Audience` | Auth0 API identifier; must equal the canonical `ResourceUri` |
+| `OCR_Auth__ScopeName` | Required delegated permission, `access:ocr` |
+| `OCR_Auth__ResourceUri` | Canonical deployed origin advertised through OAuth Protected Resource Metadata and used for MCP RFC 8707 resource parameters |
+| `OCR_Auth__ApiKeys__Name` | SHA-256 hash of one named static API key; repeat with a distinct `Name` for each credential |
+| `AUTH0_DEVICE_CLIENT_ID` | Public client ID of the first-party native device-flow application used by `auth0-token.py` |
 
 The queue host also reads these unprefixed variables through the course template:
 
@@ -54,16 +59,23 @@ The queue host also reads these unprefixed variables through the course template
 |-----|---------|
 | `MyConfig__StorageConnectionString` | Course Queue, training/result Blob containers, and result Table |
 | `MyConfig__GroupId` | Result row partition key |
-| `MyConfig__TrainingContainer` | Source images named in queue commands |
+| `MyConfig__TrainingContainer` | Source images; bulk datasets use `images/<dataset-name>/` within this container |
 | `MyConfig__ResultContainer` | Graded output artifacts |
-| `MyConfig__ResultTable` | One `ExperimentResult` row per queue message |
+| `MyConfig__ResultTable` | Single-image rows plus bulk parent and child `ExperimentResult` rows |
 | `MyConfig__Queue` | Trigger queue |
 | `MyConfig__WorkRoot` | Writable temporary worker files |
 | `MyConfig__MessageVisibilityTimeoutSeconds` | Queue message processing lease |
+| `MyConfig__MaximumBatchImages` | Maximum images in one bulk dataset (default 2,000) |
+| `MyConfig__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
 
 The deployment helpers accept `COURSE_STORAGE_CONNECTION_STRING` as a worker-only override and
 otherwise reuse `AZURE_STORAGE_CONNECTION_STRING`. Course entity names are independently
 overridable; see [QUEUE_WORKER.md](QUEUE_WORKER.md).
+
+With the default training container, the canonical bulk prefix is
+`training-files/images/<dataset-name>/`. The worker runs one replica. A bulk parent persists its
+AI-selected and validated `PlanJson` before deterministic fan-out; child messages reuse the plan
+without per-image AI and skip work when their stable item result is already present.
 
 `scripts/azure-queue-produce.sh` uses the same connection-string order and the canonical
 `MyConfig__TrainingContainer` and `MyConfig__Queue` names. Command-line options can override the two
@@ -78,7 +90,17 @@ or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CO
 `Storage` selects and configures the image store; see the provider classes in `OcrAgent/Storage/`.
 `Runs` selects and configures the run store and is documented in [RUN_RECORDS.md](RUN_RECORDS.md).
 `Sql` configures durable conversations, user profiles, and structured receipt data. `Auth` configures
-Microsoft Identity Web. All optional services ship disabled, so a checkout with no `.env` still runs.
+generic Auth0 JWT validation, named static API keys, and OAuth Protected Resource Metadata.
+Authentication is disabled in the checked-in defaults for offline development. When enabled, the
+host fails at startup unless the Auth0 domain, SPA client ID, scope, audience, and resource URI are
+complete. `Audience` must equal the canonical `ResourceUri` (ignoring a trailing slash) so
+provider-neutral MCP clients can send RFC 8707 `resource` parameters under Auth0's Resource
+Parameter Compatibility Profile.
+
+Production `/api` and `/mcp` requests accept either a bearer JWT issued by the configured Auth0
+domain for the configured audience and carrying `access:ocr`, or an `X-API-Key` whose SHA-256 hash
+matches a named `ApiKeys` entry. The static UI, `/api/config`, and OAuth Protected Resource Metadata
+remain public bootstrap resources.
 
 ## Scripts
 
@@ -90,6 +112,35 @@ override per invocation.
 gitignored `.env`. Azure hosting is documented in [DEPLOYMENT.md](DEPLOYMENT.md). The Azure helpers
 read the same `.env` file. Pointing an MCP client at either server is covered in
 [MCP_CLIENT_TESTING.md](MCP_CLIENT_TESTING.md).
+
+Export a short-lived `AUTH0_MANAGEMENT_API_TOKEN`, then run:
+
+```bash
+python3 scripts/auth0-setup.py \
+  --domain <tenant>.eu.auth0.com \
+  --app-url https://<canonical-app-hostname>/
+unset AUTH0_MANAGEMENT_API_TOKEN
+```
+
+The canonical `--app-url` becomes both the Auth0 API audience and `ResourceUri`. The script creates
+or updates the API, public SPA, first-party native device-flow client, strict open DCR, the default
+`access:ocr` third-party user grant, and the Resource Parameter Compatibility Profile. It writes
+only public identifiers to the gitignored `.env`. Auth0 Universal Login also requires the database,
+Google, and GitHub connections to be promoted to the tenant domain.
+
+`python3 scripts/auth0-token.py` performs device authorization through the first-party native client
+and prints only the user access token to stdout. The configured API policy gives these user tokens a
+24-hour lifetime. Use command substitution and do not persist the token.
+
+Generate a named static credential with `python3 scripts/api-key-create.py Professor`. The script
+prints the raw key once and stores only its SHA-256 hash as
+`OCR_Auth__ApiKeys__Professor`; clients send the raw value in `X-API-Key`. Raw API keys and Auth0
+Management API tokens must never be put in `.env`, committed, logged, or included in screenshots.
+
+The Auth0 tenant and production settings are configured, and the deployed protection was verified
+with interactive Web login, anonymous rejection, OAuth metadata, and named
+API-key REST/MCP access. Microsoft Entra is historical only: it was abandoned after the DAENET
+tenant denied the project identity permission to create app registrations.
 
 Docker Compose passes `.env` to both roles. It explicitly maps the worker's course settings because
 the worker uses `MyConfig__StorageConnectionString`, while the serving role uses

@@ -1,11 +1,11 @@
 # Course Queue Worker
 
-The implementation keeps the course template's processing loop and supplies its storage and
-experiment adapters. `MyCloudProject` and `MyCloudProject.Common` remain unchanged.
+The implementation keeps the course processing loop and extends its storage and experiment
+adapters with deterministic bulk dispatch, idempotency, and poison-message handling.
 
-## Message format
+## Commands and source layout
 
-A queue message is the same natural-language command a user gives the Web UI agent:
+A single-image queue message is plain natural language:
 
 ```text
 Remove the background from RCPT001.
@@ -15,36 +15,64 @@ Remove the background from RCPT001.
 Extract receipt data using workflow receipt_extract_v3 from RCPT001.
 ```
 
-The referenced image must exist in the configured `training-files` container. It may be inside a
-folder such as `images/RCPT001.png`; matching uses the filename without its extension.
+The referenced image must exist in the configured `training-files` container. Matching uses its
+filename without the extension.
+
+A bulk parent message is also plain natural language and must explicitly request all images in one
+named dataset, for example:
+
+```text
+Remove background from all images in cord-smoke.
+```
+
+Bulk datasets use this canonical Blob layout:
+
+```text
+training-files/images/<dataset-name>/<image-file>
+```
+
+The dataset name in the command must uniquely match a folder directly below `images/`. Supported
+images are sorted by Blob name before dispatch. A request is rejected if the folder is empty or
+exceeds `MyConfig__MaximumBatchImages`, whose default is 2,000.
 
 ## Processing
 
-1. `MyCloudProject` polls the queue and gives one message to the experiment as one independent job.
-2. `AzureStorageProvider` materializes the message body as the template's local input file.
-3. `MyExperiment` reads the command, asks the provider to resolve and download its named image, and
-   maps both to an agent-mode execution request.
-4. `ExecutionCore` invokes `AgentService`, which creates a one-shot model session and calls the
-   shared OCR tools or workflow.
-5. `AzureStorageProvider` uploads the collected files to `result-files`.
-6. One result row is written to the configured Table, using the primary OCR run ID as both
-   `ExperimentId` and `RowKey`.
-7. The queue message is deleted only after Blob and Table writes succeed.
+For a single image, `MyExperiment` resolves the named source and runs one one-shot agent command.
+
+For a bulk parent:
+
+1. The worker derives a stable batch ID from the parent queue message ID and command.
+2. The planning agent selects and validates either one ordered chain of image-transform tools or one
+   workflow. A workflow cannot be mixed with tool steps.
+3. The parent result row stores the selected `PlanJson` before fan-out. A redelivered parent reuses
+   that persisted plan instead of asking the model again.
+4. The worker lists `training-files/images/<dataset-name>/` and publishes one deterministic child
+   message per image. Each child has a stable item ID derived from the batch ID and Blob name.
+5. A child validates and executes the persisted plan directly through `ExecutionCore`; there is no
+   per-image AI planning or conversation.
+6. A child whose item result row already exists is skipped and returns that durable result.
+
+The parent planner therefore makes one AI decision for the batch. Fan-out and child execution are
+deterministic. JSON is an internal child-message contract, not the operator-facing parent format.
 
 MCP and REST are not involved: they are network transports. The worker directly reuses the same
 `AgentService`, execution core, tools, workflows, run records, and artifact discovery code.
 
 ## Result
 
-The result row contains the command, run ID, success/error state, model answer, source image blob,
-timing, and output-file URLs. Result blobs use:
+Single-image and child result rows contain the command, success/error state, source Blob, timing,
+plan metadata where applicable, and output-file URLs. The parent batch row records its batch ID,
+dataset, item count, dispatch status, and `PlanJson`. Result blobs preserve the existing contract:
 
 ```text
-<group-id>/<run-id>/<artifact-name>
+result-files/<group-id>/<item-id>/<artifact-name>
 ```
 
-Storage errors leave the message uncommitted for Azure Queue retry. Invalid commands, unresolved
-image references, and missing model configuration produce a failure row and are committed.
+For a legacy single-image result, `<item-id>` is its experiment/run key. Storage or unexpected
+processing errors leave a message uncommitted for retry. After
+`MyConfig__MaximumDequeueAttempts` failed deliveries (default 5), the worker copies the failed
+message and error details to `<queue>-poison` and deletes it from the source queue. The deployed
+worker uses one replica, preventing competing consumers from processing the fan-out concurrently.
 
 ## Configuration
 
@@ -57,6 +85,9 @@ image references, and missing model configuration produce a failure row and are 
 | `MyConfig__ResultTable` | Command results |
 | `MyConfig__Queue` | Natural-language commands |
 | `MyConfig__WorkRoot` | Temporary worker files |
+| `MyConfig__MessageVisibilityTimeoutSeconds` | Processing lease for one received message |
+| `MyConfig__MaximumBatchImages` | Bulk-image cap (default 2,000) |
+| `MyConfig__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
 | `OPENAI_API_KEY` | Required by `AgentService` |
 
 ## Run and verify
@@ -83,7 +114,37 @@ python3 scripts/verify-queue-worker.py --image SampleFiles/images/RCPT001.png
 ```
 
 The deployed `ca-ocr-worker` Container App has no ingress and one replica. The verifier uploads the
-sample, publishes two commands, waits for their Table rows, and checks every referenced result Blob.
+sample, publishes two single-image commands, waits for their Table rows, and checks every referenced
+result Blob. It does not constitute a submitted bulk batch.
+
+Prepare and submit a bulk smoke run with:
+
+```bash
+python3 -m pip install "datasets>=2.14"
+python3 scripts/prepare-cord-dataset.py --mode smoke
+scripts/azure-queue-produce-bulk.sh \
+  --upload-dir SampleFiles/datasets/cord/smoke/images \
+  --dataset cord-smoke \
+  --command "Remove background from all images in cord-smoke"
+python3 scripts/verify-bulk-queue.py
+```
+
+The producer uploads every supported image before publishing exactly one parent command. The
+verifier reports parent/item counts and artifact URLs. Its `--requeue-failed` option is a dry run
+unless `--yes` is also provided; retries are emitted as ordinary single-image commands.
+
+## CORD evaluation corpus
+
+CORD is a CC BY 4.0 corpus of 1,000 receipt images. In this project it is an evaluation and
+robustness corpus for pretrained inference components, not training data. A small `cord-smoke`
+subset is appropriate for fast queue and artifact checks; running all 1,000 images is an optional
+full benchmark for reproducible throughput, retry, artifact-integrity, OCR, and extraction
+evidence. A two-image background-removal smoke batch completed successfully; do not report
+full-corpus results until the 1,000-image batch has actually been submitted and measured.
+
+The Web UI remains intentionally scoped to single-image processing and conversations. Bulk
+processing belongs to the queue worker because the professor specifically requested queue-worker
+bulk processing.
 
 For local container execution, build and start the serving role with `docker compose up --build`.
 The worker is opt-in because it consumes the Azure queue named in `.env`:
