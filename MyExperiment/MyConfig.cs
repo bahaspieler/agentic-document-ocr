@@ -39,6 +39,11 @@
         /// <summary>Whether configured queue/blob/table resources may be created when absent.</summary>
         public bool EnsureStorageResources { get; set; } = true;
 
+        /// <summary>Maximum images accepted in one bulk request.</summary>
+        public int MaximumBatchImages { get; set; } = 2000;
+
+        /// <summary>Maximum failed delivery attempts before a message is moved to the poison queue.</summary>
+        public int MaximumDequeueAttempts { get; set; } = 5;
     }
 }
 
