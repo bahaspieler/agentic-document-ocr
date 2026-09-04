@@ -54,23 +54,4 @@ public sealed class QueueCommandTests
             File.Delete(path);
         }
     }
-
-    private sealed class UnusedCommandStorage : IStorageProvider, IQueueCommandStorage
-    {
-        public Task<ResolvedQueueImage> ResolveImageAsync(string command) =>
-            throw new AssertFailedException(
-                "An empty command must fail before image resolution.");
-
-        public IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token) =>
-            throw new NotSupportedException();
-
-        public Task<string> DownloadInputAsync(string fileName) =>
-            throw new NotSupportedException();
-
-        public Task UploadResultAsync(string experimentName, IExperimentResult result) =>
-            throw new NotSupportedException();
-
-        public Task CommitRequestAsync(IExerimentRequest request) =>
-            throw new NotSupportedException();
-    }
 }

@@ -19,12 +19,16 @@ namespace MyCloudProject.Common
         /// </summary>
         public string InputFile { get; set; }
 
+        /// <summary>Gets or sets the natural-language experiment name or command.</summary>
         public string Name { get; set; }
 
+        /// <summary>Gets or sets a human-readable request description.</summary>
         public string Description { get; set; }
 
+        /// <summary>Gets or sets the queue message identifier.</summary>
         public string MessageId { get; set; }
 
+        /// <summary>Gets or sets the receipt required to update or delete the queue message.</summary>
         public string MessageReceipt { get; set; }
     }
 }

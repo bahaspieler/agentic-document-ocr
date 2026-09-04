@@ -38,7 +38,7 @@ namespace MyCloudProject.Common
         /// <summary>
         /// Makes sure that the message is deleted from the queue.
         /// </summary>
-        /// <param name="request">The requests received by <see cref="nameof(IStorageProvider.ReceiveExperimentRequestAsync)"/>.</param>
+        /// <param name="request">The request received by <see cref="ReceiveExperimentRequestAsync"/>.</param>
         /// <returns></returns>
         Task CommitRequestAsync(IExerimentRequest request);
 

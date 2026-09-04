@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 
 namespace MyCloudProject.Common
 {
+    /// <summary>Builds shared configuration and logging services for the worker host.</summary>
     public static class InitHelpers
     {
         /// <summary>

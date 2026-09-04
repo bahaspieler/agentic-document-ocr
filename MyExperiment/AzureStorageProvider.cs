@@ -106,25 +106,63 @@ namespace MyExperiment
             if (message is null)
                 return null!;
 
-            var command = DecodeMessage(message.Body.ToString());
+            var body = DecodeMessage(message.Body.ToString());
+            var bulkItem = TryParseBulkItem(body);
+            var command = bulkItem?.Command ?? body;
             if (string.IsNullOrWhiteSpace(command))
                 throw new InvalidDataException("The queue command is empty.");
+            var workerInput = JsonSerializer.Serialize(new QueueCommandInput
+            {
+                RequestId = message.MessageId,
+                Command = command.Trim(),
+                Kind = bulkItem?.Kind ?? "",
+                BatchId = bulkItem?.BatchId ?? "",
+                ItemId = bulkItem?.ItemId ?? "",
+                BlobName = bulkItem?.BlobName ?? "",
+                PlanJson = bulkItem?.PlanJson ?? ""
+            }, JsonOptions);
 
             return new ExerimentRequestMessage
             {
                 ExperimentId = message.MessageId,
                 InputFile = InlineCommandPrefix + Convert.ToBase64String(
-                    System.Text.Encoding.UTF8.GetBytes(command.Trim())),
+                    System.Text.Encoding.UTF8.GetBytes(workerInput)),
                 Name = command.Trim(),
                 Description = "Natural-language OCR command",
                 MessageId = message.MessageId,
-                MessageReceipt = message.PopReceipt
+                MessageReceipt = message.PopReceipt,
+                DequeueCount = message.DequeueCount,
+                Kind = bulkItem?.Kind ?? "",
+                BatchId = bulkItem?.BatchId ?? "",
+                ItemId = bulkItem?.ItemId ?? "",
+                BlobName = bulkItem?.BlobName ?? "",
+                PlanJson = bulkItem?.PlanJson ?? ""
             };
         }
 
         /// <inheritdoc />
-        public async Task<ResolvedQueueImage> ResolveImageAsync(string command)
+        public async Task<ResolvedQueueImage> ResolveImageAsync(
+            string command,
+            string? exactBlobName = null)
         {
+            if (!string.IsNullOrWhiteSpace(exactBlobName))
+            {
+                var normalized = NormalizeBlobName(exactBlobName);
+                if (!normalized.StartsWith("images/", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Bulk item Blobs must be below the images/ dataset root.");
+                if (!IsImageExtension(Path.GetExtension(normalized)))
+                    throw new InvalidOperationException("The selected Blob is not a supported image.");
+                var blob = _training.GetBlobClient(normalized);
+                if (!await blob.ExistsAsync().ConfigureAwait(false))
+                    throw new FileNotFoundException(
+                        $"Training image '{normalized}' was not found.");
+                return new ResolvedQueueImage(
+                    Path.GetFileNameWithoutExtension(normalized),
+                    normalized,
+                    await DownloadBlobAsync(normalized).ConfigureAwait(false));
+            }
+
             var matches = new System.Collections.Generic.List<(string Blob, string Reference)>();
             await foreach (var blob in _training.GetBlobsAsync())
             {
@@ -150,6 +188,109 @@ namespace MyExperiment
                 match.Reference,
                 match.Blob,
                 await DownloadBlobAsync(match.Blob).ConfigureAwait(false));
+        }
+
+        /// <inheritdoc />
+        public async Task<(string DatasetName, IReadOnlyList<QueueImage> Images)>
+            ListDatasetImagesAsync(string command, int maximumImages)
+        {
+            if (maximumImages < 1)
+                throw new ArgumentOutOfRangeException(
+                    nameof(maximumImages), "Maximum images must be positive.");
+
+            const string root = "images/";
+            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var images = new System.Collections.Generic.List<QueueImage>();
+            await foreach (var blob in _training.GetBlobsAsync(
+                               BlobTraits.None, BlobStates.None, root,
+                               CancellationToken.None))
+            {
+                if (!IsImageExtension(Path.GetExtension(blob.Name)))
+                    continue;
+                var relative = blob.Name[root.Length..];
+                var slash = relative.IndexOf('/');
+                if (slash <= 0)
+                    continue;
+                candidates.Add(relative[..slash]);
+                images.Add(new QueueImage(blob.Name, Path.GetFileName(blob.Name)));
+            }
+
+            var dataset = BulkCommandParser.ResolveDatasetName(command, candidates);
+            var prefix = $"{root}{dataset}/";
+            var selected = images
+                .Where(image => image.BlobName.StartsWith(
+                    prefix, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(image => image.BlobName, StringComparer.Ordinal)
+                .ToArray();
+            if (selected.Length == 0)
+                throw new InvalidOperationException(
+                    $"Dataset '{dataset}' contains no supported images.");
+            if (selected.Length > maximumImages)
+                throw new InvalidOperationException(
+                    $"Dataset '{dataset}' contains {selected.Length} images; " +
+                    $"the configured maximum is {maximumImages}.");
+            return (dataset, selected);
+        }
+
+        /// <inheritdoc />
+        public async Task EnqueueBulkItemsAsync(IEnumerable<BulkQueueMessage> messages)
+        {
+            ArgumentNullException.ThrowIfNull(messages);
+            foreach (var message in messages)
+            {
+                var json = JsonSerializer.Serialize(message, JsonOptions);
+                await _queue.SendMessageAsync(json).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<ExperimentResult?> GetResultAsync(string rowKey)
+        {
+            try
+            {
+                var response = await _table.GetEntityAsync<ExperimentResult>(
+                    _config.GroupId, rowKey).ConfigureAwait(false);
+                return response.Value;
+            }
+            catch (RequestFailedException error) when (error.Status == 404)
+            {
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task SaveBatchPlanAsync(ExperimentResult result)
+        {
+            ArgumentNullException.ThrowIfNull(result);
+            await _table.UpsertEntityAsync(result, TableUpdateMode.Replace)
+                .ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task MoveToPoisonAsync(
+            ExerimentRequestMessage request,
+            string error)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            var poison = new QueueClient(
+                _config.StorageConnectionString, $"{_config.Queue}-poison");
+            await poison.CreateIfNotExistsAsync().ConfigureAwait(false);
+            var payload = JsonSerializer.Serialize(new
+            {
+                request.MessageId,
+                request.Name,
+                request.Kind,
+                request.BatchId,
+                request.ItemId,
+                request.BlobName,
+                request.PlanJson,
+                request.DequeueCount,
+                Error = error,
+                FailedAtUtc = DateTimeOffset.UtcNow
+            }, JsonOptions);
+            await poison.SendMessageAsync(payload).ConfigureAwait(false);
+            await _queue.DeleteMessageAsync(
+                request.MessageId, request.MessageReceipt).ConfigureAwait(false);
         }
 
         #endregion
@@ -239,6 +380,24 @@ namespace MyExperiment
             catch (FormatException)
             {
                 return trimmed;
+            }
+        }
+
+        private static BulkQueueMessage? TryParseBulkItem(string body)
+        {
+            if (!body.TrimStart().StartsWith('{'))
+                return null;
+            try
+            {
+                var item = JsonSerializer.Deserialize<BulkQueueMessage>(body, JsonOptions);
+                return item?.Kind.Equals(
+                    "bulk-item", StringComparison.OrdinalIgnoreCase) == true
+                    ? item
+                    : null;
+            }
+            catch (JsonException)
+            {
+                return null;
             }
         }
 
