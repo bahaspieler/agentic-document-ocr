@@ -1,6 +1,7 @@
 import { Download, ExternalLink, File, Image as ImageIcon, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { apiFetch, runArtifactUrl, type ArtifactDescriptor, type Run } from '../api'
+import { AuthenticatedArtifactAction, AuthenticatedArtifactImage } from './AuthenticatedArtifact'
 
 export function RunDetailDrawer({ run, getToken, onClose }: {
   run?: Run; getToken: () => Promise<string | undefined>; onClose: () => void
@@ -28,10 +29,12 @@ export function RunDetailDrawer({ run, getToken, onClose }: {
       <div className="drawer-artifacts">{artifacts.map((artifact) => {
         const url = runArtifactUrl(run.runId, artifact.name, run.conversationId)
         return <article key={artifact.name}>
-          {artifact.previewable && artifact.contentType.startsWith('image/') ? <img src={url} alt="" /> : <File size={24} />}
+          {artifact.previewable && artifact.contentType.startsWith('image/')
+            ? <AuthenticatedArtifactImage url={url} getToken={getToken} alt="" />
+            : <File size={24} />}
           <span><strong>{artifact.name}</strong><small>{formatBytes(artifact.sizeBytes)}</small></span>
-          <a aria-label={`View ${artifact.name}`} href={url} target="_blank" rel="noreferrer"><ExternalLink size={15} /></a>
-          <a aria-label={`Download ${artifact.name}`} href={runArtifactUrl(run.runId, artifact.name, run.conversationId, true)}><Download size={15} /></a>
+          <AuthenticatedArtifactAction ariaLabel={`View ${artifact.name}`} url={url} fileName={artifact.name} getToken={getToken}><ExternalLink size={15} /></AuthenticatedArtifactAction>
+          <AuthenticatedArtifactAction download ariaLabel={`Download ${artifact.name}`} url={runArtifactUrl(run.runId, artifact.name, run.conversationId, true)} fileName={artifact.name} getToken={getToken}><Download size={15} /></AuthenticatedArtifactAction>
         </article>
       })}</div>
       {!artifacts.length && !error && <div className="drawer-empty"><ImageIcon />No artifacts recorded for this run.</div>}

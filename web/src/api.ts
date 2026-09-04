@@ -1,5 +1,11 @@
 export type RuntimeConfig = {
-  auth: { enabled: boolean; clientId: string; authority: string }
+  auth: {
+    enabled: boolean
+    clientId: string
+    authority: string
+    audience: string
+    scope: string
+  }
   sqlEnabled: boolean
   agentEnabled: boolean
   model?: string

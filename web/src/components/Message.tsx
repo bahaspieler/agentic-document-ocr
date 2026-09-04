@@ -5,10 +5,12 @@ import rehypeSanitize from 'rehype-sanitize'
 import type { Run } from '../api'
 import type { ChatMessage } from '../types'
 import { ActivityTimeline } from './ActivityTimeline'
+import { AuthenticatedArtifactImage } from './AuthenticatedArtifact'
 import { ResultCard } from './ResultCard'
 
-export function Message({ message, pending = false, onViewRun }: {
+export function Message({ message, pending = false, onViewRun, getToken }: {
   message: ChatMessage; pending?: boolean; onViewRun?: (run: Run) => void
+  getToken?: () => Promise<string | undefined>
 }) {
   const assistant = message.role === 'assistant'
   return (
@@ -22,7 +24,12 @@ export function Message({ message, pending = false, onViewRun }: {
         {message.attachments?.length ? (
           <div className="sent-attachments">
             {message.attachments.map((attachment) => (
-              <img key={attachment.reference} src={`/api/artifacts/${attachment.reference.split('/').map(encodeURIComponent).join('/')}`} alt={attachment.name ?? 'Attached image'} />
+              <AuthenticatedArtifactImage
+                key={attachment.reference}
+                url={`/api/artifacts/${attachment.reference.split('/').map(encodeURIComponent).join('/')}`}
+                getToken={getToken}
+                alt={attachment.name ?? 'Attached image'}
+              />
             ))}
           </div>
         ) : null}
@@ -35,7 +42,7 @@ export function Message({ message, pending = false, onViewRun }: {
           ) : <p>{message.text}</p>}
         </div>
         {message.runs?.map((run) => (
-          <ResultCard key={run.runId} run={run} artifacts={message.artifacts?.filter((item) => item.runId === run.runId) ?? []} onViewRun={onViewRun} />
+          <ResultCard key={run.runId} run={run} artifacts={message.artifacts?.filter((item) => item.runId === run.runId) ?? []} onViewRun={onViewRun} getToken={getToken} />
         ))}
       </div>
     </article>

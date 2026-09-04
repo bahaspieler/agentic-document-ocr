@@ -8,6 +8,7 @@ public sealed class SqlDatabase
 {
     private readonly string _connectionString;
 
+    /// <summary>Initializes a database connection provider from validated SQL configuration.</summary>
     public SqlDatabase(SqlConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);

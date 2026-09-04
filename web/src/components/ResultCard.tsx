@@ -1,8 +1,10 @@
 import { CheckCircle2, Clipboard, Download, ExternalLink, FileText, XCircle } from 'lucide-react'
 import { artifactUrl, runArtifactUrl, type ArtifactDescriptor, type Run } from '../api'
+import { AuthenticatedArtifactAction, AuthenticatedArtifactImage } from './AuthenticatedArtifact'
 
-export function ResultCard({ run, artifacts = [], onViewRun }: {
+export function ResultCard({ run, artifacts = [], onViewRun, getToken }: {
   run: Run; artifacts?: ArtifactDescriptor[]; onViewRun?: (run: Run) => void
+  getToken?: () => Promise<string | undefined>
 }) {
   const images = artifacts.filter((item) => item.contentType.startsWith('image/'))
   const primary = images[images.length - 1] ?? artifacts.find((item) => item.previewable) ?? artifacts[0]
@@ -23,11 +25,11 @@ export function ResultCard({ run, artifacts = [], onViewRun }: {
       </header>
       {run.error && <p className="error-text">{run.error}</p>}
       {url && (images.length > 0 || (!primary && run.outputReference)) && (
-        <img className="result-preview" src={url} alt={`${primary?.name ?? run.name} preview`} />
+        <AuthenticatedArtifactImage className="result-preview" url={url} getToken={getToken} alt={`${primary?.name ?? run.name} preview`} />
       )}
       <div className="result-actions">
-        {url && <a href={url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> View</a>}
-        {downloadUrl && <a href={downloadUrl}><Download size={14} /> Download</a>}
+        {url && <AuthenticatedArtifactAction url={url} fileName={primary?.name ?? run.outputReference} getToken={getToken}><ExternalLink size={14} /> View</AuthenticatedArtifactAction>}
+        {downloadUrl && <AuthenticatedArtifactAction download url={downloadUrl} fileName={primary?.name ?? run.outputReference} getToken={getToken}><Download size={14} /> Download</AuthenticatedArtifactAction>}
         <button type="button" onClick={() => void navigator.clipboard.writeText(run.outputReference || run.runId)}><Clipboard size={14} /> Copy reference</button>
         {!url && <span><FileText size={14} /> {run.stepCount} steps</span>}
       </div>
@@ -35,8 +37,8 @@ export function ResultCard({ run, artifacts = [], onViewRun }: {
         <strong>Data files</strong>
         {important.slice(0, 6).map((artifact) => <div key={artifact.name}>
           <span><FileText size={13} /> {friendlyName(artifact.name)}</span>
-          <a href={runArtifactUrl(run.runId, artifact.name, run.conversationId)} target="_blank" rel="noreferrer">View</a>
-          <a href={runArtifactUrl(run.runId, artifact.name, run.conversationId, true)}>Download</a>
+          <AuthenticatedArtifactAction url={runArtifactUrl(run.runId, artifact.name, run.conversationId)} fileName={artifact.name} getToken={getToken}>View</AuthenticatedArtifactAction>
+          <AuthenticatedArtifactAction download url={runArtifactUrl(run.runId, artifact.name, run.conversationId, true)} fileName={artifact.name} getToken={getToken}>Download</AuthenticatedArtifactAction>
         </div>)}
       </div>}
       {onViewRun && <button className="view-all-files" type="button" onClick={() => onViewRun(run)}>

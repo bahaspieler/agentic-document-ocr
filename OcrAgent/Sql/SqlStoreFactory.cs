@@ -3,6 +3,7 @@ namespace OcrAgent.Sql;
 /// <summary>Validates SQL configuration, installs the schema, and creates the stores.</summary>
 public static class SqlStoreFactory
 {
+    /// <summary>Creates configured SQL stores after optionally ensuring the database schema.</summary>
     public static SqlStores Create(SqlConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);

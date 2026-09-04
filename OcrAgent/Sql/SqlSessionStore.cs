@@ -4,12 +4,22 @@ using Dapper;
 namespace OcrAgent.Sql;
 
 /// <summary>Azure SQL implementation of durable conversations.</summary>
-public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
+public sealed class SqlSessionStore : ISessionStore
 {
+    private readonly SqlDatabase _database;
+
+    /// <summary>Initializes a session store backed by the specified SQL database.</summary>
+    public SqlSessionStore(SqlDatabase database)
+    {
+        _database = database;
+    }
+
+    /// <summary>Gets a value indicating that durable conversation storage is available.</summary>
     public bool IsEnabled => true;
 
     #region Conversation Operations
 
+    /// <summary>Creates a conversation with its initial metadata in Azure SQL.</summary>
     public async Task<ConversationRecord> CreateAsync(
         string conversationId,
         string? ownerUserId,
@@ -22,22 +32,24 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             OUTPUT inserted.*
             VALUES (@conversationId, @ownerUserId, @title, @now, @now, 0, 1);
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleAsync<ConversationRecord>(new CommandDefinition(
             sql,
             new { conversationId, ownerUserId, title = NormalizeTitle(title), now = DateTime.UtcNow },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <summary>Gets a conversation by its identifier from Azure SQL.</summary>
     public async Task<ConversationRecord?> GetAsync(
         string conversationId, CancellationToken cancellationToken = default)
     {
         const string sql = "SELECT * FROM dbo.Conversations WHERE Id = @conversationId;";
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleOrDefaultAsync<ConversationRecord>(new CommandDefinition(
             sql, new { conversationId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <summary>Lists an owner's most recently active conversations from Azure SQL.</summary>
     public async Task<IReadOnlyList<ConversationRecord>> ListAsync(
         string ownerUserId, int top = 100, CancellationToken cancellationToken = default)
     {
@@ -47,13 +59,14 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             WHERE OwnerUserId = @ownerUserId
             ORDER BY LastActiveUtc DESC;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<ConversationRecord>(new CommandDefinition(
             sql, new { ownerUserId, top = Math.Clamp(top, 1, 200) },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.AsList();
     }
 
+    /// <summary>Renames a conversation owned by the specified user.</summary>
     public async Task RenameAsync(
         string conversationId,
         string title,
@@ -66,7 +79,7 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             WHERE Id = @conversationId
               AND ((@ownerUserId IS NULL AND OwnerUserId IS NULL) OR OwnerUserId = @ownerUserId);
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var changed = await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new { conversationId, title = NormalizeTitle(title), ownerUserId, now = DateTime.UtcNow },
@@ -75,6 +88,7 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             throw new KeyNotFoundException($"Conversation '{conversationId}' was not found.");
     }
 
+    /// <summary>Deletes a conversation owned by the specified user.</summary>
     public async Task DeleteAsync(
         string conversationId, string? ownerUserId, CancellationToken cancellationToken = default)
     {
@@ -83,11 +97,12 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             WHERE Id = @conversationId
               AND ((@ownerUserId IS NULL AND OwnerUserId IS NULL) OR OwnerUserId = @ownerUserId);
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             sql, new { conversationId, ownerUserId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <summary>Assigns unowned conversations to a user.</summary>
     public async Task ClaimAsync(
         IEnumerable<string> conversationIds,
         string ownerUserId,
@@ -102,7 +117,7 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             SET OwnerUserId = @ownerUserId, LastActiveUtc = @now
             WHERE Id IN @ids AND OwnerUserId IS NULL;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             sql, new { ids, ownerUserId, now = DateTime.UtcNow },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -112,6 +127,7 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
 
     #region Turn Operations
 
+    /// <summary>Gets a completed turn by its conversation and idempotency key.</summary>
     public async Task<ConversationTurnRecord?> GetTurnAsync(
         string conversationId,
         string idempotencyKey,
@@ -121,12 +137,13 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             SELECT * FROM dbo.ConversationTurns
             WHERE ConversationId = @conversationId AND IdempotencyKey = @idempotencyKey;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleOrDefaultAsync<ConversationTurnRecord>(new CommandDefinition(
             sql, new { conversationId, idempotencyKey },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <summary>Lists a conversation's completed turns in turn order.</summary>
     public async Task<IReadOnlyList<ConversationTurnRecord>> ListTurnsAsync(
         string conversationId, CancellationToken cancellationToken = default)
     {
@@ -135,12 +152,13 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
             WHERE ConversationId = @conversationId
             ORDER BY TurnIndex;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<ConversationTurnRecord>(new CommandDefinition(
             sql, new { conversationId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.AsList();
     }
 
+    /// <summary>Atomically saves updated conversation state and its completed turn.</summary>
     public async Task<ConversationRecord> SaveTurnAsync(
         ConversationRecord expected,
         string payloadJson,
@@ -153,7 +171,7 @@ public sealed class SqlSessionStore(SqlDatabase database) : ISessionStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 

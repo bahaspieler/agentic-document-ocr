@@ -7,12 +7,23 @@ using OcrAgent.Extraction.RuleBased;
 
 namespace OcrAgent.Sql;
 
-public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
+/// <summary>Azure SQL implementation of durable receipt storage and review history.</summary>
+public sealed class SqlReceiptStore : IReceiptStore
 {
+    private readonly SqlDatabase _database;
+
+    /// <summary>Initializes a receipt store backed by the specified SQL database.</summary>
+    public SqlReceiptStore(SqlDatabase database)
+    {
+        _database = database;
+    }
+
+    /// <summary>Gets a value indicating that durable receipt storage is available.</summary>
     public bool IsEnabled => true;
 
     #region Receipt Operations
 
+    /// <summary>Saves an extracted receipt unless its receipt identifier already exists.</summary>
     public async Task SaveAsync(
         ReceiptData receipt,
         string? runId,
@@ -25,7 +36,7 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
 
         var transactionUtc = ParseDate(receipt.Transaction.DateTime);
         var rawJson = JsonSerializer.Serialize(receipt);
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
@@ -78,15 +89,17 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Gets a receipt by its identifier from Azure SQL.</summary>
     public async Task<ReceiptRecord?> GetAsync(
         string receiptId, CancellationToken cancellationToken = default)
     {
         const string sql = "SELECT * FROM dbo.Receipts WHERE ReceiptId = @receiptId;";
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleOrDefaultAsync<ReceiptRecord>(new CommandDefinition(
             sql, new { receiptId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <summary>Applies a reviewed correction when the expected receipt version still matches.</summary>
     public async Task<ReceiptRecord> UpdateAsync(
         string receiptId,
         ReceiptData corrected,
@@ -108,7 +121,7 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         var currentJson = JsonSerializer.Serialize(corrected);
         var now = DateTime.UtcNow;
 
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
         const string updateSql = """
@@ -178,10 +191,11 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         return updated;
     }
 
+    /// <summary>Lists the recorded corrections for a receipt in descending revision order.</summary>
     public async Task<IReadOnlyList<ReceiptRevisionRecord>> ListRevisionsAsync(
         string receiptId, CancellationToken cancellationToken = default)
     {
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<ReceiptRevisionRecord>(new CommandDefinition(
             """
             SELECT * FROM dbo.ReceiptRevisions
@@ -191,6 +205,7 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
         return rows.AsList();
     }
 
+    /// <summary>Queries recent receipts by optional merchant and transaction date filters.</summary>
     public async Task<IReadOnlyList<ReceiptRecord>> QueryAsync(
         string? merchant = null,
         DateTime? fromUtc = null,
@@ -206,7 +221,7 @@ public sealed class SqlReceiptStore(SqlDatabase database) : IReceiptStore
               AND (@toUtc IS NULL OR TransactionUtc < @toUtc)
             ORDER BY CreatedUtc DESC;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<ReceiptRecord>(new CommandDefinition(
             sql,
             new

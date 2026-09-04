@@ -21,7 +21,7 @@ public static class ApiEndpoints
     /// <param name="app">ASP.NET Core application receiving the routes.</param>
     /// <param name="host">Shared OCR tools and persistence stores.</param>
     /// <param name="agentService">Agent service, or null when model access is unavailable.</param>
-    /// <param name="auth">Optional Microsoft Entra configuration.</param>
+    /// <param name="auth">Optional Auth0 and API-key configuration.</param>
     public static void MapOcrApi(
         this WebApplication app,
         OcrAgentToolHost host,
@@ -29,6 +29,8 @@ public static class ApiEndpoints
         AuthConfiguration auth)
     {
         var api = app.MapGroup("/api");
+        if (auth.Enabled)
+            api.RequireAuthorization(AuthPolicies.Access);
         var logger = app.Logger;
         var executionCore = new ExecutionCore(
             host.Aggregator,
@@ -46,13 +48,15 @@ public static class ApiEndpoints
             {
                 enabled = auth.Enabled,
                 clientId = auth.ClientId,
-                authority = $"{auth.Instance.TrimEnd('/')}/{auth.TenantId}"
+                authority = auth.AuthorizationServer,
+                audience = auth.Audience,
+                scope = auth.Enabled ? auth.ScopeName : ""
             },
             sqlEnabled = host.SessionStore.IsEnabled,
             agentEnabled = agentService is not null,
             model = Environment.GetEnvironmentVariable("OPENAI_CHATCOMPLETION_DEPLOYMENT")
                 ?? "gpt-4o-mini"
-        }));
+        })).AllowAnonymous();
 
         // Uploads use bearer tokens rather than cookies, so antiforgery tokens do not apply.
         api.MapPost("/images", async (HttpRequest request, CancellationToken cancellationToken) =>
@@ -1064,7 +1068,7 @@ public static class ApiEndpoints
             return null;
         await store.UpsertAsync(
             userId,
-            principal.FindFirstValue("tid") ?? "microsoft",
+            principal.FindFirstValue("auth_method") ?? "auth0",
             principal.FindFirstValue("name") ?? principal.Identity?.Name,
             cancellationToken);
         return userId;
@@ -1155,8 +1159,6 @@ public static class ApiEndpoints
 
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
-
-    private sealed record SseEnvelope(string Event, object Data);
 
     #endregion
 }

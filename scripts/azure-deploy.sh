@@ -40,6 +40,14 @@ if [ -z "${AZURE_STORAGE_CONNECTION_STRING:-}" ]; then
     exit 1
 fi
 
+for auth_key in OCR_Auth__Domain OCR_Auth__ClientId OCR_Auth__Audience OCR_Auth__ResourceUri; do
+    if [ -z "${!auth_key:-}" ]; then
+        echo "[ERROR] $auth_key is required for the protected production deployment." >&2
+        echo "        Run scripts/auth0-setup.sh before deploying." >&2
+        exit 1
+    fi
+done
+
 if ! az group show --name "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
     echo "[ERROR] Resource group '$AZURE_RESOURCE_GROUP' was not found." >&2
     echo "        The scripts never create or delete the group; it is bound to the team." >&2
@@ -149,6 +157,11 @@ fi
 if [ -n "${OCR_Sql__ConnectionString:-}" ]; then
     SECRET_ARGS+=(sql-cs="$OCR_Sql__ConnectionString")
 fi
+while IFS= read -r key_variable; do
+    key_name="${key_variable#OCR_Auth__ApiKeys__}"
+    secret_name="auth-api-key-$(printf '%s' "$key_name" | tr '[:upper:]_' '[:lower:]-')"
+    SECRET_ARGS+=("$secret_name=${!key_variable}")
+done < <(compgen -A variable OCR_Auth__ApiKeys__)
 
 ENV_VARS=()
 while IFS= read -r line; do
@@ -199,6 +212,25 @@ else
         --min-replicas 1 \
         --max-replicas "$AZURE_MAX_REPLICAS" \
         --set-env-vars "${ENV_VARS[@]}" \
+        --output none
+fi
+
+REVISION_MODE="$(az containerapp show \
+    --name "$AZURE_CONTAINER_APP_NAME" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --query properties.configuration.activeRevisionsMode \
+    -o tsv)"
+if [ "$REVISION_MODE" = "Multiple" ]; then
+    LATEST_REVISION="$(az containerapp show \
+        --name "$AZURE_CONTAINER_APP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --query properties.latestRevisionName \
+        -o tsv)"
+    echo "[INFO] Routing all traffic to $LATEST_REVISION"
+    az containerapp ingress traffic set \
+        --name "$AZURE_CONTAINER_APP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --revision-weight "$LATEST_REVISION=100" \
         --output none
 fi
 

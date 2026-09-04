@@ -3,7 +3,13 @@
   <PropertyGroup>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OcrAgent.Mcp.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\OcrAgent\OcrAgent.csproj" />
@@ -17,7 +23,7 @@
     <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
   </ItemGroup>
@@ -30,8 +36,7 @@
   -->
   <Target Name="RemoveEngineAppSettingsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
-                             Condition="'%(RelativePath)' == 'appsettings.json' AND '%(RootDir)%(Directory)' != '$([MSBuild]::EnsureTrailingSlash($(MSBuildProjectDirectory)))'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(RelativePath)' == 'appsettings.json' AND '%(RootDir)%(Directory)' != '$([MSBuild]::EnsureTrailingSlash($(MSBuildProjectDirectory)))'" />
     </ItemGroup>
   </Target>
 
@@ -42,16 +47,12 @@
     same files into this host so RunOcr works here too. No-op on Windows or when the libs are
     not present (Tesseract simply stays disabled, exactly as in OcrAgent).
   -->
-  <Target Name="ForwardMacTesseractNativeLibs" AfterTargets="Build"
-          Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+  <Target Name="ForwardMacTesseractNativeLibs" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <ItemGroup>
       <_OcrAgentMacNativeLib Include="$(MSBuildProjectDirectory)\..\OcrAgent\bin\$(Configuration)\$(TargetFramework)\x64\libleptonica-*.dylib" />
       <_OcrAgentMacNativeLib Include="$(MSBuildProjectDirectory)\..\OcrAgent\bin\$(Configuration)\$(TargetFramework)\x64\libtesseract*.dylib" />
     </ItemGroup>
-    <Copy SourceFiles="@(_OcrAgentMacNativeLib)"
-          DestinationFolder="$(OutDir)x64"
-          SkipUnchangedFiles="true"
-          Condition="'@(_OcrAgentMacNativeLib)' != ''" />
+    <Copy SourceFiles="@(_OcrAgentMacNativeLib)" DestinationFolder="$(OutDir)x64" SkipUnchangedFiles="true" Condition="'@(_OcrAgentMacNativeLib)' != ''" />
   </Target>
 
 </Project>

@@ -2,10 +2,21 @@ using Dapper;
 
 namespace OcrAgent.Sql;
 
-public sealed class SqlUserStore(SqlDatabase database) : IUserStore
+/// <summary>Azure SQL implementation of authenticated user profile storage.</summary>
+public sealed class SqlUserStore : IUserStore
 {
+    private readonly SqlDatabase _database;
+
+    /// <summary>Initializes a user store backed by the specified SQL database.</summary>
+    public SqlUserStore(SqlDatabase database)
+    {
+        _database = database;
+    }
+
+    /// <summary>Gets a value indicating that durable user storage is available.</summary>
     public bool IsEnabled => true;
 
+    /// <summary>Creates or refreshes an authenticated user's profile in Azure SQL.</summary>
     public async Task UpsertAsync(
         string userId,
         string identityProvider,
@@ -26,7 +37,7 @@ public sealed class SqlUserStore(SqlDatabase database) : IUserStore
                 VALUES (@userId, @identityProvider, @displayName, @now, @now);
             END;
             """;
-        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             sql, new { userId, identityProvider, displayName, now = DateTime.UtcNow },
             cancellationToken: cancellationToken)).ConfigureAwait(false);

@@ -26,6 +26,7 @@
   <Project Path="MyCloudProject.Common/MyCloudProject.Common.csproj" />
   <Project Path="MyCloudProject/MyCloudProject.csproj" />
   <Project Path="MyExperiment/MyExperiment.csproj" />
+  <Project Path="OcrAgent.Mcp.Tests/OcrAgent.Mcp.Tests.csproj" />
   <Project Path="OcrAgent.Mcp/OcrAgent.Mcp.csproj" />
   <Project Path="OcrAgent/OcrAgent.csproj" />
   <Project Path="UnitTests/UnitTests.csproj" />

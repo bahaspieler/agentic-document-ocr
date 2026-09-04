@@ -4,6 +4,7 @@ import {
   apiFetch, receiptExportUrl, type ReceiptData, type ReceiptRecord,
   type ReceiptRevision, type ReceiptSummary,
 } from '../api'
+import { AuthenticatedArtifactAction } from './AuthenticatedArtifact'
 
 export function ReceiptEditor({ receipt, getToken, onClose, onSaved }: {
   receipt: ReceiptSummary; getToken: () => Promise<string | undefined>; onClose: () => void; onSaved: () => void
@@ -78,9 +79,9 @@ export function ReceiptEditor({ receipt, getToken, onClose, onSaved }: {
     </div>
     <label className="change-summary">Change summary<input value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="What did you correct?" /></label>
     <div className="editor-actions"><button onClick={() => original && setDraft(structuredClone(original))}><RotateCcw size={15} /> Reset to original</button>
-      <a href={receiptExportUrl(receipt.receiptId, 'original', receipt.conversationId)}><Download size={15} /> Original JSON</a>
-      <a href={receiptExportUrl(receipt.receiptId, 'corrected.json', receipt.conversationId)}><Download size={15} /> Corrected JSON</a>
-      <a href={receiptExportUrl(receipt.receiptId, 'corrected.csv', receipt.conversationId)}><Download size={15} /> CSV</a>
+      <AuthenticatedArtifactAction download url={receiptExportUrl(receipt.receiptId, 'original', receipt.conversationId)} fileName={`${receipt.receiptId}-original.json`} getToken={getToken}><Download size={15} /> Original JSON</AuthenticatedArtifactAction>
+      <AuthenticatedArtifactAction download url={receiptExportUrl(receipt.receiptId, 'corrected.json', receipt.conversationId)} fileName={`${receipt.receiptId}-corrected.json`} getToken={getToken}><Download size={15} /> Corrected JSON</AuthenticatedArtifactAction>
+      <AuthenticatedArtifactAction download url={receiptExportUrl(receipt.receiptId, 'corrected.csv', receipt.conversationId)} fileName={`${receipt.receiptId}-corrected.csv`} getToken={getToken}><Download size={15} /> CSV</AuthenticatedArtifactAction>
       <button disabled={saving} onClick={() => void save(true)}><Save size={15} /> Mark verified</button>
       <button className="primary" disabled={saving} onClick={() => void save()}><Save size={15} /> {saving ? 'Saving…' : 'Save changes'}</button></div>
     <section className="revision-list"><h3>Revision history</h3>{revisions.map((revision) => <article key={revision.revisionNumber}><strong>Revision {revision.revisionNumber}</strong><span>{revision.changeSummary || 'Receipt updated'}</span><time>{new Date(revision.createdUtc).toLocaleString()}</time></article>)}

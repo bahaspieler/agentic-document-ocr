@@ -6,6 +6,7 @@ public sealed record SqlStores(
     IUserStore Users,
     IReceiptStore Receipts)
 {
+    /// <summary>Gets a store set whose capabilities are all disabled.</summary>
     public static SqlStores Disabled { get; } =
         new(NullSessionStore.Instance, NullUserStore.Instance, NullReceiptStore.Instance);
 }

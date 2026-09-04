@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useMsal } from '@azure/msal-react'
 import { Bot, CircleUserRound, History, LogIn, LogOut, Menu, MessageSquareText, MoreHorizontal, PanelLeftClose, Plus, Sparkles, Trash2, WandSparkles, X } from 'lucide-react'
 import './App.css'
 import { apiFetch, streamConversation, type ActivityEvent, type ArtifactDescriptor, type Conversation, type ConversationTurn, type ReceiptSummary, type Run, type RuntimeConfig, type Workflow } from './api'
+import { useAppAuth } from './auth/useAppAuth'
+import { AuthGate } from './components/AuthGate'
 import { ChatPanel } from './components/ChatPanel'
 import { ProcessPanel } from './components/ProcessPanel'
 import { RunHistory } from './components/RunHistory'
@@ -13,8 +14,15 @@ type View = 'chat' | 'process' | 'history'
 const anonymousKey = 'ocr-anonymous-conversations'
 
 function App({ config }: { config: RuntimeConfig }) {
-  const { instance, accounts } = useMsal()
-  const account = accounts[0]
+  const {
+    user,
+    isAuthenticated,
+    isLoading: authLoading,
+    getToken,
+    login: beginLogin,
+    logout,
+  } = useAppAuth()
+  const account = isAuthenticated ? user : undefined
   const [view, setView] = useState<View>('chat')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -27,22 +35,28 @@ function App({ config }: { config: RuntimeConfig }) {
   const [focusRunId, setFocusRunId] = useState<string>()
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([])
   const [notice, setNotice] = useState<string>()
+  const [loginBusy, setLoginBusy] = useState(false)
 
-  const getToken = useCallback(async () => {
-    if (!config.auth.enabled || !account) return undefined
-    const result = await instance.acquireTokenSilent({ account, scopes: [`api://${config.auth.clientId}/access_as_user`] })
-    return result.accessToken
-  }, [account, config.auth.clientId, config.auth.enabled, instance])
   const attachmentState = useImageAttachments(getToken)
   const saveAnonymous = useCallback((items: Conversation[]) => localStorage.setItem(anonymousKey, JSON.stringify(items)), [])
 
   const refreshConversations = useCallback(async () => {
     try {
+      if (config.auth.enabled && !account) {
+        setConversations([])
+        return
+      }
       if (account) setConversations(await apiFetch<Conversation[]>('/api/conversations', await getToken()))
       else setConversations(JSON.parse(localStorage.getItem(anonymousKey) ?? '[]') as Conversation[])
     } catch (error) { setNotice((error as Error).message) }
-  }, [account, getToken])
+  }, [account, config.auth.enabled, getToken])
   const refreshData = useCallback(async () => {
+    if (config.auth.enabled && !account) {
+      setWorkflows([])
+      setRuns([])
+      setReceipts([])
+      return
+    }
     const token = await getToken()
     const anonymous = account ? [] : JSON.parse(localStorage.getItem(anonymousKey) ?? '[]') as Conversation[]
     const scopes = account ? [undefined] : [undefined, ...anonymous.map((item) => item.id)]
@@ -56,15 +70,8 @@ function App({ config }: { config: RuntimeConfig }) {
     setWorkflows(workflowRows)
     setRuns(uniqueBy(runGroups.flat(), (item) => item.runId))
     setReceipts(uniqueBy(receiptGroups.flat(), (item) => item.receiptId))
-  }, [account, getToken])
+  }, [account, config.auth.enabled, getToken])
   useEffect(() => { void refreshConversations(); void refreshData().catch((error: Error) => setNotice(error.message)) }, [refreshConversations, refreshData])
-  useEffect(() => {
-    if (!account) return
-    const anonymous = JSON.parse(localStorage.getItem(anonymousKey) ?? '[]') as Conversation[]
-    if (!anonymous.length) return
-    void getToken().then((token) => apiFetch<void>('/api/conversations/claim', token, { method: 'POST', body: JSON.stringify({ conversationIds: anonymous.map((item) => item.id) }) }))
-      .then(() => { localStorage.removeItem(anonymousKey); return refreshConversations() }).catch((error: Error) => setNotice(error.message))
-  }, [account, getToken, refreshConversations])
 
   const selectConversation = async (id: string) => {
     setActiveConversation(id); setView('chat'); setMessages([])
@@ -144,9 +151,25 @@ function App({ config }: { config: RuntimeConfig }) {
       setMessages((current) => updateLast(current, 'error', { message: (error as Error).message }))
     } finally { setSending(false) }
   }
-  const login = async () => instance.loginPopup({ scopes: [`api://${config.auth.clientId}/access_as_user`], prompt: 'select_account' })
+  const login = async () => {
+    setLoginBusy(true)
+    setNotice(undefined)
+    try {
+      await beginLogin()
+    } catch (error) {
+      setNotice((error as Error).message)
+    } finally {
+      setLoginBusy(false)
+    }
+  }
   const status = useMemo(() => !config.sqlEnabled ? { tone: 'warning', text: 'SQL setup needed' } : !config.agentEnabled ? { tone: 'warning', text: 'Agent unavailable' } : { tone: 'online', text: 'All systems ready' }, [config])
   const model = config.modelName ?? config.model ?? (config.agentEnabled ? 'AI model ready' : 'Agent offline')
+
+  if (config.auth.enabled && authLoading)
+    return <AuthGate busy error={notice} onLogin={() => undefined} />
+
+  if (config.auth.enabled && !account)
+    return <AuthGate busy={loginBusy} error={notice} onLogin={() => void login()} />
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
@@ -163,14 +186,14 @@ function App({ config }: { config: RuntimeConfig }) {
         <div className="row-actions"><button aria-label={`Rename ${conversation.title}`} onClick={() => void renameConversation(conversation)}><MoreHorizontal size={14} /></button><button aria-label={`Delete ${conversation.title}`} onClick={() => void deleteConversation(conversation)}><Trash2 size={14} /></button></div>
       </div>)}{!conversations.length && <p className="empty-sidebar">Your conversations will appear here.</p>}</div>
       <div className="sidebar-footer"><div className={`system-status ${status.tone}`}><i />{status.text}</div>
-        {config.auth.enabled ? account ? <button className="account-button" onClick={() => void instance.logoutPopup()}><CircleUserRound size={20} /><span><strong>{account.name ?? 'Microsoft account'}</strong><small>Signed in</small></span><LogOut size={15} /></button>
-          : <button className="account-button" onClick={() => void login()}><LogIn size={19} /><span><strong>Sign in with Microsoft</strong><small>Sync conversations</small></span></button>
+        {config.auth.enabled ? account ? <div className="account-card"><CircleUserRound size={20} /><span><strong>{account.name ?? account.email ?? 'Signed-in account'}</strong><small>Signed in</small></span><button type="button" aria-label="Sign out" title="Sign out" onClick={() => void logout()}><LogOut size={15} /></button></div>
+          : <button className="account-button" onClick={() => void login()}><LogIn size={19} /><span><strong>Sign in securely</strong><small>Sync conversations</small></span></button>
           : <div className="anonymous-label"><CircleUserRound size={18} /> Using anonymously</div>}</div>
     </aside>
     <main className="workspace">
       <header className="topbar">{!sidebarOpen && <button aria-label="Open sidebar" className="icon-button" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>}<div><h1>{view === 'chat' ? 'Agent workspace' : view === 'process' ? 'Process a receipt' : 'Results & history'}</h1><p>{view === 'chat' ? 'Ask naturally. The agent chooses the right OCR tools.' : view === 'process' ? 'Choose a repeatable workflow or ask the agent for help.' : 'Search, inspect, and correct every result.'}</p></div><div className="topbar-badge"><Bot size={16} /> {model}</div></header>
       {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice(undefined)}><X size={16} /></button></div>}
-      {view === 'chat' && <ChatPanel messages={messages} draft={draft} sending={sending} hasConversation={Boolean(activeConversation)} attachments={attachmentState.items} onDraft={setDraft} onSend={() => void sendMessage()} onAddFiles={(files) => void attachmentState.addFiles(files)} onRemoveAttachment={attachmentState.remove} onViewRun={(run) => { setFocusRunId(run.runId); setView('history') }} />}
+      {view === 'chat' && <ChatPanel messages={messages} draft={draft} sending={sending} hasConversation={Boolean(activeConversation)} attachments={attachmentState.items} onDraft={setDraft} onSend={() => void sendMessage()} onAddFiles={(files) => void attachmentState.addFiles(files)} onRemoveAttachment={attachmentState.remove} onViewRun={(run) => { setFocusRunId(run.runId); setView('history') }} getToken={getToken} />}
       {view === 'process' && <ProcessPanel workflows={workflows} conversations={conversations} getToken={getToken} createConversation={createConversation} onComplete={async () => { await Promise.all([refreshData(), refreshConversations()]) }} onOpenHistory={(runId) => { setFocusRunId(runId); setView('history') }} onError={setNotice} />}
       {view === 'history' && <RunHistory runs={runs} receipts={receipts} getToken={getToken} onRefresh={() => void refreshData()} focusRunId={focusRunId} />}
     </main>

@@ -7,12 +7,12 @@ import { AttachmentPicker } from './AttachmentPicker'
 import { Message } from './Message'
 
 export function ChatPanel({
-  messages, draft, sending, hasConversation, attachments, onDraft, onSend, onAddFiles, onRemoveAttachment, onViewRun,
+  messages, draft, sending, hasConversation, attachments, onDraft, onSend, onAddFiles, onRemoveAttachment, onViewRun, getToken,
 }: {
   messages: ChatMessage[]; draft: string; sending: boolean; hasConversation: boolean
   attachments: PendingAttachment[]; onDraft: (value: string) => void; onSend: () => void
   onAddFiles: (files: File[]) => void; onRemoveAttachment: (id: string) => void
-  onViewRun?: (run: Run) => void
+  onViewRun?: (run: Run) => void; getToken?: () => Promise<string | undefined>
 }) {
   const [dragging, setDragging] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -36,7 +36,7 @@ export function ChatPanel({
             <button key={suggestion} onClick={() => onDraft(suggestion)}><Sparkles size={15} />{suggestion}<ChevronRight size={15} /></button>)}</div>
         </div>}
         {messages.map((message, index) =>
-          <Message key={message.id} message={message} pending={sending && index === messages.length - 1} onViewRun={onViewRun} />)}
+          <Message key={message.id} message={message} pending={sending && index === messages.length - 1} onViewRun={onViewRun} getToken={getToken} />)}
         <div ref={bottomRef} />
       </div>
       <div className="composer-wrap">

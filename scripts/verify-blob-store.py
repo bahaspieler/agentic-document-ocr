@@ -26,6 +26,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import sys
 import threading
@@ -44,9 +45,11 @@ PROGRESS_TOKEN = "verify-workflow-progress"
 class McpClient:
     """Minimal MCP Streamable HTTP client. One instance is one session."""
 
-    def __init__(self, url, name):
+    def __init__(self, url, name, access_token=None, api_key=None):
         self.url = url
         self.name = name
+        self.access_token = access_token
+        self.api_key = api_key
         self.session_id = None
         self.request_id = 0
         self.instructions = None
@@ -59,6 +62,10 @@ class McpClient:
         request = urllib.request.Request(self.url, data=json.dumps(body).encode(), method="POST")
         request.add_header("Content-Type", "application/json")
         request.add_header("Accept", "application/json, text/event-stream")
+        if self.access_token:
+            request.add_header("Authorization", f"Bearer {self.access_token}")
+        elif self.api_key:
+            request.add_header("X-API-Key", self.api_key)
         if self.session_id:
             request.add_header("mcp-session-id", self.session_id)
 
@@ -220,12 +227,22 @@ def main():
         "--image-ref", action="append", dest="image_refs", metavar="REF",
         help="Blob-native image reference. Repeatable: first drives steps 2-4, next two drive concurrent runs.")
     parser.add_argument("--workflow", default="receipt_extract_v3")
+    parser.add_argument(
+        "--access-token",
+        default=os.environ.get("OCR_AUTH_ACCESS_TOKEN"),
+        help="Delegated bearer token; defaults to OCR_AUTH_ACCESS_TOKEN.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("OCR_AUTH_API_KEY"),
+        help="Static API key; defaults to OCR_AUTH_API_KEY.",
+    )
     args = parser.parse_args()
 
     primary, concurrent_a, concurrent_b, register_path = resolve_inputs(args)
     failures = []
 
-    client = McpClient(args.url, "verify-blob-store")
+    client = McpClient(args.url, "verify-blob-store", args.access_token, args.api_key)
     print("server:", client.initialize())
     failures.extend(check_server_guidance(client))
 
@@ -278,7 +295,12 @@ def main():
     results = {}
 
     def run_workflow(tag, image_ref):
-        worker = McpClient(args.url, "verify-concurrent-" + tag)
+        worker = McpClient(
+            args.url,
+            "verify-concurrent-" + tag,
+            args.access_token,
+            args.api_key,
+        )
         worker.initialize()
         if image_ref is None:
             failed, image = worker.call_tool("RegisterImage", {"filePath": register_path})

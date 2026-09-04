@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Uploads a receipt to Blob, drives the deployed MCP server over HTTPS, then
-# asserts the artifacts and the run row exist in Azure Storage. Images never
-# travel as local paths; the server only ever sees a blob reference.
+# Uploads a receipt to Blob, proves anonymous MCP access is rejected, drives the
+# deployed MCP server over HTTPS with an Auth0 token or API key, then asserts the
+# artifacts and run row exist in Azure Storage. Images never travel as local
+# paths; the server only ever sees a blob reference.
 #
 # Usage:
 #   scripts/verify-deployment.sh
@@ -82,8 +83,11 @@ wait_for_mcp() {
     echo "[INFO] Waiting for MCP at $url"
     for attempt in $(seq 1 18); do
         if python3 - "$url" <<'PY'
-import json, sys, urllib.request
+import json, sys, urllib.error, urllib.request
 url = sys.argv[1]
+with urllib.request.urlopen(f"{url.rstrip('/')}/api/config", timeout=30) as response:
+    if response.status >= 400:
+        sys.exit(1)
 body = json.dumps({
     "jsonrpc": "2.0", "id": 1, "method": "initialize",
     "params": {"protocolVersion": "2025-06-18", "capabilities": {},
@@ -95,6 +99,9 @@ req.add_header("Accept", "application/json, text/event-stream")
 try:
     with urllib.request.urlopen(req, timeout=30) as response:
         sys.exit(0 if response.status < 400 else 1)
+except urllib.error.HTTPError as error:
+    challenge = error.headers.get("WWW-Authenticate", "")
+    sys.exit(0 if error.code == 401 and "resource_metadata=" in challenge else 1)
 except Exception:
     sys.exit(1)
 PY
@@ -137,6 +144,21 @@ if [ -z "$URL" ]; then
 fi
 
 wait_for_mcp "$URL"
+
+AUTH_ENABLED="$(python3 - "$URL" <<'PY'
+import json, sys, urllib.request
+with urllib.request.urlopen(f"{sys.argv[1].rstrip('/')}/api/config", timeout=30) as response:
+    print(str(json.load(response)["auth"]["enabled"]).lower())
+PY
+)"
+if [ "$AUTH_ENABLED" = "true" ] &&
+    [ -z "${OCR_AUTH_ACCESS_TOKEN:-}" ] &&
+    [ -z "${OCR_AUTH_API_KEY:-}" ]; then
+    echo "[ERROR] The deployment is protected and no token or API key is configured." >&2
+    echo '        Run: export OCR_AUTH_ACCESS_TOKEN="$(scripts/auth0-token.py)"' >&2
+    echo "        Or:  export OCR_AUTH_API_KEY='<raw generated key>'" >&2
+    exit 1
+fi
 
 VERIFY_LOG="$(mktemp)"
 set +e

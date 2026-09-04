@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Verify the deployed SPA, REST API, SQL stores, and durable SSE chat.
+"""Verify authentication, the deployed SPA, REST API, SQL stores, and durable SSE chat.
 
-The verifier creates anonymous users, conversations, turns, jobs, and receipt
-corrections in the configured deployment. It does not delete those records.
+The verifier rejects anonymous protected access, then creates authenticated users,
+conversations, turns, jobs, and receipt corrections. It does not delete those records.
 
 Usage:
     python3 scripts/verify-webui.py --url https://app.azurecontainerapps.io/
@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import pathlib
 import uuid
 import urllib.error
@@ -20,14 +21,35 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+ACCESS_TOKEN: str | None = None
+API_KEY: str | None = None
 
-def request(base: str, path: str, method: str = "GET", body: object | None = None):
+
+def add_auth(headers: dict[str, str]) -> None:
+    """Attach the configured OAuth token or static API key."""
+    if ACCESS_TOKEN:
+        headers["Authorization"] = f"Bearer {ACCESS_TOKEN}"
+    elif API_KEY:
+        headers["X-API-Key"] = API_KEY
+
+
+def request(
+    base: str,
+    path: str,
+    method: str = "GET",
+    body: object | None = None,
+    *,
+    authenticated: bool = True,
+):
     data = None if body is None else json.dumps(body).encode()
+    headers = {"Content-Type": "application/json"} if data else {}
+    if authenticated:
+        add_auth(headers)
     req = urllib.request.Request(
         f"{base.rstrip('/')}{path}",
         data=data,
         method=method,
-        headers={"Content-Type": "application/json"} if data else {},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=180) as response:
         raw = response.read().decode()
@@ -53,11 +75,13 @@ def stream_turn(
 
 
 def stream_request(base: str, path: str, body: dict):
+    headers = {"Content-Type": "application/json"}
+    add_auth(headers)
     req = urllib.request.Request(
         f"{base.rstrip('/')}{path}",
         data=json.dumps(body).encode(),
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     events: list[tuple[str, dict]] = []
     with urllib.request.urlopen(req, timeout=180) as response:
@@ -88,20 +112,33 @@ def upload_image(base: str, path: pathlib.Path):
         f'Content-Disposition: form-data; name="file"; filename="{path.name}"\r\n'
         f"Content-Type: {content_type}\r\n\r\n"
     ).encode() + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    add_auth(headers)
     req = urllib.request.Request(
         f"{base.rstrip('/')}/api/images",
         data=body,
         method="POST",
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=180) as response:
         return json.loads(response.read().decode()), content_type
 
 
 def main():
+    global ACCESS_TOKEN, API_KEY
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
     parser.add_argument("--image", type=pathlib.Path)
+    parser.add_argument(
+        "--access-token",
+        default=os.environ.get("OCR_AUTH_ACCESS_TOKEN"),
+        help="Delegated bearer token; defaults to OCR_AUTH_ACCESS_TOKEN.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("OCR_AUTH_API_KEY"),
+        help="Static API key; defaults to OCR_AUTH_API_KEY.",
+    )
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
 
@@ -110,8 +147,26 @@ def main():
     assert "Hidden Layer OCR Studio" in html
     print("[OK] React SPA")
 
-    config = request(base, "/api/config")
+    config = request(base, "/api/config", authenticated=False)
     assert config["sqlEnabled"] and config["agentEnabled"], config
+    if config["auth"]["enabled"]:
+        try:
+            request(base, "/api/workflows", authenticated=False)
+        except urllib.error.HTTPError as error:
+            assert error.code == 401, error
+        else:
+            raise AssertionError("Protected REST endpoint accepted an anonymous request")
+        print("[OK] Anonymous REST request rejected")
+
+        if not args.access_token and not args.api_key:
+            raise SystemExit(
+                "Authentication is enabled. Set OCR_AUTH_ACCESS_TOKEN with "
+                'export OCR_AUTH_ACCESS_TOKEN="$(scripts/auth0-token.py)" '
+                "or set OCR_AUTH_API_KEY."
+            )
+        ACCESS_TOKEN = args.access_token
+        API_KEY = args.api_key
+
     assert request(base, "/api/workflows")
     assert isinstance(request(base, "/api/runs?top=5"), list)
     assert isinstance(request(base, "/api/receipts?top=5"), list)

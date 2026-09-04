@@ -1,6 +1,7 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Identity.Web;
+using ModelContextProtocol.AspNetCore.Authentication;
+using ModelContextProtocol.Authentication;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Server;
 using OcrAgent.Agent;
@@ -66,11 +67,13 @@ internal static class Program
         var builder = WebApplication.CreateBuilder(args);
         var auth = toolHost.Configuration.GetSection("Auth").Get<AuthConfiguration>()
             ?? new AuthConfiguration();
-        var authConfigured = auth.Enabled && !string.IsNullOrWhiteSpace(auth.ClientId);
+        auth.Validate();
+        var authConfigured = auth.Enabled;
 
         ConfigureAuthentication(builder, auth, authConfigured);
         builder.Services
             .AddMcpServer(options => options.ServerInstructions = AgentInstructions.ForMcpServer)
+            .AddAuthorizationFilters()
             // Stateless transport lets requests reach any replica without session affinity.
             .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
             .WithTools(tools)
@@ -89,9 +92,29 @@ internal static class Program
         app.UseDefaultFiles();
         app.UseStaticFiles();
         app.MapOcrApi(toolHost, agentService, auth);
-        app.MapMcp();
+        if (authConfigured)
+            MapProtectedResourceMetadata(app, auth);
+        var mcp = app.MapMcp();
+        if (authConfigured)
+            mcp.RequireAuthorization(AuthPolicies.Access);
         app.MapFallbackToFile("index.html");
         await app.RunAsync();
+    }
+
+    private static void MapProtectedResourceMetadata(
+        WebApplication app,
+        AuthConfiguration auth)
+    {
+        app.MapGet(
+                "/.well-known/oauth-protected-resource",
+                () => Results.Ok(new ProtectedResourceMetadata
+                {
+                    Resource = auth.ResourceUri,
+                    AuthorizationServers = { auth.AuthorizationServer },
+                    ScopesSupported = [auth.ScopeName],
+                    ResourceName = "Hidden Layer OCR Agent",
+                }))
+            .AllowAnonymous();
     }
 
     #endregion
@@ -106,13 +129,69 @@ internal static class Program
         if (!authConfigured)
             return;
 
-        builder.Configuration["Auth:Instance"] = auth.Instance;
-        builder.Configuration["Auth:TenantId"] = auth.TenantId;
-        builder.Configuration["Auth:ClientId"] = auth.ClientId;
-        builder.Services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("Auth"));
-        builder.Services.AddAuthorization();
+        var resourceUri = new Uri(auth.ResourceUri);
+        var resourceMetadataUri = new Uri(
+            resourceUri,
+            "/.well-known/oauth-protected-resource");
+
+        var authentication = builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = AuthSchemes.Composite;
+                options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
+            });
+
+        authentication
+            .AddPolicyScheme(
+                AuthSchemes.Composite,
+                "Auth0 access token or API key",
+                options =>
+                {
+                    options.ForwardDefaultSelector = context =>
+                        context.Request.Headers.ContainsKey(ApiKeyAuthenticationOptions.HeaderName)
+                            ? AuthSchemes.ApiKey
+                            : AuthSchemes.Jwt;
+                })
+            .AddJwtBearer(
+                AuthSchemes.Jwt,
+                options =>
+                {
+                    options.Authority = auth.AuthorizationServer;
+                    options.Audience = auth.Audience;
+                    options.MapInboundClaims = false;
+                    options.TokenValidationParameters.NameClaimType = "name";
+                })
+            .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
+                AuthSchemes.ApiKey,
+                options => options.KeyHashes = auth.ApiKeys);
+
+        authentication.AddMcp(options =>
+        {
+            options.ResourceMetadataUri = resourceMetadataUri;
+            options.ResourceMetadata = new ProtectedResourceMetadata
+            {
+                Resource = resourceUri.AbsoluteUri,
+                AuthorizationServers = { auth.AuthorizationServer },
+                ScopesSupported = [auth.ScopeName],
+                ResourceName = "Hidden Layer OCR Agent",
+            };
+        });
+
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(
+                AuthPolicies.Access,
+                policy => policy
+                    .RequireAuthenticatedUser()
+                    .RequireAssertion(context =>
+                        context.User.HasClaim("auth_method", "api_key") ||
+                        context.User
+                            .FindAll("scope")
+                            .SelectMany(claim => claim.Value.Split(
+                                ' ',
+                                StringSplitOptions.RemoveEmptyEntries))
+                            .Contains(auth.ScopeName, StringComparer.Ordinal)));
+        });
     }
 
     private static AgentService? CreateAgentService(OcrAgentToolHost toolHost) =>
@@ -135,12 +214,6 @@ internal static class Program
             toolHost.SessionStore.IsEnabled,
             authConfigured,
             agentService is not null);
-
-        if (auth.Enabled && !authConfigured)
-        {
-            app.Logger.LogWarning(
-                "Authentication was requested but Auth:ClientId is empty; API authentication is disabled.");
-        }
 
         if (agentService is null)
         {
