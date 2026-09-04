@@ -42,11 +42,22 @@ runtime flows, and persistence responsibilities.
 - **MCP:** stateless Streamable HTTP for remote clients and stdio for local clients. The MCP client
   supplies the model and calls the exposed tools or workflows directly.
 - **CLI:** local tool, workflow, run-query, and console-chat commands.
-- **Queue worker:** plain-language Azure Queue messages such as `Remove the background from
-  RCPT001.` trigger one-shot agent jobs through the course template.
+- **Queue worker:** plain-language Azure Queue messages handle single images and queue-only bulk
+  datasets. For example, `Remove background from all images in cord-smoke` plans once and fans out
+  deterministic per-image work.
 
 The Web UI calls REST, not MCP. The server-side agent is used by REST chat and the queue worker; it
 is intentionally not wrapped in an `agent_chat` MCP tool.
+
+Bulk sources follow `training-files/images/<dataset-name>/`. At parent planning, AI selects and
+validates either one ordered image-transform tool chain or one workflow, then persists it as
+`PlanJson`. Stable child messages reuse that plan without per-image AI. Stable batch/item IDs,
+existing-result skips, a default 2,000-image cap, five dequeue attempts before `<queue>-poison`, and
+one worker replica bound retry and duplication behavior. Child artifacts retain
+`result-files/<group>/<item-id>/`.
+
+The Web UI deliberately remains a single-image and conversation interface; the professor requested
+bulk processing through the queue worker.
 
 ## Deployment shape
 
@@ -64,6 +75,19 @@ The serving path uses Azure Blob Storage for images and artifacts, Azure Table S
 records, and Azure SQL for conversations, users, receipts, line items, and correction revisions.
 The course worker uses its configured Queue, `training-files`, `result-files`, and `results` Table
 entities. It does not use the Web UI session database.
+
+## Evaluation scope
+
+This is an inference and orchestration system built from pretrained components; it does not train or
+fine-tune U2NETP, Tesseract, or the language model. CORD contributes 1,000 receipt images under
+CC BY 4.0 as an evaluation and robustness corpus, not learning artifacts. The `cord-smoke` subset is
+for fast integration checks, while the full 1,000-image run is an optional benchmark. A deployed
+two-image smoke batch verified parent planning, deterministic fan-out, child execution, Table rows,
+and result Blob artifacts. The full CORD benchmark has not been run.
+
+Accordingly, the project does not claim PR20 training compliance and will not train a model merely
+to satisfy a dataset-size metric. The appropriate evidence is a reproducible bulk inference
+evaluation with success, retry, throughput, artifact-integrity, OCR, and extraction measurements.
 
 ## Prerequisites
 
@@ -191,12 +215,14 @@ Configuration precedence is environment variables, `.env`,
 - `AZURE_STORAGE_CONNECTION_STRING`
 - `OCR_Runs__Provider` (`none` or `azuretable`)
 - `OCR_Sql__Enabled` and `OCR_Sql__ConnectionString`
-- `OCR_Auth__Enabled`, `OCR_Auth__ClientId`, and `OCR_Auth__TenantId`
+- `OCR_Auth__Enabled`, `OCR_Auth__Domain`, `OCR_Auth__ClientId`,
+  `OCR_Auth__Audience`, `OCR_Auth__ScopeName`, and `OCR_Auth__ResourceUri`
+- named `OCR_Auth__ApiKeys__Name` values containing SHA-256 hashes, never raw API keys
 - `COURSE_STORAGE_CONNECTION_STRING` and the worker's `MyConfig__*` values
 
-Secrets belong in `.env` for local work or Container Apps secret references in Azure. They must not
-be committed or built into the image. See [CONFIGURATION.md](Documentation/CONFIGURATION.md) for
-the complete key list.
+Secrets belong in `.env` for local work or Container Apps secret references in Azure. Raw API keys,
+Auth0 Management API tokens, and other secrets must never be committed or built into the image. See
+[CONFIGURATION.md](Documentation/CONFIGURATION.md) for the complete key list.
 
 ## Azure deployment and verification
 
@@ -204,6 +230,10 @@ The scripts use the existing `RG_Hidden_Layer` resource group and place new comp
 
 ```bash
 scripts/azure-sql.sh               # when SQL is not already provisioned
+export AUTH0_MANAGEMENT_API_TOKEN="<short-lived-token>"
+python3 scripts/auth0-setup.py \
+  --domain <tenant>.eu.auth0.com \
+  --app-url https://<container-app-hostname>/
 scripts/azure-deploy.sh
 scripts/azure-worker-deploy.sh
 
@@ -211,10 +241,18 @@ scripts/azure-queue-produce.sh \
   --image SampleFiles/images/RCPT001.png \
   --message "Remove the background from RCPT001."
 
+export OCR_AUTH_ACCESS_TOKEN="$(python3 scripts/auth0-token.py)"
 scripts/verify-deployment.sh
 python3 scripts/verify-webui.py https://<container-app-hostname>
 python3 scripts/verify-queue-worker.py
 ```
+
+`auth0-setup.py` creates or updates the Auth0 API, SPA, first-party native device client, strict open
+Dynamic Client Registration (DCR), default third-party user grant, and Resource Parameter
+Compatibility Profile. Its canonical `--app-url` becomes both the API audience and
+`OCR_Auth__ResourceUri`, as required for MCP RFC 8707 resource parameters. Promote the Auth0
+database, Google, and GitHub connections to the tenant domain for Universal Login. Unset the
+short-lived Management API token after setup; never save or commit it.
 
 `azure-deploy.sh` builds the Linux image in Azure Container Registry and creates or updates the
 serving app. `azure-worker-deploy.sh` assigns that same image to the no-ingress worker. The scripts
@@ -230,6 +268,7 @@ resources.
 ```text
 OcrAgent/              Processing engine, plugins, workflows, execution, stores, and CLI
 OcrAgent.Mcp/          ASP.NET serving host for MCP, REST, SSE, and the compiled SPA
+OcrAgent.Mcp.Tests/    Serving-host authentication and configuration tests
 UnitTests/             Backend unit and integration tests
 web/                   React, Vite, and TypeScript frontend
 MyCloudProject/        Unchanged course queue host
@@ -245,12 +284,18 @@ Documentation/         Architecture and operational documentation
 - Receipt extraction is rule-based and targets common English-language receipt layouts.
 - OCR confidence is not field-level accuracy. The UI reports OCR confidence separately from
   consistency checks and correction status.
-- Microsoft login code is present, but a tenant administrator must create and configure the Entra
-  application registration. Anonymous use remains available.
+- In production, `/api` and `/mcp` require either an Auth0 JWT carrying `access:ocr` or a valid
+  named `X-API-Key`. The static SPA, `/api/config`, and OAuth Protected Resource Metadata remain
+  public so clients can start authentication. Local authentication can still be disabled explicitly
+  for offline development.
+- Auth0 protection is live and verified on the deployed Container App. Anonymous rejection,
+  interactive Web login, MCP discovery, named API-key access, and authenticated REST/MCP workflows.
 - Embeddings, vector similarity, duplicate detection, and an MCP receipt-query tool are future
   work.
 - Secrets currently use Container Apps secret references. Azure Key Vault integration is not
   implemented.
+- Queue bulk orchestration is live-verified with a two-image smoke batch. Full CORD benchmark and
+  dataset-level OCR metrics remain evaluation work.
 
 ## Documentation
 

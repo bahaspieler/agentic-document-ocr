@@ -11,8 +11,8 @@ pipelines.
 The deployed system has two runtime boundaries:
 
 - `ca-ocr-agent` serves the React application, REST API, SSE streams, and stateless MCP endpoint.
-- `ca-ocr-worker` has no ingress. It polls Azure Queue through the unchanged course host and runs
-  each message as one agent job.
+- `ca-ocr-worker` has no ingress. It polls Azure Queue through the unchanged course host and handles
+  single-image agent jobs plus deterministic bulk parent/child orchestration.
 
 Both Container Apps use one image from Azure Container Registry. They have different entry roles
 and persistence settings.
@@ -93,17 +93,32 @@ A queue message is plain text, for example:
 Extract receipt data using workflow receipt_extract_v3 from RCPT001.
 ```
 
+Bulk parents are also natural language:
+
+```text
+Remove background from all images in cord-smoke.
+```
+
 `AzureStorageProvider` exposes the message through the template's input-file contract.
-`Experiment.RunAsync` reads the command, locates the named image in `training-files`, and imports it
-into a job-scoped local engine store. A one-shot `AgentService` call performs the command. The
-worker then uploads collected artifacts to `result-files` and writes an `ExperimentResult` row to
-the `results` Table.
+For a single command, `Experiment.RunAsync` locates the named image in `training-files`, imports it
+into a job-scoped local engine store, and invokes a one-shot `AgentService` call.
 
-The primary OCR run ID is the result key when one is available. The queue message is deleted only
-after result Blob and Table writes complete. Handled command failures produce failure rows;
-infrastructure failures leave the message for Azure Queue retry.
+For a bulk parent, the storage adapter lists the canonical
+`training-files/images/<dataset-name>/` prefix. The planner calls AI once to choose and validate
+either one ordered chain of image-transform tools or one workflow. It stores that choice as
+`PlanJson` in a parent batch row before publishing one internal child message per sorted image.
+Batch IDs and item IDs are stable functions of the parent request, command, and source Blob. A
+redelivered parent reuses persisted `PlanJson`; it does not replan.
 
-There is no JSON job descriptor and no queue conversation history.
+Each child carries the exact source Blob and persisted plan. It validates and executes the plan
+directly through `ExecutionCore`, without an agent session or per-image AI decision. If its stable
+item result already exists, the worker returns that durable result instead of processing the image
+again. JSON is used only for internal child messages; operator-facing parent messages remain natural
+language, and there is no queue conversation history.
+
+The worker uploads artifacts to `result-files` and writes parent/item `ExperimentResult` rows to the
+`results` Table. Messages are deleted only after durable writes complete. Unexpected failures retry;
+the default fifth failed delivery moves the message to `<queue>-poison`. The worker runs one replica.
 
 ## Shared engine
 
@@ -186,7 +201,8 @@ artifacts. REST direct jobs use tool and workflow modes. The queue adapter uses 
 `AgentService` wraps the Microsoft Agents AI tool-calling loop. It accepts natural language and
 calls the same functions registered for workflows and MCP. REST conversation handling supplies a
 serialized `AgentSession`; queue execution creates one session for the single command and discards
-it afterward.
+it afterward. Bulk execution is different: only the parent planner invokes AI, and every child
+executes the persisted deterministic plan.
 
 MCP stays on its native typed-tool path because the MCP client already provides this reasoning
 layer.
@@ -222,7 +238,7 @@ record.
 
 SQL is enabled for the deployed Web UI and created idempotently at host startup. The schema contains:
 
-- `Users` for Microsoft identity profiles;
+- `Users` for Auth0 identities and named API-key principals;
 - `Conversations` for ownership, titles, serialized model sessions, and `rowversion`;
 - `ConversationTurns` for idempotency keys, messages, activity, run IDs, and attachments;
 - `Receipts` for original and current structured data, review state, and concurrency metadata;
@@ -240,12 +256,18 @@ items, increments the current revision, and inserts an audit row in one transact
 The worker's result path is separate from the serving run store:
 
 - the trigger arrives through the configured Azure Queue;
-- source images come from `training-files`;
-- published artifacts go to `result-files/<groupId>/<runId>/`;
-- one `ExperimentResult` row goes to the `results` Table.
+- single-image sources come from `training-files`, while bulk datasets use
+  `training-files/images/<dataset-name>/`;
+- published child artifacts go to `result-files/<groupId>/<itemId>/`;
+- parent batch and child item `ExperimentResult` rows go to the `results` Table.
 
 The worker disables `AzureTableRunStore`. Its course result row is not an `OcrRuns` row, and it does
 not persist Web UI conversations or receipts to SQL.
+
+Bulk dispatch rejects an empty dataset or one above the configured cap, which defaults to 2,000
+images. Stable IDs, persisted plans, existing-item result checks, isolated queue retries, poison
+handling after five failed deliveries by default, and a single worker replica make redelivery
+bounded and observable.
 
 ## State, concurrency, and recovery
 
@@ -268,19 +290,35 @@ store to download the referenced image again.
 
 ## Authentication and access
 
-REST authentication is optional. When enabled, Microsoft Identity Web validates bearer tokens for
-an Entra registration that accepts organizational and personal Microsoft accounts. The React
-application uses MSAL and can claim anonymous conversations after login.
+Authentication remains optional only for offline development. When enabled, ASP.NET's generic JWT
+handler validates Auth0 issuer, audience, signature, and lifetime, and the shared authorization
+policy requires `access:ocr`. A parallel scheme validates named `X-API-Key` credentials by comparing
+their SHA-256 hashes with configured `OCR_Auth__ApiKeys__Name` entries. Production `/api` and
+Streamable HTTP MCP requests accept either scheme. Static SPA files, `/api/config`, and OAuth
+Protected Resource Metadata remain public so clients can begin authentication.
 
-Anonymous users retain conversation IDs in browser `localStorage`. Possession of an unowned
-conversation ID permits access to that conversation and its linked resources. Authenticated
-resources are checked against their owner.
+The Auth0 API audience must equal the canonical `ResourceUri`. Protected-resource metadata
+advertises that URI, Auth0's authorization server, and `access:ocr`; the Auth0 tenant uses the
+Resource Parameter Compatibility Profile for MCP RFC 8707 requests. Strict open DCR plus a default
+third-party user grant lets provider-neutral clients such as Cursor, Claude, and Copilot-compatible
+clients register automatically.
 
-The tenant app registration is not yet available to the project identity, so the deployed
-application remains usable anonymously until an administrator completes that setup.
+The React application gates the workspace on Auth0 Universal Login, with database, Google, and
+GitHub connections. API calls, SSE requests, uploads, artifact previews, downloads, and receipt
+exports attach the bearer token. Conversation and resource access is checked against the
+authenticated Auth0 subject; API-key principals receive stable identities derived from their
+configured names. The Web UI does not automatically assign earlier anonymous browser history to a
+signed-in account; the claim endpoint remains available only for an explicit migration client.
 
-The MCP endpoint is not protected by the optional REST JWT configuration. Deployment access should
-therefore be treated separately if the endpoint is exposed beyond the course environment.
+A first-party native client supports device authorization through `scripts/auth0-token.py`; the
+Auth0 API policy issues these user access tokens for 24 hours. `scripts/api-key-create.py` reveals a
+raw static key once and persists only its SHA-256 hash. Raw API keys and short-lived
+`AUTH0_MANAGEMENT_API_TOKEN` values must never be committed.
+
+The deployed Auth0 implementation has been verified through interactive Web login, anonymous
+rejection, OAuth discovery, and authenticated API-key REST/MCP workflows.
+Microsoft Entra was abandoned after the DAENET tenant denied the project identity app-registration
+permissions; it is retained only as factual project history, not as current architecture.
 
 Secrets are injected through Container Apps secret references. The current deployment does not use
 Azure Key Vault.
@@ -290,7 +328,8 @@ Azure Key Vault.
 ### REST conversation turn
 
 1. The browser uploads an image and receives a durable image reference.
-2. The API loads or creates the SQL conversation and checks ownership or anonymous possession.
+2. The API validates the scoped Auth0 token or named API key, loads or creates the SQL conversation,
+   and checks ownership.
 3. `AgentService` restores the model session and streams text and activity to the browser.
 4. Tool and workflow calls process Blob-backed references through the shared engine.
 5. Artifacts go to Blob, the logical job goes to `OcrRuns`, and exported receipt data goes to SQL.
@@ -299,7 +338,8 @@ Azure Key Vault.
 
 ### MCP workflow
 
-1. The MCP client initializes and receives server instructions, prompts, and typed tools.
+1. The MCP client authenticates through automatic Auth0 OAuth DCR or `X-API-Key`, then initializes
+   and receives server instructions, prompts, and typed tools.
 2. The client's model calls `RunWorkflow` with an existing Blob reference.
 3. The server executes the workflow in-process and reports step progress.
 4. The workflow writes scoped Blob artifacts and one Azure Table run record.
@@ -309,10 +349,27 @@ Azure Key Vault.
 
 1. `MyCloudProject` receives one plain-language queue message.
 2. `AzureStorageProvider` retains its message ID and pop receipt.
-3. `Experiment` resolves the named source image from `training-files`.
-4. A one-shot agent runs against the local job store and collects outputs.
-5. The provider uploads outputs to `result-files` and writes the `ExperimentResult` row.
-6. The provider deletes the queue message after both writes succeed.
+3. A single-image command resolves one source and runs a one-shot agent.
+4. A bulk parent resolves one dataset, persists one validated AI-selected `PlanJson`, and fans out
+   stable child messages.
+5. Each child deterministically applies the persisted plan to its exact source Blob, skipping an
+   already persisted item result.
+6. The provider uploads outputs under `result-files/<group>/<item-id>/`, writes the result row, and
+   deletes the message after durable writes succeed.
+
+## Learning and evaluation boundary
+
+The architecture orchestrates pretrained U2NETP, Tesseract, language-model, and classical
+image-processing components. It is not a model-training or fine-tuning pipeline. CORD supplies
+1,000 CC BY 4.0 receipt images as an evaluation and robustness corpus, not learning artifacts.
+`cord-smoke` is a small integration subset; the full 1,000-image corpus is an optional benchmark.
+The project therefore does not claim PR20 training compliance. Reproducible bulk queue, Blob,
+Table, retry, throughput, OCR, and extraction evidence is the relevant evaluation. A deployed
+two-image smoke batch verified planning, fan-out, execution, and result persistence; the full CORD
+benchmark and dataset-level metrics remain pending.
+
+The Web UI remains scoped to single-image processing and conversations. Bulk orchestration is
+queue-only because the professor specifically requested queue-worker bulk processing.
 
 ## Project boundaries
 

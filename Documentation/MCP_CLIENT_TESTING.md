@@ -19,10 +19,44 @@ https://ca-ocr-agent.blackglacier-c262b0d9.germanywestcentral.azurecontainerapps
 
 Run `scripts/azure-stop.sh` when you are done, or the replica bills all night.
 
-## 2. Register it in Cursor
+## 2. Choose an authentication path
+
+The preferred provider-neutral path is automatic OAuth. The server publishes OAuth Protected
+Resource Metadata pointing to Auth0. Auth0 has strict open Dynamic Client Registration (DCR), a
+default `access:ocr` third-party user grant, and the Resource Parameter Compatibility Profile.
+Cursor, Claude, and Copilot-compatible MCP clients can therefore register and open Auth0 Universal
+Login without a repository-specific client ID. The API audience equals the canonical
+`ResourceUri`, which lets clients use the RFC 8707 `resource` parameter.
+
+Universal Login offers the Auth0 database, Google, and GitHub connections after they are promoted
+to the tenant domain.
+
+For unattended or explicitly provisioned clients, generate a named static credential:
+
+```bash
+python3 scripts/api-key-create.py CursorDemo
+export OCR_AUTH_API_KEY="<raw-key-printed-once>"
+```
+
+The script stores only the SHA-256 hash in `.env` as
+`OCR_Auth__ApiKeys__CursorDemo`. The raw value is revealed once and sent as `X-API-Key`; it must
+never be saved in `.env`, committed, logged, or shown in screenshots.
+
+For manual bearer-token verification, the implemented first-party native client supports device
+flow:
+
+```bash
+export OCR_AUTH_ACCESS_TOKEN="$(python3 scripts/auth0-token.py)"
+```
+
+The helper prints sign-in instructions to stderr and only the token to stdout. Auth0 is configured
+to issue this user access token for 24 hours. Do not persist it. Fully restart a desktop client
+after setting or rotating an environment variable so the process inherits the new value.
+
+## 3. Register it in Cursor
 
 Create `.cursor/mcp.json` in whichever project you want the tools in, or `~/.cursor/mcp.json` for all
-of them. Cursor treats an entry with `url` as a remote server.
+of them. For automatic OAuth DCR, configure only the remote URL:
 
 ```json
 {
@@ -34,9 +68,27 @@ of them. Cursor treats an entry with `url` as a remote server.
 }
 ```
 
-The endpoint has no authentication, so no `headers` block is needed. Save the file, then open
-**Customize → MCPs**: `ocr-agent` appears with a toggle, and its tools show up under **Available
-Tools** in the chat panel. If it does not appear, restart Cursor; Cursor rereads the file on start.
+The client discovers the public protected-resource metadata, dynamically registers with Auth0, and
+opens Universal Login. For the named API-key path, Cursor expands `${env:...}` placeholders inside
+headers:
+
+```json
+{
+  "mcpServers": {
+    "ocr-agent": {
+      "url": "https://ca-ocr-agent.blackglacier-c262b0d9.germanywestcentral.azurecontainerapps.io/",
+      "headers": {
+        "X-API-Key": "${env:OCR_AUTH_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Save the file, fully restart Cursor, then open **Customize → MCPs**: `ocr-agent` appears with a
+toggle, and its tools show up under **Available Tools** in the chat panel. The second file contains
+only an environment-variable reference, not the raw key itself. A manual device-flow token can
+likewise be supplied with `"Authorization": "Bearer ${env:OCR_AUTH_ACCESS_TOKEN}"`.
 
 Alongside the tools the server sends two other things a client may or may not use. Its `instructions`
 carry the rules the tool schemas cannot express, the same ones the console agent has always had: call
@@ -46,7 +98,7 @@ next call, and assess quality first when working manually. Its prompts, `extract
 by client, so if a model starts calling tools one at a time, assume the instructions did not arrive and
 say what you want in the request itself.
 
-## 3. Put an image where the server can reach it
+## 4. Put an image where the server can reach it
 
 The deployed server has no filesystem in common with you, so `RegisterImage` is useless against it.
 Upload to the blob container instead. A blob named `RCPT001.png` is the reference `RCPT001`.
@@ -72,7 +124,7 @@ Uploading different bytes under a name the server has already read is the one th
 replica caches images by reference and will keep serving the first copy it downloaded. Use a new name,
 or stop and restart the serving app to start with empty replica caches.
 
-## 4. Drive it from chat
+## 5. Drive it from chat
 
 Agent mode, plain language. Cursor picks the tool from the descriptions.
 
@@ -106,7 +158,7 @@ az storage blob list --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
   --container-name ocr-images --prefix wf_receipt_extract_v3/<runId>/ -o table
 ```
 
-## 5. Against a local server instead
+## 6. Against a local server instead
 
 Two transports, same tools. HTTP is closest to the deployed setup:
 
@@ -146,14 +198,29 @@ settings without anything being passed in.
 
 | Symptom | Cause |
 |---------|-------|
-| Server never connects, or shows no tools | Start the serving app with `scripts/azure-start.sh`, wait for it, then re-add the server. |
+| Server never connects, or shows no tools | Start the serving app; for automatic OAuth, remove and re-add it to restart discovery; for environment credentials, fully restart Cursor. |
+| Automatic OAuth never opens login | Confirm strict DCR, the default third-party user grant, and Resource Parameter Compatibility Profile are enabled, and audience equals the canonical resource URI. |
+| `401 Unauthorized` after it previously worked | Reauthorize automatic OAuth, refresh the device-flow token, or check that the named API key has not been rotated; then restart Cursor when using environment credentials. |
 | Tools listed but every call fails | Check **Output → MCP Logs** (`Cmd+Shift+U`). |
 | `No stored image found for reference` | The blob is not in the container the app is configured with, its extension is not one of the accepted ones, or a workflow output reference was shortened to its last segment. |
-| A workflow completes but the text is empty | A stale cached copy of the reference. See step 3. |
+| A workflow completes but the text is empty | A stale cached copy of the reference. See step 4. |
 | Edits to `mcp.json` ignored | Restart Cursor, or remove and re-add the server in Customize → MCPs. |
 
 An end-to-end check that does not involve Cursor at all:
 
 ```bash
+export OCR_AUTH_ACCESS_TOKEN="$(python3 scripts/auth0-token.py)"
 scripts/verify-deployment.sh
 ```
+
+Or verify the static credential path:
+
+```bash
+export OCR_AUTH_API_KEY="<raw-generated-key>"
+unset OCR_AUTH_ACCESS_TOKEN
+scripts/verify-deployment.sh
+```
+
+The Auth0 tenant and protected deployment were verified. OAuth discovery advertised DCR and PKCE,
+anonymous MCP access was rejected, and the named API-key path completed live MCP workflows and
+persistence assertions. The abandoned Entra approach is not a fallback.
