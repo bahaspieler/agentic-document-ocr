@@ -20,6 +20,8 @@ namespace MyCloudProject
 
             var cfgRoot = Common.InitHelpers.InitConfiguration(args);
             var cfgSec = cfgRoot.GetSection("MyConfig");
+            var workerConfig = new MyConfig();
+            cfgSec.Bind(workerConfig);
             using var logFactory = InitHelpers.InitLogging(cfgRoot);
             var logger = logFactory.CreateLogger("Train.Console");
 
@@ -52,8 +54,23 @@ namespace MyCloudProject
                         }
                         catch (Exception ex)
                         {
-                            // The message stays uncommitted and becomes visible for a Queue retry.
-                            logger.LogError(ex, "Queue experiment failed.");
+                            if (request is ExerimentRequestMessage queueRequest &&
+                                queueRequest.DequeueCount >=
+                                Math.Max(1, workerConfig.MaximumDequeueAttempts) &&
+                                storageProvider is IQueueCommandStorage queueStorage)
+                            {
+                                await queueStorage.MoveToPoisonAsync(
+                                    queueRequest, ex.ToString());
+                                logger.LogError(
+                                    ex,
+                                    "Queue experiment moved to poison queue after {AttemptCount} attempts.",
+                                    queueRequest.DequeueCount);
+                            }
+                            else
+                            {
+                                // The message stays uncommitted and becomes visible for a Queue retry.
+                                logger.LogError(ex, "Queue experiment failed.");
+                            }
                         }
                     }
                     else
