@@ -1,0 +1,97 @@
+{
+  "dataset": "CORD",
+  "dataset_version": "v2",
+  "files": [
+    {
+      "bytes": 338392,
+      "filename": "cord-v2_test_0000.png",
+      "package_path": "images/cord-v2_test_0000.png",
+      "sha256": "8612d04b70f430f3aef07fbbd5200e382dcc4152b344cc2eff9f735f05a257c8",
+      "source_index": 0,
+      "split": "test"
+    },
+    {
+      "bytes": 1728383,
+      "filename": "cord-v2_train_0000.png",
+      "package_path": "images/cord-v2_train_0000.png",
+      "sha256": "a36cd6a022b3ddce17c8bc9639c9cc19fbede010ea89c3357a8c8c81a06939eb",
+      "source_index": 0,
+      "split": "train"
+    },
+    {
+      "bytes": 1780003,
+      "filename": "cord-v2_train_0001.png",
+      "package_path": "images/cord-v2_train_0001.png",
+      "sha256": "a43a430908190f38a8e4145298ec09f60a112906ab4f33840894ff5700a758bc",
+      "source_index": 1,
+      "split": "train"
+    },
+    {
+      "bytes": 461805,
+      "filename": "cord-v2_train_0002.png",
+      "package_path": "images/cord-v2_train_0002.png",
+      "sha256": "9357a493f210849c518ab32de56de1f056f2b9f836ad1dd1970588cde9e353cb",
+      "source_index": 2,
+      "split": "train"
+    },
+    {
+      "bytes": 1934099,
+      "filename": "cord-v2_train_0003.png",
+      "package_path": "images/cord-v2_train_0003.png",
+      "sha256": "91a6b599b27f4049cc4e56997ffce29da8efe9b4e30038d2a500fa068b4eb781",
+      "source_index": 3,
+      "split": "train"
+    },
+    {
+      "bytes": 1354017,
+      "filename": "cord-v2_train_0004.png",
+      "package_path": "images/cord-v2_train_0004.png",
+      "sha256": "9e200c30d71d9cdf673319abf9740d5b3847a79857d91a1a2049c49269f912b9",
+      "source_index": 4,
+      "split": "train"
+    },
+    {
+      "bytes": 7247213,
+      "filename": "cord-v2_train_0005.png",
+      "package_path": "images/cord-v2_train_0005.png",
+      "sha256": "869d1c7dbbf3cc89fd5e84bcd8b14751341d8adbd89bef9a7d4a72060954e540",
+      "source_index": 5,
+      "split": "train"
+    },
+    {
+      "bytes": 1706105,
+      "filename": "cord-v2_train_0006.png",
+      "package_path": "images/cord-v2_train_0006.png",
+      "sha256": "ad04e4f531ad5f58a944cd30d166d2373d518101bd0efaa4e82a257c33255c83",
+      "source_index": 6,
+      "split": "train"
+    },
+    {
+      "bytes": 1617993,
+      "filename": "cord-v2_train_0007.png",
+      "package_path": "images/cord-v2_train_0007.png",
+      "sha256": "b2ee6dafc47fe6d597ea2e3c0df1e2e36c3df14082af2807ea0719f2b2635585",
+      "source_index": 7,
+      "split": "train"
+    },
+    {
+      "bytes": 1382793,
+      "filename": "cord-v2_validation_0000.png",
+      "package_path": "images/cord-v2_validation_0000.png",
+      "sha256": "2423ea6be07e0d8a8c0d041c70f6880e68b424f5efb02b0568a517074af04db7",
+      "source_index": 0,
+      "split": "validation"
+    }
+  ],
+  "license": "CC-BY-4.0",
+  "mode": "smoke",
+  "package_sha256": "7394ec5621926c2820226b3ab0119dfa9ba36404d5d4916edab4fb3d535656a1",
+  "source": "naver-clova-ix/cord-v2",
+  "source_revision": "447d3d5adc8ac4b2f0782088847f18c7bd2c5a76",
+  "split_counts": {
+    "test": 1,
+    "train": 8,
+    "validation": 1
+  },
+  "total_images": 10
+}

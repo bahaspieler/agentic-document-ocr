@@ -1,0 +1,25 @@
+CORD dataset license notice
+===========================
+
+The CORD dataset is licensed under the Creative Commons Attribution 4.0
+International license (CC BY 4.0).
+
+You are free to share and adapt the material for any purpose, provided that you
+give appropriate credit, provide a link to the license, and indicate if changes
+were made. You may not apply legal terms or technological measures that legally
+restrict others from doing anything the license permits.
+
+This notice is a summary and does not replace the license. The complete,
+authoritative license is available at:
+
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+Dataset attribution:
+
+CORD: A Consolidated Receipt Dataset for Post-OCR Parsing
+Seunghyun Park, Seung Shin, Bado Lee, Junyeop Lee, Jaeheung Surh,
+Minjoon Seo, and Hwalsuk Lee (2019).
+
+Official dataset repository:
+
+https://github.com/clovaai/cord
