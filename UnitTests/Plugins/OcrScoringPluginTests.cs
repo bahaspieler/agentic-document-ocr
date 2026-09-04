@@ -184,7 +184,7 @@ public class OcrScoringPluginTests
 
         var resultJson = await plugin.ScoreOcrResult(ocrJson, "otsu", "SingleColumn");
 
-        var score = JsonSerializer.Deserialize<OcrScoringPlugin.OcrScore>(resultJson);
+        var score = JsonSerializer.Deserialize<OcrScore>(resultJson);
         Assert.IsNotNull(score);
         Assert.AreEqual("otsu", score.Variant);
         Assert.AreEqual("SingleColumn", score.Psm);

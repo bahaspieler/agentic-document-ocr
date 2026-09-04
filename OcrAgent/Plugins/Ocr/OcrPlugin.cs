@@ -123,7 +123,7 @@ public sealed class OcrPlugin : IImageProcessingTool
 
         bool tryAll = variantMode == "auto";
         bool needSauvola = tryAll && ShouldTrySauvola(qualityProfile);
-        var candidates = new List<(string json, OcrScoringPlugin.OcrScore score)>();
+        var candidates = new List<(string json, OcrScore score)>();
         var variantImages = new Dictionary<string, string>();
         int variantCount = 0;
         int variantLimit = maxVariants > 0 ? maxVariants : int.MaxValue;
@@ -187,7 +187,7 @@ public sealed class OcrPlugin : IImageProcessingTool
     }
 
     private async Task RunVariant(
-        List<(string json, OcrScoringPlugin.OcrScore score)> candidates,
+        List<(string json, OcrScore score)> candidates,
         string imagePath, string variantName,
         OcrPageSegMode[] psms, string language, int dpi,
         Dictionary<string, string> configVars)
@@ -381,7 +381,7 @@ public sealed class OcrPlugin : IImageProcessingTool
         }
     }
 
-    private void SaveCandidateScores(string imageReference, List<(string json, OcrScoringPlugin.OcrScore score)> candidates)
+    private void SaveCandidateScores(string imageReference, List<(string json, OcrScore score)> candidates)
     {
         try
         {

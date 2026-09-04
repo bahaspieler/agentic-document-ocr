@@ -13,35 +13,6 @@ namespace OcrAgent.Plugins.Ocr;
 /// </summary>
 public sealed partial class OcrScoringPlugin : IImageProcessingTool
 {
-    #region Score Model
-
-    /// <summary>Breakdown of a single OCR run used for ranking variants.</summary>
-    public sealed class OcrScore
-    {
-        /// <summary>Total score on 0–100 after clamping.</summary>
-        public double Score { get; set; }
-        /// <summary>Word count from all lines.</summary>
-        public int WordCount { get; set; }
-        /// <summary>Number of text lines.</summary>
-        public int LineCount { get; set; }
-        /// <summary>True if decimal money-like tokens were found.</summary>
-        public bool HasAmounts { get; set; }
-        /// <summary>True if a date-like pattern matched.</summary>
-        public bool HasDate { get; set; }
-        /// <summary>True if a TOTAL keyword matched.</summary>
-        public bool HasTotal { get; set; }
-        /// <summary>Mean word confidence where confidence is in (0,100].</summary>
-        public double AvgConfidence { get; set; }
-        /// <summary>Average characters per line (same value used for density scoring).</summary>
-        public double TextDensity { get; set; }
-        /// <summary>Binarization variant label for logging.</summary>
-        public string Variant { get; set; } = "";
-        /// <summary>PSM label for logging.</summary>
-        public string Psm { get; set; } = "";
-    }
-
-    #endregion
-
     #region Scoring
 
     /// <summary>
