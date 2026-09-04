@@ -22,8 +22,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Bilateral_Medium_CreatesNewImage()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -46,8 +46,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Median_Low_CreatesNewImage()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -68,8 +68,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Nlm_High_CreatesNewImage()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -94,8 +94,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Auto_SelectsMethodBasedOnNoise()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -117,8 +117,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Auto_WithQualityProfile_UsesPrecomputedNoise()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -141,8 +141,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_Auto_SkipsWhenNoiseNegligible()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_clean";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -169,8 +169,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_InvalidMethod_Throws()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -190,8 +190,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_InvalidStrength_Throws()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -215,8 +215,8 @@ namespace UnitTests.Plugins.Enhancement
         [TestMethod]
         public async Task DenoiseImage_ActuallyChangesPixels_ForNoisyInput()
         {
-            using var temp = new TempFolder();
-            var store = new TestImageStore(temp.Path);
+            using var temp = new DenoiseTempFolder();
+            var store = new DenoiseTestImageStore(temp.Path);
 
             var inputRef = "img_noisy";
             var inputPath = Path.Combine(temp.Path, $"{inputRef}.png");
@@ -263,80 +263,5 @@ namespace UnitTests.Plugins.Enhancement
             return img;
         }
 
-        private sealed class TempFolder : IDisposable
-        {
-            public string Path { get; }
-
-            public TempFolder()
-            {
-                Path = System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(),
-                    "DenoiseTests_" + Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(Path);
-            }
-
-            public void Dispose()
-            {
-                try { Directory.Delete(Path, true); } catch { }
-            }
-        }
-
-        /// <summary>
-        /// Test implementation of IImageStore matching your real interface
-        /// </summary>
-        private sealed class TestImageStore : IImageStore
-        {
-            private readonly string _root;
-            private readonly Dictionary<string, string> _paths = new();
-            private readonly Dictionary<string, IDictionary<string, string>> _meta = new();
-
-            public TestImageStore(string root)
-            {
-                _root = root;
-            }
-
-            public void RegisterExisting(string reference, string path)
-            {
-                _paths[reference] = path;
-                _meta[reference] = new Dictionary<string, string>();
-            }
-
-            public bool Exists(string reference) => _paths.ContainsKey(reference);
-
-            public string GetImagePath(string reference)
-            {
-                if (!_paths.TryGetValue(reference, out var path))
-                    throw new FileNotFoundException(reference);
-                return path;
-            }
-
-            public IDictionary<string, string> GetMetadata(string reference)
-                => _meta.TryGetValue(reference, out var m) ? m : new Dictionary<string, string>();
-
-            public string SaveFromFile(string path, string? desiredReference)
-            {
-                var ext = Path.GetExtension(path);
-                var finalRef = desiredReference ?? $"img_{Guid.NewGuid():N}";
-                var dest = Path.Combine(_root, finalRef + ext);
-                File.Copy(path, dest, true);
-                _paths[finalRef] = dest;
-                _meta[finalRef] = new Dictionary<string, string>();
-                return finalRef;
-            }
-
-            public string SaveBytes(byte[] bytes, string extension, IDictionary<string, string>? metadata = null, string? desiredReference = null)
-            {
-                var finalRef = desiredReference ?? $"img_{Guid.NewGuid():N}";
-                var dest = Path.Combine(_root, $"{finalRef}.{extension}");
-                File.WriteAllBytes(dest, bytes);
-                _paths[finalRef] = dest;
-                _meta[finalRef] = metadata ?? new Dictionary<string, string>();
-                return finalRef;
-            }
-
-            public void SetActiveSubdirectory(string? subdirectory) { }
-            public string? GetActiveSubdirectory() => null;
-            public string GetWriteDirectory() => _root;
-        }
     }
 }
