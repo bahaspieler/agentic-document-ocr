@@ -206,10 +206,5 @@ public sealed class ExecutionCore
             ? value
             : throw new ArgumentException($"{name} is required.", name);
 
-    private sealed class InlineProgress<T>(Action<T> callback) : IProgress<T>
-    {
-        public void Report(T value) => callback(value);
-    }
-
     #endregion
 }
