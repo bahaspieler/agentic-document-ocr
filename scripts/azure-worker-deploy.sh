@@ -145,6 +145,13 @@ else
     fi
 fi
 
+echo "[INFO] Enforcing single-revision mode for exactly one queue consumer"
+az containerapp revision set-mode \
+    --name "$AZURE_WORKER_APP_NAME" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --mode single \
+    --output none
+
 echo "[OK] Worker deployed with min/max replicas 1/1 and no ingress."
 echo "     Status: scripts/azure-worker-status.sh"
 echo "     Stop:   scripts/azure-worker-stop.sh"

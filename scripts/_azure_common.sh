@@ -82,6 +82,8 @@ apply_azure_defaults() {
     : "${MyConfig__Queue:=trigger-queue}"
     : "${MyConfig__GroupId:=HiddenLayer}"
     : "${MyConfig__MessageVisibilityTimeoutSeconds:=900}"
+    : "${MyConfig__MaximumBatchImages:=2000}"
+    : "${MyConfig__MaximumDequeueAttempts:=5}"
 }
 
 resource_group_location() {
@@ -174,6 +176,7 @@ worker_active_revisions() {
 # Environment variables applied to the container. The connection string (and the
 # model key, when present) are secret references rather than plaintext values.
 container_env_vars() {
+    local key_name key_variable secret_name
     local vars=(
         "AZURE_STORAGE_CONNECTION_STRING=secretref:storage-cs"
         "OCR_Storage__Provider=azureblob"
@@ -191,10 +194,17 @@ container_env_vars() {
     if [ -n "${OCR_Auth__ClientId:-}" ]; then
         vars+=(
             "OCR_Auth__Enabled=true"
+            "OCR_Auth__Domain=${OCR_Auth__Domain}"
             "OCR_Auth__ClientId=${OCR_Auth__ClientId}"
-            "OCR_Auth__TenantId=${OCR_Auth__TenantId:-common}"
-            "OCR_Auth__Instance=${OCR_Auth__Instance:-https://login.microsoftonline.com/}"
+            "OCR_Auth__Audience=${OCR_Auth__Audience}"
+            "OCR_Auth__ScopeName=${OCR_Auth__ScopeName:-access:ocr}"
+            "OCR_Auth__ResourceUri=${OCR_Auth__ResourceUri}"
         )
+        while IFS= read -r key_variable; do
+            key_name="${key_variable#OCR_Auth__ApiKeys__}"
+            secret_name="auth-api-key-$(printf '%s' "$key_name" | tr '[:upper:]_' '[:lower:]-')"
+            vars+=("$key_variable=secretref:$secret_name")
+        done < <(compgen -A variable OCR_Auth__ApiKeys__)
     fi
     if [ -n "${OCR_Storage__AzureBlob__BlobPrefix:-}" ]; then
         vars+=("OCR_Storage__AzureBlob__BlobPrefix=${OCR_Storage__AzureBlob__BlobPrefix}")
@@ -218,6 +228,8 @@ worker_env_vars() {
         "MyConfig__GroupId=${MyConfig__GroupId}"
         "MyConfig__WorkRoot=/var/ocr/worker"
         "MyConfig__MessageVisibilityTimeoutSeconds=${MyConfig__MessageVisibilityTimeoutSeconds:-900}"
+        "MyConfig__MaximumBatchImages=${MyConfig__MaximumBatchImages:-2000}"
+        "MyConfig__MaximumDequeueAttempts=${MyConfig__MaximumDequeueAttempts:-5}"
         "MyConfig__EnsureStorageResources=true"
         "OCR_Storage__Provider=local"
         "OCR_Runs__Provider=none"
