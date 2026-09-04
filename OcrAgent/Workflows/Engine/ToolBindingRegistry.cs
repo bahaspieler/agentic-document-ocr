@@ -10,7 +10,7 @@ public sealed class ToolBindingRegistry
     private readonly Dictionary<string, AIFunction> _bindings = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Adds or replaces a binding keyed by <see cref="AIFunction.Name"/> (case-insensitive).
+    /// Adds or replaces a binding keyed by the function's <c>Name</c> value (case-insensitive).
     /// </summary>
     /// <param name="function">Tool implementation to expose.</param>
     public void Register(AIFunction function)

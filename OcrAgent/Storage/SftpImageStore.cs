@@ -394,6 +394,10 @@ public sealed class SftpImageStore : IImageStore, IArtifactStore, IDisposable
     /// <inheritdoc />
     public string GetWriteDirectory() => ScopeBasePath(_activeSubdirectory.Value);
 
+    /// <summary>Lists remote files stored directly within an artifact scope.</summary>
+    /// <param name="scope">Relative artifact scope to inspect.</param>
+    /// <param name="cancellationToken">Token used to cancel SFTP operations.</param>
+    /// <returns>Artifact metadata ordered by remote file name.</returns>
     public Task<IReadOnlyList<StoredArtifact>> ListAsync(
         string scope, CancellationToken cancellationToken = default)
     {
@@ -412,6 +416,11 @@ public sealed class SftpImageStore : IImageStore, IArtifactStore, IDisposable
         });
     }
 
+    /// <summary>Downloads a remote artifact into a readable memory stream.</summary>
+    /// <param name="scope">Relative scope containing the artifact.</param>
+    /// <param name="name">Remote artifact file name.</param>
+    /// <param name="cancellationToken">Token used to cancel SFTP operations.</param>
+    /// <returns>A readable stream positioned at the start of the artifact.</returns>
     public Task<Stream> OpenReadAsync(
         string scope, string name, CancellationToken cancellationToken = default)
     {

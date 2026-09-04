@@ -43,6 +43,10 @@ public sealed class LocalFileImageStore : IImageStore, IArtifactStore
     /// <inheritdoc />
     public string GetWriteDirectory() => ScopeDirectory(_activeSubdirectory.Value);
 
+    /// <summary>Lists files stored directly within a local artifact scope.</summary>
+    /// <param name="scope">Relative artifact scope to inspect.</param>
+    /// <param name="cancellationToken">Token accepted for interface compatibility.</param>
+    /// <returns>Artifact metadata ordered by file name.</returns>
     public Task<IReadOnlyList<StoredArtifact>> ListAsync(
         string scope, CancellationToken cancellationToken = default)
     {
@@ -60,6 +64,11 @@ public sealed class LocalFileImageStore : IImageStore, IArtifactStore
         return Task.FromResult(result);
     }
 
+    /// <summary>Opens a local artifact for reading.</summary>
+    /// <param name="scope">Relative scope containing the artifact.</param>
+    /// <param name="name">Artifact file name.</param>
+    /// <param name="cancellationToken">Token accepted for interface compatibility.</param>
+    /// <returns>A readable file stream.</returns>
     public Task<Stream> OpenReadAsync(
         string scope, string name, CancellationToken cancellationToken = default)
     {

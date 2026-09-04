@@ -9,6 +9,8 @@ public sealed class ArtifactDiscoveryService
 {
     private readonly IImageStore _store;
 
+    /// <summary>Creates an artifact discovery service for an image store.</summary>
+    /// <param name="store">The store used to locate run outputs.</param>
     public ArtifactDiscoveryService(IImageStore store)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -58,6 +60,9 @@ public sealed class ArtifactDiscoveryService
         ];
     }
 
+    /// <summary>Determines the MIME content type for an artifact path.</summary>
+    /// <param name="path">The artifact path or file name.</param>
+    /// <returns>The recognized MIME type, or a binary fallback.</returns>
     public static string ContentTypeFor(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch
         {
@@ -73,6 +78,9 @@ public sealed class ArtifactDiscoveryService
             _ => "application/octet-stream"
         };
 
+    /// <summary>Determines whether an artifact can be previewed by clients.</summary>
+    /// <param name="path">The artifact path or file name.</param>
+    /// <returns>True for supported image, JSON, CSV, and text artifacts.</returns>
     public static bool IsPreviewable(string path)
     {
         var contentType = ContentTypeFor(path);

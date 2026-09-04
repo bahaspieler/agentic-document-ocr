@@ -103,11 +103,11 @@ public sealed class WorkflowCompiler
         int stepIndex, WorkflowStep step, WorkflowOverrides? overrides, WorkflowContext context)
     {
         var conditionVar = step.Condition ?? "";
-        var branchSteps = new Dictionary<string, List<BranchDispatcherExecutor.BranchToolStep>>();
+        var branchSteps = new Dictionary<string, List<BranchToolStep>>();
 
         foreach (var (caseName, caseSteps) in step.Branches!)
         {
-            var toolSteps = new List<BranchDispatcherExecutor.BranchToolStep>();
+            var toolSteps = new List<BranchToolStep>();
             foreach (var branchStep in caseSteps)
             {
                 if (!branchStep.Enabled) continue;
@@ -118,7 +118,7 @@ public sealed class WorkflowCompiler
                 }
 
                 var args = MergeArgs(branchStep.Args, overrides?.Steps?.GetValueOrDefault(branchStep.Id)?.Args);
-                toolSteps.Add(new BranchDispatcherExecutor.BranchToolStep(
+                toolSteps.Add(new BranchToolStep(
                     branchStep.Id, branchStep.Tool, args, branchStep.Passthrough, branchStep.Outputs));
             }
             if (toolSteps.Count > 0)

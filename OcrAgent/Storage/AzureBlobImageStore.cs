@@ -199,6 +199,10 @@ public sealed class AzureBlobImageStore : IImageStore, IArtifactStore, IDisposab
     /// </remarks>
     public string GetWriteDirectory() => EnsureStagingDirectory(_activeSubdirectory.Value);
 
+    /// <summary>Lists blobs stored directly within an artifact scope.</summary>
+    /// <param name="scope">Relative artifact scope to inspect.</param>
+    /// <param name="cancellationToken">Token used to cancel blob enumeration.</param>
+    /// <returns>Artifact metadata ordered by blob name.</returns>
     public async Task<IReadOnlyList<StoredArtifact>> ListAsync(
         string scope, CancellationToken cancellationToken = default)
     {
@@ -218,6 +222,11 @@ public sealed class AzureBlobImageStore : IImageStore, IArtifactStore, IDisposab
         return artifacts.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    /// <summary>Downloads an artifact into a readable memory stream.</summary>
+    /// <param name="scope">Relative scope containing the artifact.</param>
+    /// <param name="name">Artifact blob name.</param>
+    /// <param name="cancellationToken">Token used to cancel the download.</param>
+    /// <returns>A readable stream positioned at the start of the artifact.</returns>
     public async Task<Stream> OpenReadAsync(
         string scope, string name, CancellationToken cancellationToken = default)
     {

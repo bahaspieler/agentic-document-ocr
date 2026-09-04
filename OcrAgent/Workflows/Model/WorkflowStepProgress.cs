@@ -14,6 +14,10 @@ namespace OcrAgent.Workflows.Model;
 /// <param name="StepId">Workflow step id from the definition.</param>
 /// <param name="ToolName">Tool the step invoked.</param>
 /// <param name="Success">Whether the step completed without error.</param>
+/// <param name="InputReference">Optional image reference received by the step.</param>
+/// <param name="OutputReference">Optional image reference produced by the step.</param>
+/// <param name="DurationMs">Step duration in milliseconds.</param>
+/// <param name="Error">Optional error message when the step failed.</param>
 public sealed record WorkflowStepProgress(
     int Completed,
     int Total,
