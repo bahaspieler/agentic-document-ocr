@@ -43,7 +43,7 @@ fi
 for auth_key in OCR_Auth__Domain OCR_Auth__ClientId OCR_Auth__Audience OCR_Auth__ResourceUri; do
     if [ -z "${!auth_key:-}" ]; then
         echo "[ERROR] $auth_key is required for the protected production deployment." >&2
-        echo "        Run scripts/auth0-setup.sh before deploying." >&2
+        echo "        Run python3 scripts/auth0-setup.py before deploying." >&2
         exit 1
     fi
 done
@@ -242,6 +242,6 @@ fi
 
 echo
 echo "[OK] Serving instance is at https://$FQDN/"
-echo "     MCP clients:  https://$FQDN/"
+echo "     MCP clients:  https://$FQDN/mcp"
 echo "     Verify:       scripts/verify-deployment.sh"
 echo "     Stop compute: scripts/azure-stop.sh"

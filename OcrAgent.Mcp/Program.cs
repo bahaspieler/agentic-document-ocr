@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -93,10 +94,18 @@ internal static class Program
         app.UseStaticFiles();
         app.MapOcrApi(toolHost, agentService, auth);
         if (authConfigured)
+        {
             MapProtectedResourceMetadata(app, auth);
-        var mcp = app.MapMcp();
+            MapAuthorizationServerMetadataRedirects(app, auth);
+        }
+        // Keep Streamable HTTP separate from the SPA root. MCP clients use both GET and POST;
+        // serving index.html for the transport GET makes the response fail JSON parsing.
+        var mcp = app.MapMcp("/mcp");
         if (authConfigured)
             mcp.RequireAuthorization(AuthPolicies.Access);
+        // Stateless MCP intentionally has no GET or DELETE transport endpoints. Reserve those
+        // methods so they return the protocol-defined 405 instead of falling through to the SPA.
+        app.MapMethods("/mcp", ["GET", "HEAD", "DELETE"], () => Results.StatusCode(405));
         app.MapFallbackToFile("index.html");
         await app.RunAsync();
     }
@@ -105,15 +114,82 @@ internal static class Program
         WebApplication app,
         AuthConfiguration auth)
     {
+        ProtectedResourceMetadata CreateMetadata() => new()
+        {
+            Resource = auth.ResourceUri,
+            AuthorizationServers = { auth.AuthorizationServer },
+            ScopesSupported = [auth.ScopeName],
+            ResourceName = "Hidden Layer OCR Agent",
+        };
+
+        // RFC 9728 inserts a protected resource's path after the well-known name. Keep the
+        // origin-level form advertised by the challenge and the path-qualified discovery form.
         app.MapGet(
                 "/.well-known/oauth-protected-resource",
-                () => Results.Ok(new ProtectedResourceMetadata
+                () => Results.Ok(CreateMetadata()))
+            .AllowAnonymous();
+        app.MapGet(
+                "/.well-known/oauth-protected-resource/mcp",
+                () => Results.Ok(CreateMetadata()))
+            .AllowAnonymous();
+    }
+
+    private static void MapAuthorizationServerMetadataRedirects(
+        WebApplication app,
+        AuthConfiguration auth)
+    {
+        var issuer = auth.AuthorizationServer.TrimEnd('/');
+        var authorizationEndpoint =
+            new Uri(new Uri(auth.ResourceUri), "/oauth/authorize").AbsoluteUri;
+        var metadata = new
+        {
+            issuer = auth.AuthorizationServer,
+            authorization_endpoint = authorizationEndpoint,
+            token_endpoint = $"{issuer}/oauth/token",
+            registration_endpoint = $"{issuer}/oidc/register",
+            jwks_uri = $"{issuer}/.well-known/jwks.json",
+            response_types_supported = new[] { "code" },
+            grant_types_supported = new[] { "authorization_code", "refresh_token" },
+            token_endpoint_auth_methods_supported = new[] { "none" },
+            code_challenge_methods_supported = new[] { "S256" },
+            scopes_supported = new[] { "openid", "profile", "email", "offline_access", auth.ScopeName },
+        };
+
+        foreach (var path in new[]
+                 {
+                     "/.well-known/oauth-authorization-server",
+                     "/.well-known/oauth-authorization-server/mcp",
+                 })
+        {
+            app.MapGet(path, () => Results.Ok(metadata)).AllowAnonymous();
+        }
+
+        foreach (var path in new[]
+                 {
+                     "/.well-known/openid-configuration",
+                     "/.well-known/openid-configuration/mcp",
+                     "/mcp/.well-known/openid-configuration",
+                 })
+        {
+            app.MapGet(path, () => Results.Ok(metadata)).AllowAnonymous();
+        }
+
+        app.MapGet(
+                "/oauth/authorize",
+                (HttpRequest request) =>
                 {
-                    Resource = auth.ResourceUri,
-                    AuthorizationServers = { auth.AuthorizationServer },
-                    ScopesSupported = [auth.ScopeName],
-                    ResourceName = "Hidden Layer OCR Agent",
-                }))
+                    var parameters = request.Query.ToDictionary(
+                        item => item.Key,
+                        item => (string?)item.Value.ToString(),
+                        StringComparer.Ordinal);
+                    parameters["audience"] = auth.Audience;
+                    parameters["resource"] = auth.ResourceUri;
+                    if (!parameters.ContainsKey("scope"))
+                        parameters["scope"] = auth.ScopeName;
+
+                    return Results.Redirect(
+                        QueryHelpers.AddQueryString($"{issuer}/authorize", parameters));
+                })
             .AllowAnonymous();
     }
 

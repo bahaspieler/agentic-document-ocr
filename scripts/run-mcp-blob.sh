@@ -47,7 +47,8 @@ export ASPNETCORE_URLS="http://localhost:$PORT"
 [ -n "${OCR_BLOB_PREFIX:-}" ] && export OCR_Storage__AzureBlob__BlobPrefix="$OCR_BLOB_PREFIX"
 
 echo "[INFO] Settings : $ENV_FILE"
-echo "[INFO] Endpoint : http://localhost:$PORT"
+echo "[INFO] Web UI   : http://localhost:$PORT/"
+echo "[INFO] MCP      : http://localhost:$PORT/mcp"
 
 cd "$APP_DIR"
 

@@ -26,8 +26,13 @@ and pins an immutable source revision.
 ```sh
 python3 -m pip install "datasets>=2.14"
 python3 scripts/prepare-cord-dataset.py --mode smoke
+python3 scripts/prepare-cord-dataset.py --mode smoke --smoke-count 20
 python3 scripts/prepare-cord-dataset.py --mode full
 ```
+
+Smoke mode defaults to 10 images; `--smoke-count` accepts any value from 1 to 1,000. Packaging
+creates or replaces the selected mode's `images/`, `manifest.json`, and `SHA256SUMS` together, so
+these files must describe the same approved subset.
 
 Output is deterministic:
 
@@ -63,6 +68,8 @@ copied without re-encoding.
 
 ## Queue smoke run
 
+Create the local image directory with the packaging command above before running the producer.
+
 ```sh
 scripts/azure-queue-produce-bulk.sh \
   --upload-dir SampleFiles/datasets/cord/smoke/images \
@@ -78,3 +85,7 @@ read upstream shards that lack efficient random-row access. Run the pinned
 packaging command locally, manually review/trim the resulting smoke images, and
 commit only the small approved sample with its generated manifest and
 `SHA256SUMS`. No ignore rule excludes that package.
+
+The deployed two-image smoke result reported in the project documentation used an intentionally
+trimmed Azure dataset to check orchestration quickly. It is separate from the configurable local
+smoke package and does not represent the full CORD benchmark.

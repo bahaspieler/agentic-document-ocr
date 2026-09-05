@@ -20,8 +20,8 @@ shared download only races while it is cold.
 
 Usage:
     python3 scripts/verify-blob-store.py --image /path/to/receipt.jpg
-    python3 scripts/verify-blob-store.py --image-ref DEPLOY01 --url https://app.azurecontainerapps.io/
-    python3 scripts/verify-blob-store.py --url http://localhost:5290/ --workflow receipt_extract_v3
+    python3 scripts/verify-blob-store.py --image-ref DEPLOY01 --url https://app.azurecontainerapps.io/mcp
+    python3 scripts/verify-blob-store.py --url http://localhost:5290/mcp --workflow receipt_extract_v3
 """
 
 import argparse
@@ -221,7 +221,7 @@ def resolve_inputs(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://localhost:5290/")
+    parser.add_argument("--url", default="http://localhost:5290/mcp")
     parser.add_argument("--image", help="Absolute path to an image the server can read")
     parser.add_argument(
         "--image-ref", action="append", dest="image_refs", metavar="REF",

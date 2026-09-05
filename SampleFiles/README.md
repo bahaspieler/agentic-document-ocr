@@ -29,3 +29,23 @@ python3 scripts/verify-queue-worker.py --image SampleFiles/images/RCPT001.png
 
 The verifier uploads the image to `training-files`, sends both command bodies to `trigger-queue`,
 waits for matching rows in the `results` Table, and checks each URL written under `result-files`.
+
+## Bulk smoke dataset
+
+`datasets/cord/` contains CORD attribution, citation, licensing, and reproducibility manifests.
+Dataset images are prepared on demand and uploaded below
+`training-files/images/<dataset-name>/`; they are evaluation inputs, not model-training artifacts.
+
+```bash
+python3 -m pip install "datasets>=2.14"
+python3 scripts/prepare-cord-dataset.py --mode smoke
+scripts/azure-queue-produce-bulk.sh \
+  --upload-dir SampleFiles/datasets/cord/smoke/images \
+  --dataset cord-smoke \
+  --command "Remove background from all images in cord-smoke"
+python3 scripts/verify-bulk-queue.py
+```
+
+The producer publishes one parent message only after all images are durable. The worker plans once,
+fans out stable child messages, and writes item artifacts below
+`result-files/<group-id>/<item-id>/`.

@@ -5,7 +5,9 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Documentation/">
-    <File Path="Documentation/Experiment Specification - Hidden Layer.md" />
+    <File Path="Documentation/Experiment Specification - Baha Uddin Ahmed.md" />
+    <File Path="Documentation/Experiment Specification - MD Tazmim Hossain.md" />
+    <File Path="Documentation/Experiment Specification - M M Rauf Shahriyar.md" />
     <File Path="Documentation/PROMPT.md" />
     <File Path="Documentation/QUEUE_WORKER.md" />
     <File Path="Documentation/SYSTEM_ARCHITECTURE.md" />

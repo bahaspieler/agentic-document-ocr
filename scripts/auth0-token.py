@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 import time
 import urllib.error
@@ -13,6 +14,26 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_env_file() -> None:
+    """Load missing Auth0 settings from the project-local .env file."""
+    env_file = ROOT / ".env"
+    if not env_file.is_file():
+        return
+
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        os.environ.setdefault(key.strip(), value)
 
 
 def post_form(url: str, fields: dict[str, str]) -> dict[str, Any]:
@@ -48,6 +69,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     """Run device authorization and print only the final bearer token to stdout."""
+    load_env_file()
     args = parse_args()
     if not all((args.domain, args.client_id, args.audience, args.scope)):
         print("[ERROR] Auth0 domain, device client ID, audience, and scope are required.", file=sys.stderr)

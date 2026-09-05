@@ -78,14 +78,15 @@ find_sample() {
 }
 
 wait_for_mcp() {
-    local url="$1"
+    local app_url="$1"
+    local mcp_url="${app_url%/}/mcp"
     local attempt
-    echo "[INFO] Waiting for MCP at $url"
+    echo "[INFO] Waiting for MCP at $mcp_url"
     for attempt in $(seq 1 18); do
-        if python3 - "$url" <<'PY'
+        if python3 - "$app_url" "$mcp_url" <<'PY'
 import json, sys, urllib.error, urllib.request
-url = sys.argv[1]
-with urllib.request.urlopen(f"{url.rstrip('/')}/api/config", timeout=30) as response:
+app_url, mcp_url = sys.argv[1:3]
+with urllib.request.urlopen(f"{app_url.rstrip('/')}/api/config", timeout=30) as response:
     if response.status >= 400:
         sys.exit(1)
 body = json.dumps({
@@ -93,7 +94,7 @@ body = json.dumps({
     "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                "clientInfo": {"name": "wait", "version": "1.0"}},
 }).encode()
-req = urllib.request.Request(url, data=body, method="POST")
+req = urllib.request.Request(mcp_url, data=body, method="POST")
 req.add_header("Content-Type", "application/json")
 req.add_header("Accept", "application/json, text/event-stream")
 try:
@@ -165,7 +166,7 @@ set +e
 # The verifier asserts the OCR text itself, on the summary it already holds rather than on what
 # reaches this log. A workflow that completes without recognising anything fails there.
 python3 "$SCRIPT_DIR/verify-blob-store.py" \
-    --url "$URL" \
+    --url "${URL%/}/mcp" \
     --workflow "$WORKFLOW" \
     --image-ref "$REFERENCE" \
     --image-ref "$SHARED_REFERENCE" \

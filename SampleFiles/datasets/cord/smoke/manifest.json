@@ -11,6 +11,78 @@
       "split": "test"
     },
     {
+      "bytes": 734233,
+      "filename": "cord-v2_test_0001.png",
+      "package_path": "images/cord-v2_test_0001.png",
+      "sha256": "5852cbe48df03646524e717e987eb3d0ac329a52fd192070b5fda1222a053789",
+      "source_index": 1,
+      "split": "test"
+    },
+    {
+      "bytes": 1387299,
+      "filename": "cord-v2_test_0002.png",
+      "package_path": "images/cord-v2_test_0002.png",
+      "sha256": "571ac6af26e75de8c06747a8c536c778f19a4562879090813571eddc74603d34",
+      "source_index": 2,
+      "split": "test"
+    },
+    {
+      "bytes": 1278906,
+      "filename": "cord-v2_test_0003.png",
+      "package_path": "images/cord-v2_test_0003.png",
+      "sha256": "8f73f0c4803ea8815040a50e3389d4f3fa15e8c28cb6d50ea9854f6f6c22bd63",
+      "source_index": 3,
+      "split": "test"
+    },
+    {
+      "bytes": 1643699,
+      "filename": "cord-v2_test_0004.png",
+      "package_path": "images/cord-v2_test_0004.png",
+      "sha256": "8f3eee7068c96e86cdb2e4b5c53085cb5e1439462edd55c373548cb1962801ad",
+      "source_index": 4,
+      "split": "test"
+    },
+    {
+      "bytes": 7725898,
+      "filename": "cord-v2_test_0005.png",
+      "package_path": "images/cord-v2_test_0005.png",
+      "sha256": "0b63b666b54ea615d1d05733ee2c6fc24f20e1a6c77b333872fa80fff28b2c48",
+      "source_index": 5,
+      "split": "test"
+    },
+    {
+      "bytes": 2002836,
+      "filename": "cord-v2_test_0006.png",
+      "package_path": "images/cord-v2_test_0006.png",
+      "sha256": "1c091eb7436b3e5a813eb6492c0350ef4eb14e3fdad78d42da35df669c757292",
+      "source_index": 6,
+      "split": "test"
+    },
+    {
+      "bytes": 987476,
+      "filename": "cord-v2_test_0007.png",
+      "package_path": "images/cord-v2_test_0007.png",
+      "sha256": "810d3545f4105b19757c4b8b35934a477cde8cd1875302d9092315d2f960ef93",
+      "source_index": 7,
+      "split": "test"
+    },
+    {
+      "bytes": 1853544,
+      "filename": "cord-v2_test_0008.png",
+      "package_path": "images/cord-v2_test_0008.png",
+      "sha256": "58716693a6c0733358e66e64d7064a5a845424280bb55f9b5fa137b1af8c92fe",
+      "source_index": 8,
+      "split": "test"
+    },
+    {
+      "bytes": 816325,
+      "filename": "cord-v2_test_0009.png",
+      "package_path": "images/cord-v2_test_0009.png",
+      "sha256": "0411c4d9beb9be65165fdb70c2b60f8bbf9035cc9661be2b8d4c73bbfcff7972",
+      "source_index": 9,
+      "split": "test"
+    },
+    {
       "bytes": 1728383,
       "filename": "cord-v2_train_0000.png",
       "package_path": "images/cord-v2_train_0000.png",
@@ -75,23 +147,671 @@
       "split": "train"
     },
     {
+      "bytes": 1675101,
+      "filename": "cord-v2_train_0008.png",
+      "package_path": "images/cord-v2_train_0008.png",
+      "sha256": "a2071158a469ec678f67c70e29c9c8ab600a1f905167000c0106b2beac408530",
+      "source_index": 8,
+      "split": "train"
+    },
+    {
+      "bytes": 1964317,
+      "filename": "cord-v2_train_0009.png",
+      "package_path": "images/cord-v2_train_0009.png",
+      "sha256": "0422ba24bb9491b49c2f0e9e39379d6adb32792633519ef884bcc8baf8d98936",
+      "source_index": 9,
+      "split": "train"
+    },
+    {
+      "bytes": 425449,
+      "filename": "cord-v2_train_0010.png",
+      "package_path": "images/cord-v2_train_0010.png",
+      "sha256": "5a489d5a1bf4da72c4f603b84784f9bd7cfe8779ecb333d507bd1974dd95b813",
+      "source_index": 10,
+      "split": "train"
+    },
+    {
+      "bytes": 1950505,
+      "filename": "cord-v2_train_0011.png",
+      "package_path": "images/cord-v2_train_0011.png",
+      "sha256": "f376cbc7f370ce5d17b8b4f4a04a07d6528aeefdc5615f9aa04b6368d92ca2d4",
+      "source_index": 11,
+      "split": "train"
+    },
+    {
+      "bytes": 867499,
+      "filename": "cord-v2_train_0012.png",
+      "package_path": "images/cord-v2_train_0012.png",
+      "sha256": "79d2dc2e4118ec1c7a3620c79885eded2929f76055ad5f5d81cbc2f19fe2597b",
+      "source_index": 12,
+      "split": "train"
+    },
+    {
+      "bytes": 8793289,
+      "filename": "cord-v2_train_0013.png",
+      "package_path": "images/cord-v2_train_0013.png",
+      "sha256": "06d0e69a4f784b11ac76351ead3ebee7bee6156d5e217684cc74ce2565d0e9aa",
+      "source_index": 13,
+      "split": "train"
+    },
+    {
+      "bytes": 794066,
+      "filename": "cord-v2_train_0014.png",
+      "package_path": "images/cord-v2_train_0014.png",
+      "sha256": "005e9d9e8b7aa5f12648a23136c9a269feec148f0f970c0703f475e49e6fda6c",
+      "source_index": 14,
+      "split": "train"
+    },
+    {
+      "bytes": 7597460,
+      "filename": "cord-v2_train_0015.png",
+      "package_path": "images/cord-v2_train_0015.png",
+      "sha256": "5d670211f51f14ffe05609b036abe67254f88262f9cba08c2d7c680d5f9bb18f",
+      "source_index": 15,
+      "split": "train"
+    },
+    {
+      "bytes": 1394723,
+      "filename": "cord-v2_train_0016.png",
+      "package_path": "images/cord-v2_train_0016.png",
+      "sha256": "763c62b1641d150477617137d9719b58d5eb2c4294f8e66d69fe2cb74070ede5",
+      "source_index": 16,
+      "split": "train"
+    },
+    {
+      "bytes": 942559,
+      "filename": "cord-v2_train_0017.png",
+      "package_path": "images/cord-v2_train_0017.png",
+      "sha256": "0a163171afef516072127f6d8374a4c206cc8351b6a739ed28751eb9b70dec91",
+      "source_index": 17,
+      "split": "train"
+    },
+    {
+      "bytes": 1412127,
+      "filename": "cord-v2_train_0018.png",
+      "package_path": "images/cord-v2_train_0018.png",
+      "sha256": "3fd9c2b1175941d32f1151920176002e4a607e6d6f3d2b3c3f937b3ad67bfc22",
+      "source_index": 18,
+      "split": "train"
+    },
+    {
+      "bytes": 1936781,
+      "filename": "cord-v2_train_0019.png",
+      "package_path": "images/cord-v2_train_0019.png",
+      "sha256": "0f9ec32a7610abd218813a9f89abd88718a3adab73fb15f38114b259540e01b1",
+      "source_index": 19,
+      "split": "train"
+    },
+    {
+      "bytes": 9821295,
+      "filename": "cord-v2_train_0020.png",
+      "package_path": "images/cord-v2_train_0020.png",
+      "sha256": "693bcc5ac5d66f4cbe55afc9242d8a776450c66a0169774bd968dddd7841f8cb",
+      "source_index": 20,
+      "split": "train"
+    },
+    {
+      "bytes": 779841,
+      "filename": "cord-v2_train_0021.png",
+      "package_path": "images/cord-v2_train_0021.png",
+      "sha256": "c4ec4636d99470459e2814d682028d756741b138b781cb3a7f529d84f8eeda96",
+      "source_index": 21,
+      "split": "train"
+    },
+    {
+      "bytes": 1756001,
+      "filename": "cord-v2_train_0022.png",
+      "package_path": "images/cord-v2_train_0022.png",
+      "sha256": "94957704e9e5a5e983ab404485c3a3eb84338ebe63745558d98b265c73391704",
+      "source_index": 22,
+      "split": "train"
+    },
+    {
+      "bytes": 889658,
+      "filename": "cord-v2_train_0023.png",
+      "package_path": "images/cord-v2_train_0023.png",
+      "sha256": "a532b281b2f3227af7d03e5d617c85b03868d454a3c0da6b9469ddda53e7219f",
+      "source_index": 23,
+      "split": "train"
+    },
+    {
+      "bytes": 896900,
+      "filename": "cord-v2_train_0024.png",
+      "package_path": "images/cord-v2_train_0024.png",
+      "sha256": "b75cb6c438cbf6d7d02ad9a194f2e4e4aa2f986f972d591afd70f3d55bc0b0d6",
+      "source_index": 24,
+      "split": "train"
+    },
+    {
+      "bytes": 1419863,
+      "filename": "cord-v2_train_0025.png",
+      "package_path": "images/cord-v2_train_0025.png",
+      "sha256": "544f830636e340256ca1497193bd1e0324c671d63ae4cc8ba5d5556f0f4e4024",
+      "source_index": 25,
+      "split": "train"
+    },
+    {
+      "bytes": 2566783,
+      "filename": "cord-v2_train_0026.png",
+      "package_path": "images/cord-v2_train_0026.png",
+      "sha256": "973282ec60c140c6c1b971c458df9f0ad188905a36005dee50c8c57e09021311",
+      "source_index": 26,
+      "split": "train"
+    },
+    {
+      "bytes": 2197137,
+      "filename": "cord-v2_train_0027.png",
+      "package_path": "images/cord-v2_train_0027.png",
+      "sha256": "eacfb69045e209a082dabbf211f61287c64235cbb33fa735483b09610b301d67",
+      "source_index": 27,
+      "split": "train"
+    },
+    {
+      "bytes": 1518461,
+      "filename": "cord-v2_train_0028.png",
+      "package_path": "images/cord-v2_train_0028.png",
+      "sha256": "5da9b3d83615078fc320a822109a2bb9976bae31114e90016e58795c679fadb5",
+      "source_index": 28,
+      "split": "train"
+    },
+    {
+      "bytes": 593876,
+      "filename": "cord-v2_train_0029.png",
+      "package_path": "images/cord-v2_train_0029.png",
+      "sha256": "1cac5a5cb9b702029eabf5b26319766c613189379f99f6aab0aecbf796e07652",
+      "source_index": 29,
+      "split": "train"
+    },
+    {
+      "bytes": 1660647,
+      "filename": "cord-v2_train_0030.png",
+      "package_path": "images/cord-v2_train_0030.png",
+      "sha256": "b41e7422a0b56dc4ff35fe68826da3fde5e0cdbd396b3a726d47dc93eff01ffc",
+      "source_index": 30,
+      "split": "train"
+    },
+    {
+      "bytes": 842120,
+      "filename": "cord-v2_train_0031.png",
+      "package_path": "images/cord-v2_train_0031.png",
+      "sha256": "e4b75fe6416f369c13fd1b34bf972f0973834464013673386d1aad0c604b4bae",
+      "source_index": 31,
+      "split": "train"
+    },
+    {
+      "bytes": 827531,
+      "filename": "cord-v2_train_0032.png",
+      "package_path": "images/cord-v2_train_0032.png",
+      "sha256": "c763cbc2eee95ca7dd9e13fb7ab6b74f67982e1c2b2202c2bee514dce353d5ab",
+      "source_index": 32,
+      "split": "train"
+    },
+    {
+      "bytes": 857046,
+      "filename": "cord-v2_train_0033.png",
+      "package_path": "images/cord-v2_train_0033.png",
+      "sha256": "0a45ecdaf6a3454eaa42a01da73114afbef08e8f60f32efec1762ae1f391f358",
+      "source_index": 33,
+      "split": "train"
+    },
+    {
+      "bytes": 761503,
+      "filename": "cord-v2_train_0034.png",
+      "package_path": "images/cord-v2_train_0034.png",
+      "sha256": "ffadba5822e288316f186a48e52b528a7d547f60b372758c5b928495ed4b08d7",
+      "source_index": 34,
+      "split": "train"
+    },
+    {
+      "bytes": 779635,
+      "filename": "cord-v2_train_0035.png",
+      "package_path": "images/cord-v2_train_0035.png",
+      "sha256": "e42d403454e6e3fc2b0bb76ff1212a46218a16ca68850831467ec2f1c82695e0",
+      "source_index": 35,
+      "split": "train"
+    },
+    {
+      "bytes": 1504286,
+      "filename": "cord-v2_train_0036.png",
+      "package_path": "images/cord-v2_train_0036.png",
+      "sha256": "5dd5a7f90f5e86f0824c7f32578344139001be942869e872c9ea75b4c413beaa",
+      "source_index": 36,
+      "split": "train"
+    },
+    {
+      "bytes": 1654175,
+      "filename": "cord-v2_train_0037.png",
+      "package_path": "images/cord-v2_train_0037.png",
+      "sha256": "c9ae237889ae6a78bc5bade9a8d4ab672876a115c6c5d96b7209025f8a63a100",
+      "source_index": 37,
+      "split": "train"
+    },
+    {
+      "bytes": 1773046,
+      "filename": "cord-v2_train_0038.png",
+      "package_path": "images/cord-v2_train_0038.png",
+      "sha256": "d455f98a08f6bddb591de449f62e91d731768b33b0a5126cb1dab1101361e745",
+      "source_index": 38,
+      "split": "train"
+    },
+    {
+      "bytes": 1646066,
+      "filename": "cord-v2_train_0039.png",
+      "package_path": "images/cord-v2_train_0039.png",
+      "sha256": "6efe750e28c63fd648a41aed76ffd9e1a15cdb94caf9d9a1af3ae016a88f270a",
+      "source_index": 39,
+      "split": "train"
+    },
+    {
+      "bytes": 737312,
+      "filename": "cord-v2_train_0040.png",
+      "package_path": "images/cord-v2_train_0040.png",
+      "sha256": "78ef785630114f809a8568c3899584d6bb43949a0f641d23a8d069582c03f84b",
+      "source_index": 40,
+      "split": "train"
+    },
+    {
+      "bytes": 927172,
+      "filename": "cord-v2_train_0041.png",
+      "package_path": "images/cord-v2_train_0041.png",
+      "sha256": "1d1dbf3bb494f63495ba6a0e364019b32a3147d7788e1d31ce6913eb3dc25609",
+      "source_index": 41,
+      "split": "train"
+    },
+    {
+      "bytes": 784742,
+      "filename": "cord-v2_train_0042.png",
+      "package_path": "images/cord-v2_train_0042.png",
+      "sha256": "3e96c209f134e3a2a0527807a9d48e3a8f5b4e41d3c7454031c846411a370da7",
+      "source_index": 42,
+      "split": "train"
+    },
+    {
+      "bytes": 1861459,
+      "filename": "cord-v2_train_0043.png",
+      "package_path": "images/cord-v2_train_0043.png",
+      "sha256": "69ac0b31d316a93593698a282b50baf6f4dffc14970ee11d88a9bce0fe215508",
+      "source_index": 43,
+      "split": "train"
+    },
+    {
+      "bytes": 445010,
+      "filename": "cord-v2_train_0044.png",
+      "package_path": "images/cord-v2_train_0044.png",
+      "sha256": "65314a922a2d72062e3b46721a2faa6e83cab84af1704615a1fe5c8613038a66",
+      "source_index": 44,
+      "split": "train"
+    },
+    {
+      "bytes": 9069762,
+      "filename": "cord-v2_train_0045.png",
+      "package_path": "images/cord-v2_train_0045.png",
+      "sha256": "d801384af2c5518ad7a5e9dafef26566a3620f075b10eaf165353a34e88160d5",
+      "source_index": 45,
+      "split": "train"
+    },
+    {
+      "bytes": 1679477,
+      "filename": "cord-v2_train_0046.png",
+      "package_path": "images/cord-v2_train_0046.png",
+      "sha256": "3608d0b5981da4b3e798ec9ab23076f1f08052738fded9528fe9cb8b64a2936c",
+      "source_index": 46,
+      "split": "train"
+    },
+    {
+      "bytes": 1504973,
+      "filename": "cord-v2_train_0047.png",
+      "package_path": "images/cord-v2_train_0047.png",
+      "sha256": "4afcd589a72fe9e12b4086ed48a928814f0bf4fd563548e5d283639b164ca91c",
+      "source_index": 47,
+      "split": "train"
+    },
+    {
+      "bytes": 730094,
+      "filename": "cord-v2_train_0048.png",
+      "package_path": "images/cord-v2_train_0048.png",
+      "sha256": "84b4cd6a0eb126ca41471ac5a3a550ee1e39e5c25c1efe56b60d629afc906ed0",
+      "source_index": 48,
+      "split": "train"
+    },
+    {
+      "bytes": 769544,
+      "filename": "cord-v2_train_0049.png",
+      "package_path": "images/cord-v2_train_0049.png",
+      "sha256": "e4026e4e4243b4e0cea4a1c491d55d58e23d5b90e972398fc9be788708593cf8",
+      "source_index": 49,
+      "split": "train"
+    },
+    {
+      "bytes": 1593756,
+      "filename": "cord-v2_train_0050.png",
+      "package_path": "images/cord-v2_train_0050.png",
+      "sha256": "13eafd0c25fa52bec39e3c115691a232cb8e478ef1fbafc8125ef0ace1f9a32c",
+      "source_index": 50,
+      "split": "train"
+    },
+    {
+      "bytes": 1957842,
+      "filename": "cord-v2_train_0051.png",
+      "package_path": "images/cord-v2_train_0051.png",
+      "sha256": "c8100fb34359de0c6ad1934e6c03ac466c2ab2edf360a072a30d7d407a6cb845",
+      "source_index": 51,
+      "split": "train"
+    },
+    {
+      "bytes": 794014,
+      "filename": "cord-v2_train_0052.png",
+      "package_path": "images/cord-v2_train_0052.png",
+      "sha256": "61da282278cc2b0b0fe7b272dfe245b3f6e9e539ee9802b0348857f0e6d71bff",
+      "source_index": 52,
+      "split": "train"
+    },
+    {
+      "bytes": 1152522,
+      "filename": "cord-v2_train_0053.png",
+      "package_path": "images/cord-v2_train_0053.png",
+      "sha256": "71a399a33cf3ea54978aa11fa8b87ab62841df42ac9d9ea8a9619a5c09da1947",
+      "source_index": 53,
+      "split": "train"
+    },
+    {
+      "bytes": 853367,
+      "filename": "cord-v2_train_0054.png",
+      "package_path": "images/cord-v2_train_0054.png",
+      "sha256": "d5340ac78c51a53c34b307ab66ced8983c1fb01fd30c70187fc64e529c61fe43",
+      "source_index": 54,
+      "split": "train"
+    },
+    {
+      "bytes": 8782804,
+      "filename": "cord-v2_train_0055.png",
+      "package_path": "images/cord-v2_train_0055.png",
+      "sha256": "181d2f5f037b3d57f4ac92caeec2b2b8d5f95390ee22999de617b5935fb2ca42",
+      "source_index": 55,
+      "split": "train"
+    },
+    {
+      "bytes": 4488717,
+      "filename": "cord-v2_train_0056.png",
+      "package_path": "images/cord-v2_train_0056.png",
+      "sha256": "3928169a55325a4e30d7d07df51d45eb06570dc226e7feb232ecebb34bec6377",
+      "source_index": 56,
+      "split": "train"
+    },
+    {
+      "bytes": 678600,
+      "filename": "cord-v2_train_0057.png",
+      "package_path": "images/cord-v2_train_0057.png",
+      "sha256": "ddd0d628f90771e545e05d3d67832f40f232d1e21d2af746b82846e70cb23e19",
+      "source_index": 57,
+      "split": "train"
+    },
+    {
+      "bytes": 1543475,
+      "filename": "cord-v2_train_0058.png",
+      "package_path": "images/cord-v2_train_0058.png",
+      "sha256": "1b33fb5d38247bba78c081bb89e85fab8a10e4f84531a63de8517478e7742110",
+      "source_index": 58,
+      "split": "train"
+    },
+    {
+      "bytes": 1616461,
+      "filename": "cord-v2_train_0059.png",
+      "package_path": "images/cord-v2_train_0059.png",
+      "sha256": "40a0b12c648fa31f510c73bbc071a2ac1814d3de400eaa2af161a6c55fe11530",
+      "source_index": 59,
+      "split": "train"
+    },
+    {
+      "bytes": 774242,
+      "filename": "cord-v2_train_0060.png",
+      "package_path": "images/cord-v2_train_0060.png",
+      "sha256": "1a091c3da858f283e92409cdff13cfec01a3e319e8ca54d9d6aa653c8866c31b",
+      "source_index": 60,
+      "split": "train"
+    },
+    {
+      "bytes": 749873,
+      "filename": "cord-v2_train_0061.png",
+      "package_path": "images/cord-v2_train_0061.png",
+      "sha256": "e705c2bb9388948d58f6cd301f793a475624f2781c1f64cc308cdbcc65029160",
+      "source_index": 61,
+      "split": "train"
+    },
+    {
+      "bytes": 1936848,
+      "filename": "cord-v2_train_0062.png",
+      "package_path": "images/cord-v2_train_0062.png",
+      "sha256": "3dfba6b1e12cb68df13a674240d245c87c228fce6883cfc2a3a9b36c9651e0aa",
+      "source_index": 62,
+      "split": "train"
+    },
+    {
+      "bytes": 876927,
+      "filename": "cord-v2_train_0063.png",
+      "package_path": "images/cord-v2_train_0063.png",
+      "sha256": "c210cc99520e56689ab32bc8393ea0a7a1d797af2732e80336001f77fc556744",
+      "source_index": 63,
+      "split": "train"
+    },
+    {
+      "bytes": 1271239,
+      "filename": "cord-v2_train_0064.png",
+      "package_path": "images/cord-v2_train_0064.png",
+      "sha256": "44d2753d04fda5642bb5f67ba09c5930d5cab50f2df432be2f13d811f47d8e21",
+      "source_index": 64,
+      "split": "train"
+    },
+    {
+      "bytes": 1639977,
+      "filename": "cord-v2_train_0065.png",
+      "package_path": "images/cord-v2_train_0065.png",
+      "sha256": "8c7bec2090e321ebdc3447259a5023a97ac24c843ae4387e7e0d35242e6dce83",
+      "source_index": 65,
+      "split": "train"
+    },
+    {
+      "bytes": 11939089,
+      "filename": "cord-v2_train_0066.png",
+      "package_path": "images/cord-v2_train_0066.png",
+      "sha256": "8c3b241db2048045da6d1c4120f8d57f4efb5d709bf07b87528f97416eb46e7e",
+      "source_index": 66,
+      "split": "train"
+    },
+    {
+      "bytes": 1274561,
+      "filename": "cord-v2_train_0067.png",
+      "package_path": "images/cord-v2_train_0067.png",
+      "sha256": "349b4909406032ad23b840263ba42cf17ba181706f9ad0336d2fb63828b50477",
+      "source_index": 67,
+      "split": "train"
+    },
+    {
+      "bytes": 1450481,
+      "filename": "cord-v2_train_0068.png",
+      "package_path": "images/cord-v2_train_0068.png",
+      "sha256": "72532d86a788e5e3fb0c500500b5fdbc3a6091a872586f77e0d544f0d756ea83",
+      "source_index": 68,
+      "split": "train"
+    },
+    {
+      "bytes": 979686,
+      "filename": "cord-v2_train_0069.png",
+      "package_path": "images/cord-v2_train_0069.png",
+      "sha256": "65d702da496794e45d475084719934d75511e1431f4a4bd221286215f74cf6d7",
+      "source_index": 69,
+      "split": "train"
+    },
+    {
+      "bytes": 11277917,
+      "filename": "cord-v2_train_0070.png",
+      "package_path": "images/cord-v2_train_0070.png",
+      "sha256": "8867317b5c79de72188d1708a7c98290018348115fabd3d5e947121098f8fdd2",
+      "source_index": 70,
+      "split": "train"
+    },
+    {
+      "bytes": 1496797,
+      "filename": "cord-v2_train_0071.png",
+      "package_path": "images/cord-v2_train_0071.png",
+      "sha256": "adc28dbabbde704e5b2dc07d0342498aefc1b3134b4361370d4527eb1a2887f8",
+      "source_index": 71,
+      "split": "train"
+    },
+    {
+      "bytes": 1716537,
+      "filename": "cord-v2_train_0072.png",
+      "package_path": "images/cord-v2_train_0072.png",
+      "sha256": "45c4db6db3bc26584af5ee799ab2061a8771ffb3d8b34680da63c71a0476f359",
+      "source_index": 72,
+      "split": "train"
+    },
+    {
+      "bytes": 420713,
+      "filename": "cord-v2_train_0073.png",
+      "package_path": "images/cord-v2_train_0073.png",
+      "sha256": "fb0ac12040c7f1dc66beb360d0b316a8c94d21c75a9f2fb9f63a33bad8b43509",
+      "source_index": 73,
+      "split": "train"
+    },
+    {
+      "bytes": 768970,
+      "filename": "cord-v2_train_0074.png",
+      "package_path": "images/cord-v2_train_0074.png",
+      "sha256": "98fd4aa92c515d5173ce9a311467605e541abc1b75ec0ab7587192f75ad6f359",
+      "source_index": 74,
+      "split": "train"
+    },
+    {
+      "bytes": 828293,
+      "filename": "cord-v2_train_0075.png",
+      "package_path": "images/cord-v2_train_0075.png",
+      "sha256": "25da1a35a35029f815170f20f4573fe0667d8f6d5f88d29498956654a5777ffd",
+      "source_index": 75,
+      "split": "train"
+    },
+    {
+      "bytes": 1606040,
+      "filename": "cord-v2_train_0076.png",
+      "package_path": "images/cord-v2_train_0076.png",
+      "sha256": "9135858b51792269271463fca53e6e66bb9dda0199db9537b5c8ba790efdaf52",
+      "source_index": 76,
+      "split": "train"
+    },
+    {
+      "bytes": 1630768,
+      "filename": "cord-v2_train_0077.png",
+      "package_path": "images/cord-v2_train_0077.png",
+      "sha256": "0163ea9ce0fcf36297d4b312833833da923f440383066a1e3e704ce71ddecc92",
+      "source_index": 77,
+      "split": "train"
+    },
+    {
+      "bytes": 2622069,
+      "filename": "cord-v2_train_0078.png",
+      "package_path": "images/cord-v2_train_0078.png",
+      "sha256": "33a32feabf805e231bf4a046136ea323576ba82b11222402e68709102f48aa28",
+      "source_index": 78,
+      "split": "train"
+    },
+    {
+      "bytes": 897606,
+      "filename": "cord-v2_train_0079.png",
+      "package_path": "images/cord-v2_train_0079.png",
+      "sha256": "ec45ca99c246d50c83487b2e3cfd950f976250b4208ed1232cabe335201a32b2",
+      "source_index": 79,
+      "split": "train"
+    },
+    {
       "bytes": 1382793,
       "filename": "cord-v2_validation_0000.png",
       "package_path": "images/cord-v2_validation_0000.png",
       "sha256": "2423ea6be07e0d8a8c0d041c70f6880e68b424f5efb02b0568a517074af04db7",
       "source_index": 0,
       "split": "validation"
+    },
+    {
+      "bytes": 2158700,
+      "filename": "cord-v2_validation_0001.png",
+      "package_path": "images/cord-v2_validation_0001.png",
+      "sha256": "945e505a3416b7578abeed11ad6a112b6600b24816dfb75bddbc369000b1eef9",
+      "source_index": 1,
+      "split": "validation"
+    },
+    {
+      "bytes": 311172,
+      "filename": "cord-v2_validation_0002.png",
+      "package_path": "images/cord-v2_validation_0002.png",
+      "sha256": "3d9bdf850a9b04fc1faf023667225c28af4c75d62511c6c410ee34ad801dfd95",
+      "source_index": 2,
+      "split": "validation"
+    },
+    {
+      "bytes": 10288666,
+      "filename": "cord-v2_validation_0003.png",
+      "package_path": "images/cord-v2_validation_0003.png",
+      "sha256": "e2dfa54e0af1fe1234e98d45026c7b7f82db7bb0299196b8f4fe4b29ee8b218b",
+      "source_index": 3,
+      "split": "validation"
+    },
+    {
+      "bytes": 830715,
+      "filename": "cord-v2_validation_0004.png",
+      "package_path": "images/cord-v2_validation_0004.png",
+      "sha256": "395a4aada020d241e38ab175c6b2c230897d0197b3e78a14a6de763ad192ea2a",
+      "source_index": 4,
+      "split": "validation"
+    },
+    {
+      "bytes": 1594771,
+      "filename": "cord-v2_validation_0005.png",
+      "package_path": "images/cord-v2_validation_0005.png",
+      "sha256": "f2f39d5f12253390f4c8264a8fa96e9bfdde78009e57068cb05ca5ad3c5b7d02",
+      "source_index": 5,
+      "split": "validation"
+    },
+    {
+      "bytes": 1675847,
+      "filename": "cord-v2_validation_0006.png",
+      "package_path": "images/cord-v2_validation_0006.png",
+      "sha256": "76a8ab6bc5d3baa31643474a851277fccacb13dd9a4915c5c0e82be4b63fecf6",
+      "source_index": 6,
+      "split": "validation"
+    },
+    {
+      "bytes": 786559,
+      "filename": "cord-v2_validation_0007.png",
+      "package_path": "images/cord-v2_validation_0007.png",
+      "sha256": "52adf3336878fbd558951660d6ce52268dd3e636563ca1d7d7e004ccab96bff7",
+      "source_index": 7,
+      "split": "validation"
+    },
+    {
+      "bytes": 953757,
+      "filename": "cord-v2_validation_0008.png",
+      "package_path": "images/cord-v2_validation_0008.png",
+      "sha256": "0176f6485570f8389cf78ee11f5da32bdd9bb5ebb638490b04ec495bec7562eb",
+      "source_index": 8,
+      "split": "validation"
+    },
+    {
+      "bytes": 2897897,
+      "filename": "cord-v2_validation_0009.png",
+      "package_path": "images/cord-v2_validation_0009.png",
+      "sha256": "cb5e23ac462d4706be5c2ead6f0a362b284671181dd801883e62b78bad6b3f62",
+      "source_index": 9,
+      "split": "validation"
     }
   ],
   "license": "CC-BY-4.0",
   "mode": "smoke",
-  "package_sha256": "7394ec5621926c2820226b3ab0119dfa9ba36404d5d4916edab4fb3d535656a1",
+  "package_sha256": "d49b8d8d7efd88747abd7151020280b2c7e48729a7c58532e9a7cbc1e27f0094",
   "source": "naver-clova-ix/cord-v2",
   "source_revision": "447d3d5adc8ac4b2f0782088847f18c7bd2c5a76",
   "split_counts": {
-    "test": 1,
-    "train": 8,
-    "validation": 1
+    "test": 10,
+    "train": 80,
+    "validation": 10
   },
-  "total_images": 10
+  "total_images": 100
 }
