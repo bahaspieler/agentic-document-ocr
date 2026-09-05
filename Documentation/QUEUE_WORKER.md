@@ -129,6 +129,9 @@ scripts/azure-queue-produce-bulk.sh \
 python3 scripts/verify-bulk-queue.py
 ```
 
+The preparation script creates the local `images/` directory and defaults to 10 images. Pass
+`--smoke-count <N>` to select another smoke size.
+
 The producer uploads every supported image before publishing exactly one parent command. The
 verifier reports parent/item counts and artifact URLs. Its `--requeue-failed` option is a dry run
 unless `--yes` is also provided; retries are emitted as ordinary single-image commands.
@@ -139,12 +142,13 @@ CORD is a CC BY 4.0 corpus of 1,000 receipt images. In this project it is an eva
 robustness corpus for pretrained inference components, not training data. A small `cord-smoke`
 subset is appropriate for fast queue and artifact checks; running all 1,000 images is an optional
 full benchmark for reproducible throughput, retry, artifact-integrity, OCR, and extraction
-evidence. A two-image background-removal smoke batch completed successfully; do not report
-full-corpus results until the 1,000-image batch has actually been submitted and measured.
+evidence. A separately trimmed two-image background-removal batch completed successfully as a
+deployment smoke check; it was not the default generated smoke package. Do not report full-corpus
+results until the 1,000-image batch has actually been submitted and measured.
 
 The Web UI remains intentionally scoped to single-image processing and conversations. Bulk
-processing belongs to the queue worker because the professor specifically requested queue-worker
-bulk processing.
+processing belongs to the queue worker so fan-out, retries, idempotency, and durable item status
+remain asynchronous worker concerns.
 
 For local container execution, build and start the serving role with `docker compose up --build`.
 The worker is opt-in because it consumes the Azure queue named in `.env`:

@@ -67,7 +67,7 @@ alone. No secondary index, no partition scan. `PartitionKey` is the configured `
 | `Mode` | `tool` or `workflow` |
 | `Name` | Tool name or workflow id |
 | `Version` | Workflow definition version; absent for a tool call |
-| `Source` | `cli`, `chat`, or `mcp` |
+| `Source` | Entry path: `cli`, `chat`, `mcp`, `rest`, or `queue` |
 | `ConversationId` | Agent conversation the job was raised for; absent for a direct call |
 | `InputReference`, `OutputReference` | Image references; output is empty when the job returned data rather than an image |
 | `OutputDirectory` | Artifact directory, relative to the image store root |

@@ -1,7 +1,7 @@
 # Configuration
 
-How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the queue worker are configured.
-The unchanged template host retains its `MyConfig` section alongside the engine's `OCR_*` settings.
+How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the queue worker are configured. The course
+host retains its `MyConfig` section alongside the engine's `OCR_*` settings.
 
 ## Sources, in precedence order
 
@@ -97,6 +97,25 @@ complete. `Audience` must equal the canonical `ResourceUri` (ignoring a trailing
 provider-neutral MCP clients can send RFC 8707 `resource` parameters under Auth0's Resource
 Parameter Compatibility Profile.
 
+The server also publishes authorization-server/OpenID compatibility metadata on its own origin.
+The advertised authorization endpoint preserves a client's callback, state, PKCE challenge, and
+scope, adds the configured Auth0 audience and resource when the client omits them, and redirects to
+Auth0. OAuth client IDs and `access:ocr` are public identifiers. Client secrets, access/refresh
+tokens, API keys, storage connection strings, and Management API tokens are credentials.
+
+When authentication is enabled, these public bootstrap routes support client discovery:
+
+- `GET /.well-known/oauth-protected-resource` and
+  `GET /.well-known/oauth-protected-resource/mcp`: protected-resource metadata;
+- `GET /.well-known/oauth-authorization-server` and its `/mcp` form:
+  authorization-server metadata;
+- `GET /.well-known/openid-configuration`, its `/mcp` form, and
+  `GET /mcp/.well-known/openid-configuration`: OpenID compatibility metadata; and
+- `GET /oauth/authorize`: PKCE-preserving redirect to Auth0 with audience/resource injection.
+
+Stateless MCP requests use `POST /mcp`. `GET`, `HEAD`, and `DELETE /mcp` intentionally return 405
+instead of falling through to the Web UI's HTML.
+
 Production `/api` and `/mcp` requests accept either a bearer JWT issued by the configured Auth0
 domain for the configured audience and carrying `access:ocr`, or an `X-API-Key` whose SHA-256 hash
 matches a named `ApiKeys` entry. The static UI, `/api/config`, and OAuth Protected Resource Metadata
@@ -128,6 +147,15 @@ or updates the API, public SPA, first-party native device-flow client, strict op
 only public identifiers to the gitignored `.env`. Auth0 Universal Login also requires the database,
 Google, and GitHub connections to be promoted to the tenant domain.
 
+`--app-url` must be the canonical HTTPS production origin, including its trailing slash.
+`auth0-setup.py` intentionally rejects `http://localhost`; local authentication can be disabled or
+configured manually without changing the production audience.
+
+An MCP application's client ID is client-side configuration and is not read from the server's
+`.env`. `OCR_Auth__ClientId` belongs to the Web UI SPA. MCP clients either obtain their own ID
+through DCR or use a separately registered public client whose callback URI matches that MCP
+application.
+
 `python3 scripts/auth0-token.py` performs device authorization through the first-party native client
 and prints only the user access token to stdout. The configured API policy gives these user tokens a
 24-hour lifetime. Use command substitution and do not persist the token.
@@ -136,11 +164,13 @@ Generate a named static credential with `python3 scripts/api-key-create.py Profe
 prints the raw key once and stores only its SHA-256 hash as
 `OCR_Auth__ApiKeys__Professor`; clients send the raw value in `X-API-Key`. Raw API keys and Auth0
 Management API tokens must never be put in `.env`, committed, logged, or included in screenshots.
+Generating a key updates the local `.env` only. Run `scripts/azure-deploy.sh --skip-build` to
+publish the new hash through Container Apps configuration before using that key against production.
 
 The Auth0 tenant and production settings are configured, and the deployed protection was verified
-with interactive Web login, anonymous rejection, OAuth metadata, and named
-API-key REST/MCP access. Microsoft Entra is historical only: it was abandoned after the DAENET
-tenant denied the project identity permission to create app registrations.
+with interactive Web and MCP login, anonymous rejection, OAuth metadata, and named API-key
+REST/MCP access. Microsoft Entra is historical only: it was abandoned after the DAENET tenant
+denied the project identity permission to create app registrations.
 
 Docker Compose passes `.env` to both roles. It explicitly maps the worker's course settings because
 the worker uses `MyConfig__StorageConnectionString`, while the serving role uses

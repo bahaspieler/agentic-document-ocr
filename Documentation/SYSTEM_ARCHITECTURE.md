@@ -11,8 +11,9 @@ pipelines.
 The deployed system has two runtime boundaries:
 
 - `ca-ocr-agent` serves the React application, REST API, SSE streams, and stateless MCP endpoint.
-- `ca-ocr-worker` has no ingress. It polls Azure Queue through the unchanged course host and handles
-  single-image agent jobs plus deterministic bulk parent/child orchestration.
+- `ca-ocr-worker` has no ingress. It polls Azure Queue through the course host and handles
+  single-image agent jobs, deterministic bulk parent/child orchestration, and poison-message
+  handling.
 
 Both Container Apps use one image from Azure Container Registry. They have different entry roles
 and persistence settings.
@@ -300,8 +301,15 @@ Protected Resource Metadata remain public so clients can begin authentication.
 The Auth0 API audience must equal the canonical `ResourceUri`. Protected-resource metadata
 advertises that URI, Auth0's authorization server, and `access:ocr`; the Auth0 tenant uses the
 Resource Parameter Compatibility Profile for MCP RFC 8707 requests. Strict open DCR plus a default
-third-party user grant lets provider-neutral clients such as Cursor, Claude, and Copilot-compatible
-clients register automatically.
+third-party user grant lets provider-neutral clients attempt automatic registration. A fixed public
+OAuth client ID is also supported for clients that need a predictable callback registration; it is
+an identifier rather than a secret.
+
+Some MCP clients omit the API audience or resolve authorization-server metadata against the
+protected-resource origin. Compatibility metadata on that origin advertises a local authorization
+endpoint. That endpoint preserves callback, state, PKCE challenge, and scope, adds the configured
+Auth0 audience and RFC 8707 resource, and redirects to Auth0 without receiving user credentials or
+tokens.
 
 The React application gates the workspace on Auth0 Universal Login, with database, Google, and
 GitHub connections. API calls, SSE requests, uploads, artifact previews, downloads, and receipt
@@ -315,8 +323,8 @@ Auth0 API policy issues these user access tokens for 24 hours. `scripts/api-key-
 raw static key once and persists only its SHA-256 hash. Raw API keys and short-lived
 `AUTH0_MANAGEMENT_API_TOKEN` values must never be committed.
 
-The deployed Auth0 implementation has been verified through interactive Web login, anonymous
-rejection, OAuth discovery, and authenticated API-key REST/MCP workflows.
+The deployed Auth0 implementation has been verified through interactive Web and MCP login,
+anonymous rejection, OAuth discovery, and authenticated API-key REST/MCP workflows.
 Microsoft Entra was abandoned after the DAENET tenant denied the project identity app-registration
 permissions; it is retained only as factual project history, not as current architecture.
 
@@ -338,8 +346,9 @@ Azure Key Vault.
 
 ### MCP workflow
 
-1. The MCP client authenticates through automatic Auth0 OAuth DCR or `X-API-Key`, then initializes
-   and receives server instructions, prompts, and typed tools.
+1. The MCP client authenticates through Auth0 OAuth using DCR or its own public client ID, or sends
+   a named `X-API-Key`; it then initializes and receives server instructions, prompts, and typed
+   tools.
 2. The client's model calls `RunWorkflow` with an existing Blob reference.
 3. The server executes the workflow in-process and reports step progress.
 4. The workflow writes scoped Blob artifacts and one Azure Table run record.
@@ -362,14 +371,16 @@ Azure Key Vault.
 The architecture orchestrates pretrained U2NETP, Tesseract, language-model, and classical
 image-processing components. It is not a model-training or fine-tuning pipeline. CORD supplies
 1,000 CC BY 4.0 receipt images as an evaluation and robustness corpus, not learning artifacts.
-`cord-smoke` is a small integration subset; the full 1,000-image corpus is an optional benchmark.
-The project therefore does not claim PR20 training compliance. Reproducible bulk queue, Blob,
-Table, retry, throughput, OCR, and extraction evidence is the relevant evaluation. A deployed
-two-image smoke batch verified planning, fan-out, execution, and result persistence; the full CORD
-benchmark and dataset-level metrics remain pending.
+`cord-smoke` is a configurable integration subset (10 images by default); the full 1,000-image
+corpus is an optional benchmark. The project therefore does not claim PR20 training compliance.
+Reproducible bulk queue, Blob, Table, retry, throughput, OCR, and extraction evidence is the
+relevant evaluation. A separately trimmed deployed two-image batch verified planning, fan-out,
+execution, and result persistence; the full CORD benchmark and dataset-level metrics remain
+pending.
 
 The Web UI remains scoped to single-image processing and conversations. Bulk orchestration is
-queue-only because the professor specifically requested queue-worker bulk processing.
+queue-only so fan-out, retries, idempotency, and durable item status remain asynchronous worker
+concerns.
 
 ## Project boundaries
 
@@ -399,8 +410,10 @@ UnitTests/           Backend unit and integration tests
 scripts/             Deployment, lifecycle, and verification
 ```
 
-`MyCloudProject` and `MyCloudProject.Common` remain unchanged to preserve the course template.
-Cloud-specific queue behavior is implemented in `MyExperiment`.
+`MyCloudProject` remains recognizable as the course polling host but now enforces configured retry
+and poison-message behavior. `MyCloudProject.Common` retains the course contracts with complete XML
+documentation. Cloud-specific queue storage, single/bulk dispatch, and result behavior is
+implemented in `MyExperiment`.
 
 ## Deliberate exclusions
 

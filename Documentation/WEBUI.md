@@ -1,7 +1,7 @@
 # Web UI and REST API
 
-Phase 7 serves a React, Vite, and TypeScript single-page application from the same ASP.NET process
-and origin as `/api/*` and MCP. No CORS setup or second hosting product is required.
+The React, Vite, and TypeScript single-page application is served from the same ASP.NET process and
+origin as `/api/*` and MCP. No CORS setup or second hosting product is required.
 
 ## UI
 
@@ -17,7 +17,7 @@ and origin as `/api/*` and MCP. No CORS setup or second hosting product is requi
 - optimistic receipt correction with immutable revision history and corrected JSON/CSV exports.
 
 The Web UI intentionally remains a single-image and conversation surface. Bulk dataset processing
-is queue-only because the professor specifically requested it through the queue worker.
+is queue-only so fan-out, retries, idempotency, and durable item status remain worker concerns.
 
 For local frontend work, use Node 20:
 
@@ -26,6 +26,10 @@ cd web
 npm ci
 npm run dev
 ```
+
+The current Vite configuration has no `/api` development proxy, so this command is for isolated
+frontend work. Use `docker compose up --build` when the UI must call the ASP.NET API on the same
+origin.
 
 The production Docker build runs `npm run build` and copies `web/dist` into the host's `wwwroot`.
 
@@ -37,6 +41,7 @@ The production Docker build runs `npm run build` and copies `web/dist` into the 
 | `POST /api/images` | Multipart image upload |
 | `GET /api/workflows` | Workflow catalogue |
 | `POST /api/jobs` | Direct tool or workflow run |
+| `POST /api/jobs/stream` | Direct workflow execution with SSE progress events |
 | `GET /api/runs[/{id}]` | Azure Table run history |
 | `GET /api/runs/{id}/artifacts[/{name}]` | List, preview, or download any run artifact |
 | `GET /api/artifacts/{reference}` | Stream a self-describing image reference |
@@ -45,6 +50,11 @@ The production Docker build runs `npm run build` and copies `web/dist` into the 
 | `GET /api/receipts/{id}/revisions` | Immutable correction history |
 | `GET /api/receipts/{id}/corrected.{json,csv}` | Corrected exports |
 | `/api/conversations/*` | Conversation CRUD, claim, history, and SSE turns |
+
+When authentication is enabled, every `/api` route except `GET /api/config` requires either a
+bearer JWT carrying `access:ocr` or a named `X-API-Key`. The claim endpoint is available for an
+explicit migration client, but the shipped Web UI does not call it or merge anonymous local history
+after sign-in.
 
 The message endpoint uses `text/event-stream` with `token`, `tool`, `step`, `run`, `artifact`,
 `done`, and `error` events. Completed activity, exact run ids, and attachment references are stored
@@ -81,6 +91,11 @@ access token afterward.
    Profile for provider-neutral MCP clients; and
 5. public domain, client, audience, scope, resource URI, and device-client identifiers in the
    gitignored `.env`.
+
+The serving host also publishes MCP authorization-server compatibility metadata. Its authorization
+redirect supplies the configured audience/resource when a client omits them and then delegates
+login to Auth0. A fixed MCP OAuth client ID is public client-side configuration and is separate from
+the SPA client ID returned by `/api/config`.
 
 Promote the Auth0 database, Google, and GitHub connections to the tenant domain so Universal Login
 offers all three. The setup command consumes a short-lived `AUTH0_MANAGEMENT_API_TOKEN`; that token

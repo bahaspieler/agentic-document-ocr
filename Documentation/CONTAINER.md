@@ -22,12 +22,13 @@ output is copied into `/app/mcp/wwwroot` after the .NET publish.
 ```bash
 docker run -p 5290:8080 --env-file .env ocr-agent               # Web UI + REST + MCP, the default
 docker run --rm --env-file .env ocr-agent cli runs list         # any CLI command
-docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 CTR001
+docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 RCPT001
 docker run --rm --env-file .env ocr-agent worker                # course queue loop
 ```
 
 `entrypoint.sh` reads the first argument and passes the rest through, with `CMD ["mcp"]` making the
-server the default. `worker` starts the unchanged `MyCloudProject` polling host.
+server the default. `worker` starts the course `MyCloudProject` polling host, including configured
+retry and poison-message handling.
 
 Docker Compose builds the same Dockerfile and tags the shared image `ocr-agent:local`. The default
 service starts only the serving role:
@@ -132,7 +133,7 @@ image exists. To check an image you were handed:
 
 ```bash
 docker run --rm ocr-agent cli list-tools | grep -E "RunOcr|ScoreOcrResult"
-docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 CTR001
+docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 RCPT001
 ```
 
 The first proves Tesseract loaded, since those two tools are registered only when it does. The second
@@ -141,8 +142,8 @@ proves it works, as long as the OCR text in the result is real text rather than 
 Registering a new image needs the file visible inside the container, so mount the directory:
 
 ```bash
-docker run --rm --env-file .env -v "$PWD/samples:/samples:ro" \
-    ocr-agent cli register /samples/receipt-1.jpg CTR001
+docker run --rm --env-file .env -v "$PWD/SampleFiles/images:/samples:ro" \
+    ocr-agent cli register /samples/RCPT001.png RCPT001
 ```
 
 For the server role, `scripts/verify-blob-store.py` runs against the container unchanged, given an

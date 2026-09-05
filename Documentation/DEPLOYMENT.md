@@ -81,8 +81,14 @@ The canonical `--app-url`, including its trailing slash, becomes both the Auth0 
 `OCR_Auth__ResourceUri`. Their equality is required for MCP RFC 8707 compatibility. The helper
 creates or updates an RS256 API with `access:ocr`, a public SPA, a first-party native device-flow
 client with a 24-hour API access-token policy, strict open DCR with a default third-party user
-grant, and Auth0's Resource Parameter Compatibility Profile. Provider-neutral clients such as
-Cursor, Claude, and Copilot-compatible clients can then perform automatic OAuth DCR.
+grant, and Auth0's Resource Parameter Compatibility Profile. Provider-neutral clients may use DCR;
+clients that require predictable callback registration can instead use their own public static
+OAuth client ID without a client secret.
+
+The serving host publishes protected-resource and authorization-server compatibility metadata.
+Its public `/oauth/authorize` endpoint preserves OAuth state, callback, PKCE challenge, and scope,
+adds the configured API audience and resource when omitted, and redirects to Auth0. It never handles
+user credentials or OAuth tokens.
 
 Promote the Auth0 database, Google, and GitHub connections to the tenant domain so Universal Login
 can offer them. The script writes only public runtime identifiers to the gitignored `.env`. The raw
@@ -159,9 +165,9 @@ python3 scripts/verify-webui.py https://<container-app-hostname>
 The generator stores only the SHA-256 hash as `OCR_Auth__ApiKeys__Professor`; requests carry the
 raw value in `X-API-Key`. Raw API keys must never be committed or placed in `.env`.
 
-The Auth0 deployment was verified. The healthy active revision rejected
-anonymous access, returned JSON protected-resource metadata, accepted interactive Web login and a
-named API key, and passed REST, SSE, MCP, OCR, Blob, Table, and SQL assertions.
+The Auth0 deployment was verified. The healthy active revision rejected anonymous access, returned
+JSON OAuth metadata, accepted interactive Web and MCP login and a named API key, and passed REST,
+SSE, MCP, OCR, Blob, Table, and SQL assertions.
 
 The script uploads the file to Blob twice, as `DEPLOY01.<extension>` and `DEPLOY02.<extension>`, drives
 [verify-blob-store.py](../scripts/verify-blob-store.py) against the deployed HTTPS URL, then lists
@@ -228,9 +234,10 @@ Blob prefixes, source and poison queues, and worker logs when collecting evaluat
 
 CORD contains 1,000 receipt images under CC BY 4.0. Use a small `cord-smoke` subset for quick
 integration checks and the full corpus only as an optional reproducible inference benchmark. CORD
-is not training data for this project. A deployed two-image smoke batch completed with two
-successful children and background-removal artifacts for both inputs. This verifies deployment
-wiring, not the unexecuted full CORD benchmark.
+is not training data for this project. The preparation script defaults to 10 smoke images. A
+separately trimmed deployed two-image batch completed with two successful children and
+background-removal artifacts for both inputs. This verifies deployment wiring, not the generated
+smoke package or the unexecuted full CORD benchmark.
 
 ## Local Compose
 
