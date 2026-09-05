@@ -119,7 +119,7 @@ internal static class Program
             Resource = auth.ResourceUri,
             AuthorizationServers = { auth.AuthorizationServer },
             ScopesSupported = [auth.ScopeName],
-            ResourceName = "Hidden Layer OCR Agent",
+            ResourceName = "Agentic Document OCR Agent",
         };
 
         // RFC 9728 inserts a protected resource's path after the well-known name. Keep the
@@ -249,7 +249,7 @@ internal static class Program
                 Resource = resourceUri.AbsoluteUri,
                 AuthorizationServers = { auth.AuthorizationServer },
                 ScopesSupported = [auth.ScopeName],
-                ResourceName = "Hidden Layer OCR Agent",
+                ResourceName = "Agentic Document OCR Agent",
             };
         });
 

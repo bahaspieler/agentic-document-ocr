@@ -23,11 +23,11 @@ output is copied into `/app/mcp/wwwroot` after the .NET publish.
 docker run -p 5290:8080 --env-file .env ocr-agent               # Web UI + REST + MCP, the default
 docker run --rm --env-file .env ocr-agent cli runs list         # any CLI command
 docker run --rm --env-file .env ocr-agent cli workflow receipt_extract_v3 RCPT001
-docker run --rm --env-file .env ocr-agent worker                # course queue loop
+docker run --rm --env-file .env ocr-agent worker                # worker queue loop
 ```
 
 `entrypoint.sh` reads the first argument and passes the rest through, with `CMD ["mcp"]` making the
-server the default. `worker` starts the course `MyCloudProject` polling host, including configured
+server the default. `worker` starts the worker `OcrAgent.Worker` polling host, including configured
 retry and poison-message handling.
 
 Docker Compose builds the same Dockerfile and tags the shared image `ocr-agent:local`. The default

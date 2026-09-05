@@ -24,14 +24,14 @@ services:
       - .env
     command: ["worker"]
     environment:
-      MyConfig__StorageConnectionString: "${COURSE_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
-      MyConfig__TrainingContainer: "${MyConfig__TrainingContainer:-training-files}"
-      MyConfig__ResultContainer: "${MyConfig__ResultContainer:-result-files}"
-      MyConfig__ResultTable: "${MyConfig__ResultTable:-results}"
-      MyConfig__Queue: "${MyConfig__Queue:-trigger-queue}"
-      MyConfig__GroupId: "${MyConfig__GroupId:-HiddenLayer}"
-      MyConfig__WorkRoot: "/var/ocr/worker"
-      MyConfig__MessageVisibilityTimeoutSeconds: "${MyConfig__MessageVisibilityTimeoutSeconds:-900}"
-      MyConfig__EnsureStorageResources: "true"
+      WorkerOptions__StorageConnectionString: "${WORKER_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
+      WorkerOptions__TrainingContainer: "${WorkerOptions__TrainingContainer:-training-files}"
+      WorkerOptions__ResultContainer: "${WorkerOptions__ResultContainer:-result-files}"
+      WorkerOptions__ResultTable: "${WorkerOptions__ResultTable:-results}"
+      WorkerOptions__Queue: "${WorkerOptions__Queue:-trigger-queue}"
+      WorkerOptions__GroupId: "${WorkerOptions__GroupId:-AgenticDocumentOcr}"
+      WorkerOptions__WorkRoot: "/var/ocr/worker"
+      WorkerOptions__MessageVisibilityTimeoutSeconds: "${WorkerOptions__MessageVisibilityTimeoutSeconds:-900}"
+      WorkerOptions__EnsureStorageResources: "true"
       OCR_Storage__Provider: "local"
       OCR_Runs__Provider: "none"

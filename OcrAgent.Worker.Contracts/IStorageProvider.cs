@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MyCloudProject.Common
+namespace OcrAgent.Worker.Contracts
 {
     /// <summary>
     /// Defines the contract for all storage operations.
@@ -16,7 +16,7 @@ namespace MyCloudProject.Common
         /// </summary>
         /// <param name="token"></param>
         /// <returns>NULL if there are no messages in the queue.</returns>
-        IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token);
+        IExperimentRequest ReceiveExperimentRequestAsync(CancellationToken token);
 
         /// <summary>
         /// Downloads the input file for training. This file contains all required input for the experiment.
@@ -40,7 +40,7 @@ namespace MyCloudProject.Common
         /// </summary>
         /// <param name="request">The request received by <see cref="ReceiveExperimentRequestAsync"/>.</param>
         /// <returns></returns>
-        Task CommitRequestAsync(IExerimentRequest request);
+        Task CommitRequestAsync(IExperimentRequest request);
 
     }
 }

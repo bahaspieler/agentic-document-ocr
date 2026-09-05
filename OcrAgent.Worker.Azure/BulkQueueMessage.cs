@@ -1,4 +1,4 @@
-namespace MyExperiment;
+namespace OcrAgent.Worker.Azure;
 
 /// <summary>Internal queue message for one deterministic child of a bulk request.</summary>
 public sealed class BulkQueueMessage

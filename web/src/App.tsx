@@ -173,7 +173,7 @@ function App({ config }: { config: RuntimeConfig }) {
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
-      <div className="brand"><div className="brand-mark"><Sparkles size={19} /></div><div className="brand-copy"><strong>Hidden Layer</strong><span>OCR Studio</span></div><button aria-label="Collapse sidebar" className="icon-button collapse-button" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={18} /></button></div>
+      <div className="brand"><div className="brand-mark"><Sparkles size={19} /></div><div className="brand-copy"><strong>Agentic Document OCR</strong><span>OCR Studio</span></div><button aria-label="Collapse sidebar" className="icon-button collapse-button" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={18} /></button></div>
       <button className="new-chat" onClick={() => { setView('chat'); void createConversation() }}><Plus size={17} /> New conversation</button>
       <nav className="main-nav" aria-label="Main navigation">
         <button className={view === 'chat' ? 'active' : ''} onClick={() => setView('chat')}><MessageSquareText size={18} /> Agent chat</button>

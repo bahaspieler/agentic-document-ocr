@@ -78,7 +78,7 @@ alone. No secondary index, no partition scan. `PartitionKey` is the configured `
 | `ArgumentsJson` | Arguments minus the image reference |
 | `TraceJson` | Per-step trace; workflows only |
 
-Timing and identity use the names from the course template's `IExperimentResult`, so the queue-driven
+Timing and identity use the names from the worker contract's `IExperimentResult`, so the queue-driven
 path can write this same shape later instead of a second table. Long strings are truncated before
 write, since Table Storage caps a string property at 64 KiB and an entity at 1 MiB.
 

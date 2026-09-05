@@ -2,16 +2,16 @@
 
 ## Scope
 
-The cloud project keeps the image-processing engine built during the Software Engineering course
+The cloud project keeps the image-processing engine built during the terminal-based first generation
 and adds remote access, durable state, cloud storage, and asynchronous execution. The same
-`OcrAgent` assembly serves the console, the ASP.NET host, and the course queue worker. Entry points
+`OcrAgent` assembly serves the console, the ASP.NET host, and the queue worker. Entry points
 adapt their transport contracts to that engine instead of implementing separate processing
 pipelines.
 
 The deployed system has two runtime boundaries:
 
 - `ca-ocr-agent` serves the React application, REST API, SSE streams, and stateless MCP endpoint.
-- `ca-ocr-worker` has no ingress. It polls Azure Queue through the course host and handles
+- `ca-ocr-worker` has no ingress. It polls Azure Queue through the worker host and handles
   single-image agent jobs, deterministic bulk parent/child orchestration, and poison-message
   handling.
 
@@ -23,7 +23,7 @@ and persistence settings.
 The solution targets .NET 10. The Docker image is built for `linux/amd64` on
 `mcr.microsoft.com/dotnet/aspnet:10.0`. The image includes:
 
-- the published `OcrAgent.Mcp`, `OcrAgent`, and `MyCloudProject` applications;
+- the published `OcrAgent.Mcp`, `OcrAgent`, and `OcrAgent.Worker` applications;
 - the compiled React, Vite, and TypeScript application;
 - workflow definitions, Tesseract language data, and the U2NETP ONNX model;
 - OpenCV, ONNX Runtime, Tesseract 5, and Leptonica native dependencies.
@@ -32,18 +32,18 @@ The solution targets .NET 10. The Docker image is built for `linux/amd64` on
 
 - `mcp` starts `OcrAgent.Mcp.dll` and is the image default;
 - `cli` starts `OcrAgent.dll` with the remaining command-line arguments;
-- `worker` starts `MyCloudProject.dll`.
+- `worker` starts `OcrAgent.Worker.dll`.
 
 The serving app exposes port 8080 through HTTPS ingress. It keeps at least one replica active for
-the submitted Web UI and permits up to three by default. MCP request state is not stored in a
+the serving Web UI and permits up to three by default. MCP request state is not stored in a
 replica, and REST conversation state lives in SQL, so no session affinity is needed.
 
 The worker runs separately with no ingress and one replica. Its engine writes temporary files under
-`/var/ocr`; `MyExperiment.AzureStorageProvider` publishes final results to the course storage
+`/var/ocr`; `OcrAgent.Worker.Azure.AzureStorageProvider` publishes final results to the worker storage
 account.
 
 Azure Container Apps, the registry, and Azure SQL are placed in Germany West Central beside the
-storage account. The existing `RG_Hidden_Layer` resource group remains an administrative boundary,
+storage account. The existing `rg-agentic-document-ocr` resource group remains an administrative boundary,
 not a location choice. Deployment scripts never create or delete that group.
 
 ## Entry paths and responsibility
@@ -85,8 +85,8 @@ model.
 
 ### Queue worker
 
-The queue path follows the contracts in `MyCloudProject.Common`. `MyCloudProject` owns the polling
-loop and calls the implementations supplied by `MyExperiment`.
+The queue path follows the contracts in `OcrAgent.Worker.Contracts`. `OcrAgent.Worker` owns the polling
+loop and calls the implementations supplied by `OcrAgent.Worker.Azure`.
 
 A queue message is plain text, for example:
 
@@ -252,7 +252,7 @@ counterparts keep SQL optional for local engine use.
 The original extraction remains in `RawJson`. A correction writes `CurrentJson`, updates line
 items, increments the current revision, and inserts an audit row in one transaction.
 
-### Course storage
+### Worker storage
 
 The worker's result path is separate from the serving run store:
 
@@ -262,7 +262,7 @@ The worker's result path is separate from the serving run store:
 - published child artifacts go to `result-files/<groupId>/<itemId>/`;
 - parent batch and child item `ExperimentResult` rows go to the `results` Table.
 
-The worker disables `AzureTableRunStore`. Its course result row is not an `OcrRuns` row, and it does
+The worker disables `AzureTableRunStore`. Its worker result row is not an `OcrRuns` row, and it does
 not persist Web UI conversations or receipts to SQL.
 
 Bulk dispatch rejects an empty dataset or one above the configured cap, which defaults to 2,000
@@ -356,7 +356,7 @@ Azure Key Vault.
 
 ### Queue command
 
-1. `MyCloudProject` receives one plain-language queue message.
+1. `OcrAgent.Worker` receives one plain-language queue message.
 2. `AzureStorageProvider` retains its message ID and pop receipt.
 3. A single-image command resolves one source and runs a one-shot agent.
 4. A bulk parent resolves one dataset, persists one validated AI-selected `PlanJson`, and fans out
@@ -403,17 +403,17 @@ OcrAgent.Mcp/
   OcrAgentToolHost.cs
 
 web/                 React, Vite, and TypeScript SPA
-MyCloudProject/      Unchanged course polling host
-MyCloudProject.Common/
-MyExperiment/        Course storage provider and experiment adapter
+OcrAgent.Worker/      Queue polling host
+OcrAgent.Worker.Contracts/
+OcrAgent.Worker.Azure/        Worker storage provider and experiment adapter
 UnitTests/           Backend unit and integration tests
 scripts/             Deployment, lifecycle, and verification
 ```
 
-`MyCloudProject` remains recognizable as the course polling host but now enforces configured retry
-and poison-message behavior. `MyCloudProject.Common` retains the course contracts with complete XML
+`OcrAgent.Worker` remains recognizable as the queue polling host but now enforces configured retry
+and poison-message behavior. `OcrAgent.Worker.Contracts` retains the worker contracts with complete XML
 documentation. Cloud-specific queue storage, single/bulk dispatch, and result behavior is
-implemented in `MyExperiment`.
+implemented in `OcrAgent.Worker.Azure`.
 
 ## Deliberate exclusions
 
@@ -421,5 +421,5 @@ The current system does not implement receipt embeddings, vector similarity, dup
 or an MCP receipt-query tool. It also does not use Key Vault, GPU inference, or a learned receipt
 extraction model. These are possible follow-up tasks, not current architecture.
 
-The previous `SE_Course_SYSTEM_ARCHITECTURE.md` describes the console-era engine. This document is
-the canonical architecture for the cloud project.
+The Git history preserves the earlier terminal-agent architecture. This document describes the
+current cloud-native system.

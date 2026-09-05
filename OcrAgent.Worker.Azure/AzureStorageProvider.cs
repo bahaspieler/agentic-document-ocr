@@ -5,7 +5,7 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Configuration;
-using MyCloudProject.Common;
+using OcrAgent.Worker.Contracts;
 using System;
 using System.IO;
 using System.Linq;
@@ -13,7 +13,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MyExperiment
+namespace OcrAgent.Worker.Azure
 {
     /// <summary>Implements queue, Blob, and Table operations for the OCR worker.</summary>
     public class AzureStorageProvider : IStorageProvider, IQueueCommandStorage
@@ -23,17 +23,17 @@ namespace MyExperiment
         private static readonly JsonSerializerOptions JsonOptions =
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-        private readonly MyConfig _config;
+        private readonly WorkerOptions _config;
         private readonly QueueClient _queue;
         private readonly BlobContainerClient _training;
         private readonly BlobContainerClient _results;
         private readonly TableClient _table;
 
         /// <summary>Creates clients for the configured queue, Blob containers, and result table.</summary>
-        /// <param name="configSection">The MyConfig configuration section.</param>
+        /// <param name="configSection">The WorkerOptions configuration section.</param>
         public AzureStorageProvider(IConfigurationSection configSection)
         {
-            _config = new MyConfig();
+            _config = new WorkerOptions();
             configSection.Bind(_config);
             ValidateConfiguration();
 
@@ -59,7 +59,7 @@ namespace MyExperiment
         /// <summary>Deletes a queue message after its result has been stored.</summary>
         /// <param name="request">Request containing the current message id and pop receipt.</param>
         /// <remarks>Call this only after <see cref="UploadResultAsync"/> succeeds.</remarks>
-        public async Task CommitRequestAsync(IExerimentRequest request)
+        public async Task CommitRequestAsync(IExperimentRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
             if (string.IsNullOrWhiteSpace(request.MessageId) ||
@@ -94,7 +94,7 @@ namespace MyExperiment
         /// <summary>Receives one queue message and converts its body into a worker request.</summary>
         /// <param name="token">Stops the queue receive operation.</param>
         /// <returns>The received request, or null when the queue is empty.</returns>
-        public IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token)
+        public IExperimentRequest ReceiveExperimentRequestAsync(CancellationToken token)
         {
             var response = _queue.ReceiveMessages(
                 maxMessages: 1,
@@ -122,7 +122,7 @@ namespace MyExperiment
                 PlanJson = bulkItem?.PlanJson ?? ""
             }, JsonOptions);
 
-            return new ExerimentRequestMessage
+            return new ExperimentRequestMessage
             {
                 ExperimentId = message.MessageId,
                 InputFile = InlineCommandPrefix + Convert.ToBase64String(
@@ -268,7 +268,7 @@ namespace MyExperiment
 
         /// <inheritdoc />
         public async Task MoveToPoisonAsync(
-            ExerimentRequestMessage request,
+            ExperimentRequestMessage request,
             string error)
         {
             ArgumentNullException.ThrowIfNull(request);
@@ -297,7 +297,7 @@ namespace MyExperiment
 
         #region Result Persistence
 
-        /// <summary>Uploads a result using the course experiment category.</summary>
+        /// <summary>Uploads a result using the worker experiment category.</summary>
         public Task UploadExperimentResult(IExperimentResult result)
         {
             return UploadResultAsync("experiment", result);
@@ -354,14 +354,14 @@ namespace MyExperiment
         private void ValidateConfiguration()
         {
             if (string.IsNullOrWhiteSpace(_config.StorageConnectionString))
-                throw new InvalidOperationException("MyConfig:StorageConnectionString is required.");
+                throw new InvalidOperationException("WorkerOptions:StorageConnectionString is required.");
             if (string.IsNullOrWhiteSpace(_config.Queue) ||
                 string.IsNullOrWhiteSpace(_config.TrainingContainer) ||
                 string.IsNullOrWhiteSpace(_config.ResultContainer) ||
                 string.IsNullOrWhiteSpace(_config.ResultTable) ||
                 string.IsNullOrWhiteSpace(_config.GroupId))
                 throw new InvalidOperationException(
-                    "MyConfig queue, containers, result table, and group id are required.");
+                    "WorkerOptions queue, containers, result table, and group id are required.");
         }
 
         private static string DecodeMessage(string raw)

@@ -1,4 +1,4 @@
-namespace MyExperiment;
+namespace OcrAgent.Worker.Azure;
 
 /// <summary>Provides queue-specific Blob, Queue, and Table operations to the worker.</summary>
 public interface IQueueCommandStorage
@@ -35,5 +35,5 @@ public interface IQueueCommandStorage
     /// <summary>Moves a repeatedly failing message to the configured poison queue.</summary>
     /// <param name="request">Received message metadata and content.</param>
     /// <param name="error">Terminal failure detail.</param>
-    Task MoveToPoisonAsync(ExerimentRequestMessage request, string error);
+    Task MoveToPoisonAsync(ExperimentRequestMessage request, string error);
 }

@@ -1,4 +1,4 @@
-namespace MyExperiment;
+namespace OcrAgent.Worker.Azure;
 
 /// <summary>Local worker input materialized from one received queue message.</summary>
 public sealed class QueueCommandInput

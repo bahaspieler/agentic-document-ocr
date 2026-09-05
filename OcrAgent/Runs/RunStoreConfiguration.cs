@@ -23,7 +23,7 @@ public sealed class RunStoreConfiguration
 
     /// <summary>Partition key for every record this deployment writes.</summary>
     [Required]
-    public string GroupId { get; set; } = "HiddenLayer";
+    public string GroupId { get; set; } = "AgenticDocumentOcr";
 
     /// <summary>Creates the table on first use when it does not exist.</summary>
     public bool CreateTableIfNotExists { get; set; } = true;

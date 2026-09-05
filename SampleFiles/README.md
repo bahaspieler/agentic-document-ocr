@@ -1,7 +1,7 @@
 # Reproducible Sample Files
 
 `images/RCPT001.png` is the receipt used by the queue-worker verifier. The image is copied from the
-team's earlier Software Engineering project so the cloud experiment no longer depends on a sibling
+team's earlier terminal-agent generation so the cloud experiment no longer depends on a sibling
 folder.
 
 `queue/remove-background.txt` and `queue/extract-receipt.txt` contain the exact plain-text message

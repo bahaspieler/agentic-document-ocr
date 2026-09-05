@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MyExperiment;
+namespace OcrAgent.Worker.Azure;
 
 /// <summary>Recognizes bulk intent and maps a command to an available dataset folder.</summary>
 public static partial class BulkCommandParser

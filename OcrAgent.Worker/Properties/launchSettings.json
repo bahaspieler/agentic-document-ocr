@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "MyCloudProject": {
+    "OcrAgent.Worker": {
       "commandName": "Project",
       "environmentVariables": {
         "ENVVAR1xxx": "1111"

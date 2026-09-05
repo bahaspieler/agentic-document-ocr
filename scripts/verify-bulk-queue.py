@@ -54,22 +54,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-id", help="batch RowKey; defaults to the most recent batch")
     parser.add_argument(
         "--table",
-        default=os.getenv("MyConfig__ResultTable", os.getenv("COURSE_RESULT_TABLE", "results")),
+        default=os.getenv("WorkerOptions__ResultTable", os.getenv("WORKER_RESULT_TABLE", "results")),
     )
     parser.add_argument(
         "--group",
-        default=os.getenv("MyConfig__GroupId", os.getenv("COURSE_GROUP_ID", "HiddenLayer")),
+        default=os.getenv("WorkerOptions__GroupId", os.getenv("WORKER_GROUP_ID", "AgenticDocumentOcr")),
     )
     parser.add_argument(
         "--training-container",
         default=os.getenv(
-            "MyConfig__TrainingContainer",
-            os.getenv("COURSE_TRAINING_CONTAINER", "training-files"),
+            "WorkerOptions__TrainingContainer",
+            os.getenv("WORKER_TRAINING_CONTAINER", "training-files"),
         ),
     )
     parser.add_argument(
         "--queue",
-        default=os.getenv("MyConfig__Queue", os.getenv("COURSE_QUEUE_NAME", "trigger-queue")),
+        default=os.getenv("WorkerOptions__Queue", os.getenv("WORKER_QUEUE_NAME", "trigger-queue")),
     )
     parser.add_argument("--timeout", type=int, default=900, help="seconds to poll (0 queries once)")
     parser.add_argument("--interval", type=float, default=10, help="poll interval in seconds")
@@ -87,12 +87,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def az(*args: str) -> Any:
-    connection = os.getenv("COURSE_STORAGE_CONNECTION_STRING") or os.getenv(
+    connection = os.getenv("WORKER_STORAGE_CONNECTION_STRING") or os.getenv(
         "AZURE_STORAGE_CONNECTION_STRING"
     )
     if not connection:
         raise SystemExit(
-            "Set COURSE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING "
+            "Set WORKER_STORAGE_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING "
             "(normally in the gitignored .env file)."
         )
     env = os.environ.copy()

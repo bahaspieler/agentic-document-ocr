@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.CompilerServices;
 
-namespace MyCloudProject.Common
+namespace OcrAgent.Worker.Contracts
 {
     /// <summary>Builds shared configuration and logging services for the worker host.</summary>
     public static class InitHelpers

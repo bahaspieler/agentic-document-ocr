@@ -15,7 +15,7 @@ public sealed class AuthConfigurationTests
     public void Validate_EnabledConfiguration_RejectsDomainWithScheme()
     {
         var configuration = ValidConfiguration();
-        configuration.Domain = "https://hidden-layer.eu.auth0.com";
+        configuration.Domain = "https://agentic-document-ocr.eu.auth0.com";
 
         var error = Assert.ThrowsExactly<InvalidOperationException>(configuration.Validate);
 
@@ -63,14 +63,14 @@ public sealed class AuthConfigurationTests
         configuration.Validate();
 
         Assert.AreEqual(
-            "https://hidden-layer.eu.auth0.com/",
+            "https://agentic-document-ocr.eu.auth0.com/",
             configuration.AuthorizationServer);
     }
 
     private static AuthConfiguration ValidConfiguration() => new()
     {
         Enabled = true,
-        Domain = "hidden-layer.eu.auth0.com",
+        Domain = "agentic-document-ocr.eu.auth0.com",
         ClientId = "public-spa-client-id",
         Audience = "https://ocr.example.test/",
         ScopeName = "access:ocr",

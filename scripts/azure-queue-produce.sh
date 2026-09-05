@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Uploads one image to the course training container and enqueues one or more
+# Uploads one image to the worker training container and enqueues one or more
 # plain-language commands for the queue worker. This is a producer only: it does
 # not deploy the worker or wait for result rows.
 #
@@ -83,12 +83,12 @@ done
 load_env
 apply_azure_defaults
 
-STORAGE_CONNECTION_STRING="${COURSE_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
-TRAINING_CONTAINER="${TRAINING_CONTAINER:-$MyConfig__TrainingContainer}"
-QUEUE_NAME="${QUEUE_NAME:-$MyConfig__Queue}"
+STORAGE_CONNECTION_STRING="${WORKER_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
+TRAINING_CONTAINER="${TRAINING_CONTAINER:-$WorkerOptions__TrainingContainer}"
+QUEUE_NAME="${QUEUE_NAME:-$WorkerOptions__Queue}"
 
 if [ -z "$STORAGE_CONNECTION_STRING" ]; then
-    echo "[ERROR] COURSE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_CONNECTION_STRING are empty." >&2
+    echo "[ERROR] WORKER_STORAGE_CONNECTION_STRING and AZURE_STORAGE_CONNECTION_STRING are empty." >&2
     exit 1
 fi
 if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ] || [ ! -r "$IMAGE_PATH" ]; then

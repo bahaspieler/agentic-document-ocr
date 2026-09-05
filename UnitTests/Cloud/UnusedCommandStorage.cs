@@ -1,5 +1,5 @@
-using MyCloudProject.Common;
-using MyExperiment;
+using OcrAgent.Worker.Contracts;
+using OcrAgent.Worker.Azure;
 
 namespace UnitTests.Cloud;
 
@@ -33,12 +33,12 @@ internal sealed class UnusedCommandStorage : IStorageProvider, IQueueCommandStor
 
     /// <inheritdoc />
     public Task MoveToPoisonAsync(
-        ExerimentRequestMessage request,
+        ExperimentRequestMessage request,
         string error) =>
         throw new NotSupportedException();
 
     /// <inheritdoc />
-    public IExerimentRequest ReceiveExperimentRequestAsync(CancellationToken token) =>
+    public IExperimentRequest ReceiveExperimentRequestAsync(CancellationToken token) =>
         throw new NotSupportedException();
 
     /// <inheritdoc />
@@ -50,6 +50,6 @@ internal sealed class UnusedCommandStorage : IStorageProvider, IQueueCommandStor
         throw new NotSupportedException();
 
     /// <inheritdoc />
-    public Task CommitRequestAsync(IExerimentRequest request) =>
+    public Task CommitRequestAsync(IExperimentRequest request) =>
         throw new NotSupportedException();
 }

@@ -1,9 +1,9 @@
-﻿using MyCloudProject.Common;
+﻿using OcrAgent.Worker.Contracts;
 
-namespace MyExperiment
+namespace OcrAgent.Worker.Azure
 {
     /// <summary>Queue request with the Azure identifiers required for message deletion.</summary>
-    public sealed class ExerimentRequestMessage : IExerimentRequest
+    public sealed class ExperimentRequestMessage : IExperimentRequest
     {
         /// <summary>Gets or sets the experiment identifier assigned from the queue message.</summary>
         public string ExperimentId { get; set; } = "";

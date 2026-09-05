@@ -1,7 +1,7 @@
 # Configuration
 
-How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the queue worker are configured. The course
-host retains its `MyConfig` section alongside the engine's `OCR_*` settings.
+How `OcrAgent` (console), `OcrAgent.Mcp` (server), and the queue worker are configured. The worker
+host uses its `WorkerOptions` section alongside the engine's `OCR_*` settings.
 
 ## Sources, in precedence order
 
@@ -53,23 +53,23 @@ Keys prefixed `OCR_` override `appsettings.json`, with a double underscore per n
 | `OCR_Auth__ApiKeys__Name` | SHA-256 hash of one named static API key; repeat with a distinct `Name` for each credential |
 | `AUTH0_DEVICE_CLIENT_ID` | Public client ID of the first-party native device-flow application used by `auth0-token.py` |
 
-The queue host also reads these unprefixed variables through the course template:
+The queue host also reads these unprefixed variables through the worker contract:
 
 | Key | Purpose |
 |-----|---------|
-| `MyConfig__StorageConnectionString` | Course Queue, training/result Blob containers, and result Table |
-| `MyConfig__GroupId` | Result row partition key |
-| `MyConfig__TrainingContainer` | Source images; bulk datasets use `images/<dataset-name>/` within this container |
-| `MyConfig__ResultContainer` | Graded output artifacts |
-| `MyConfig__ResultTable` | Single-image rows plus bulk parent and child `ExperimentResult` rows |
-| `MyConfig__Queue` | Trigger queue |
-| `MyConfig__WorkRoot` | Writable temporary worker files |
-| `MyConfig__MessageVisibilityTimeoutSeconds` | Queue message processing lease |
-| `MyConfig__MaximumBatchImages` | Maximum images in one bulk dataset (default 2,000) |
-| `MyConfig__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
+| `WorkerOptions__StorageConnectionString` | Worker Queue, training/result Blob containers, and result Table |
+| `WorkerOptions__GroupId` | Result row partition key |
+| `WorkerOptions__TrainingContainer` | Source images; bulk datasets use `images/<dataset-name>/` within this container |
+| `WorkerOptions__ResultContainer` | Graded output artifacts |
+| `WorkerOptions__ResultTable` | Single-image rows plus bulk parent and child `ExperimentResult` rows |
+| `WorkerOptions__Queue` | Trigger queue |
+| `WorkerOptions__WorkRoot` | Writable temporary worker files |
+| `WorkerOptions__MessageVisibilityTimeoutSeconds` | Queue message processing lease |
+| `WorkerOptions__MaximumBatchImages` | Maximum images in one bulk dataset (default 2,000) |
+| `WorkerOptions__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
 
-The deployment helpers accept `COURSE_STORAGE_CONNECTION_STRING` as a worker-only override and
-otherwise reuse `AZURE_STORAGE_CONNECTION_STRING`. Course entity names are independently
+The deployment helpers accept `WORKER_STORAGE_CONNECTION_STRING` as a worker-only override and
+otherwise reuse `AZURE_STORAGE_CONNECTION_STRING`. Worker entity names are independently
 overridable; see [QUEUE_WORKER.md](QUEUE_WORKER.md).
 
 With the default training container, the canonical bulk prefix is
@@ -78,9 +78,9 @@ AI-selected and validated `PlanJson` before deterministic fan-out; child message
 without per-image AI and skip work when their stable item result is already present.
 
 `scripts/azure-queue-produce.sh` uses the same connection-string order and the canonical
-`MyConfig__TrainingContainer` and `MyConfig__Queue` names. Command-line options can override the two
-entity names for one invocation. `verify-queue-worker.py` also reads the `MyConfig__*` names, with
-the older `COURSE_*` entity-name aliases retained as fallbacks.
+`WorkerOptions__TrainingContainer` and `WorkerOptions__Queue` names. Command-line options can override the two
+entity names for one invocation. `verify-queue-worker.py` also reads the `WorkerOptions__*` names, with
+the older `WORKER_*` entity-name aliases retained as fallbacks.
 
 Neither store needs its connection string set explicitly. When `Storage:AzureBlob:ConnectionString`
 or `Runs:ConnectionString` is empty, the factory falls back to `AZURE_STORAGE_CONNECTION_STRING`.
@@ -160,9 +160,9 @@ application.
 and prints only the user access token to stdout. The configured API policy gives these user tokens a
 24-hour lifetime. Use command substitution and do not persist the token.
 
-Generate a named static credential with `python3 scripts/api-key-create.py Professor`. The script
+Generate a named static credential with `python3 scripts/api-key-create.py AutomationClient`. The script
 prints the raw key once and stores only its SHA-256 hash as
-`OCR_Auth__ApiKeys__Professor`; clients send the raw value in `X-API-Key`. Raw API keys and Auth0
+`OCR_Auth__ApiKeys__AutomationClient`; clients send the raw value in `X-API-Key`. Raw API keys and Auth0
 Management API tokens must never be put in `.env`, committed, logged, or included in screenshots.
 Generating a key updates the local `.env` only. Run `scripts/azure-deploy.sh --skip-build` to
 publish the new hash through Container Apps configuration before using that key against production.
@@ -172,6 +172,6 @@ with interactive Web and MCP login, anonymous rejection, OAuth metadata, and nam
 REST/MCP access. Microsoft Entra is historical only: it was abandoned after the DAENET tenant
 denied the project identity permission to create app registrations.
 
-Docker Compose passes `.env` to both roles. It explicitly maps the worker's course settings because
-the worker uses `MyConfig__StorageConnectionString`, while the serving role uses
+Docker Compose passes `.env` to both roles. It explicitly maps the worker's worker settings because
+the worker uses `WorkerOptions__StorageConnectionString`, while the serving role uses
 `AZURE_STORAGE_CONNECTION_STRING`.

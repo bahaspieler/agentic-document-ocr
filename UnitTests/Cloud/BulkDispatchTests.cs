@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using MyCloudProject.Common;
-using MyExperiment;
+using OcrAgent.Worker.Contracts;
+using OcrAgent.Worker.Azure;
 using OcrAgent.Agent;
 
 namespace UnitTests.Cloud;
@@ -18,14 +18,14 @@ public sealed class BulkDispatchTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["MyConfig:GroupId"] = "HiddenLayer",
-                ["MyConfig:MaximumBatchImages"] = "10"
+                ["WorkerOptions:GroupId"] = "AgenticDocumentOcr",
+                ["WorkerOptions:MaximumBatchImages"] = "10"
             })
             .Build();
         var storage = new BulkDispatchStorage();
         var plannerCalls = 0;
         var experiment = new Experiment(
-            configuration.GetSection("MyConfig"),
+            configuration.GetSection("WorkerOptions"),
             storage,
             NullLogger.Instance,
             _ =>

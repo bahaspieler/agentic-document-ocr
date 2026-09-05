@@ -57,33 +57,33 @@ require_az() {
     fi
 }
 
-# Resource names. Overridable from .env; defaults match the team's existing group.
+# Resource names. Every value is overridable from .env.
 apply_azure_defaults() {
     # The MCP server serves every request statelessly, while REST conversation state lives in SQL,
     # so any replica can answer any request.
     : "${AZURE_MAX_REPLICAS:=3}"
-    : "${AZURE_RESOURCE_GROUP:=RG_Hidden_Layer}"
-    : "${AZURE_ACR_NAME:=acrhiddenlayerocr}"
+    : "${AZURE_RESOURCE_GROUP:=rg-agentic-document-ocr}"
+    : "${AZURE_ACR_NAME:=acragenticdococr}"
     : "${AZURE_CONTAINER_APP_NAME:=ca-ocr-agent}"
     : "${AZURE_WORKER_APP_NAME:=ca-ocr-worker}"
     : "${AZURE_CONTAINER_APP_ENV:=cae-ocr-agent}"
     : "${AZURE_IMAGE_NAME:=ocr-agent}"
-    : "${AZURE_SQL_SERVER_NAME:=sql-hidden-layer-ocr}"
+    : "${AZURE_SQL_SERVER_NAME:=sql-agentic-document-ocr}"
     : "${AZURE_SQL_DATABASE_NAME:=ocr-agent}"
     : "${AZURE_SQL_ADMIN_USER:=ocradmin}"
     : "${OCR_Storage__AzureBlob__ContainerName:=ocr-images}"
     # Keep the deployed run store independent from a developer's local OCR_Runs__Provider=none.
     : "${AZURE_OCR_RUNS_PROVIDER:=azuretable}"
     : "${OCR_Runs__TableName:=OcrRuns}"
-    : "${OCR_Runs__GroupId:=HiddenLayer}"
-    : "${MyConfig__TrainingContainer:=training-files}"
-    : "${MyConfig__ResultContainer:=result-files}"
-    : "${MyConfig__ResultTable:=results}"
-    : "${MyConfig__Queue:=trigger-queue}"
-    : "${MyConfig__GroupId:=HiddenLayer}"
-    : "${MyConfig__MessageVisibilityTimeoutSeconds:=900}"
-    : "${MyConfig__MaximumBatchImages:=2000}"
-    : "${MyConfig__MaximumDequeueAttempts:=5}"
+    : "${OCR_Runs__GroupId:=AgenticDocumentOcr}"
+    : "${WorkerOptions__TrainingContainer:=training-files}"
+    : "${WorkerOptions__ResultContainer:=result-files}"
+    : "${WorkerOptions__ResultTable:=results}"
+    : "${WorkerOptions__Queue:=trigger-queue}"
+    : "${WorkerOptions__GroupId:=AgenticDocumentOcr}"
+    : "${WorkerOptions__MessageVisibilityTimeoutSeconds:=900}"
+    : "${WorkerOptions__MaximumBatchImages:=2000}"
+    : "${WorkerOptions__MaximumDequeueAttempts:=5}"
 }
 
 resource_group_location() {
@@ -216,21 +216,21 @@ container_env_vars() {
 }
 
 # The worker intentionally receives no serving-only SQL or authentication settings.
-# Both consumers use the same storage and model secrets, while MyCloudProject binds
-# its course-template settings from the unprefixed MyConfig section.
+# Both consumers use the same storage and model secrets, while OcrAgent.Worker binds
+# its worker-contract settings from the unprefixed WorkerOptions section.
 worker_env_vars() {
     local vars=(
-        "MyConfig__StorageConnectionString=secretref:course-storage-cs"
-        "MyConfig__TrainingContainer=${MyConfig__TrainingContainer}"
-        "MyConfig__ResultContainer=${MyConfig__ResultContainer}"
-        "MyConfig__ResultTable=${MyConfig__ResultTable}"
-        "MyConfig__Queue=${MyConfig__Queue}"
-        "MyConfig__GroupId=${MyConfig__GroupId}"
-        "MyConfig__WorkRoot=/var/ocr/worker"
-        "MyConfig__MessageVisibilityTimeoutSeconds=${MyConfig__MessageVisibilityTimeoutSeconds:-900}"
-        "MyConfig__MaximumBatchImages=${MyConfig__MaximumBatchImages:-2000}"
-        "MyConfig__MaximumDequeueAttempts=${MyConfig__MaximumDequeueAttempts:-5}"
-        "MyConfig__EnsureStorageResources=true"
+        "WorkerOptions__StorageConnectionString=secretref:worker-storage-cs"
+        "WorkerOptions__TrainingContainer=${WorkerOptions__TrainingContainer}"
+        "WorkerOptions__ResultContainer=${WorkerOptions__ResultContainer}"
+        "WorkerOptions__ResultTable=${WorkerOptions__ResultTable}"
+        "WorkerOptions__Queue=${WorkerOptions__Queue}"
+        "WorkerOptions__GroupId=${WorkerOptions__GroupId}"
+        "WorkerOptions__WorkRoot=/var/ocr/worker"
+        "WorkerOptions__MessageVisibilityTimeoutSeconds=${WorkerOptions__MessageVisibilityTimeoutSeconds:-900}"
+        "WorkerOptions__MaximumBatchImages=${WorkerOptions__MaximumBatchImages:-2000}"
+        "WorkerOptions__MaximumDequeueAttempts=${WorkerOptions__MaximumDequeueAttempts:-5}"
+        "WorkerOptions__EnsureStorageResources=true"
         "OCR_Storage__Provider=local"
         "OCR_Runs__Provider=none"
     )

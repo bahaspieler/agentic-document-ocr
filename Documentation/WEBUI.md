@@ -100,7 +100,7 @@ the SPA client ID returned by `/api/config`.
 Promote the Auth0 database, Google, and GitHub connections to the tenant domain so Universal Login
 offers all three. The setup command consumes a short-lived `AUTH0_MANAGEMENT_API_TOKEN`; that token
 and all raw API keys must never be committed or saved in `.env`. Named API-key configuration values
-such as `OCR_Auth__ApiKeys__Professor` contain SHA-256 hashes only.
+such as `OCR_Auth__ApiKeys__AutomationClient` contain SHA-256 hashes only.
 
 An enabled but incomplete authentication configuration stops application startup; it never silently
 falls back to anonymous access.

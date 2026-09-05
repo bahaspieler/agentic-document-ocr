@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace MyCloudProject.Common
+namespace OcrAgent.Worker.Contracts
 {
     /// <summary>Defines timing and artifact metadata produced by an experiment.</summary>
     public interface IExperimentResult

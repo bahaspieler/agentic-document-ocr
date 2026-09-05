@@ -1,12 +1,12 @@
 ﻿using Azure;
 using Azure.Data.Tables;
-using MyCloudProject.Common;
+using OcrAgent.Worker.Contracts;
 using System;
 using System.Runtime.Serialization;
 
-namespace MyExperiment
+namespace OcrAgent.Worker.Azure
 {
-    /// <summary>Course result row plus OCR-specific execution evidence.</summary>
+    /// <summary>Worker result row plus OCR-specific execution evidence.</summary>
     public class ExperimentResult : ITableEntity, IExperimentResult
     {
         /// <summary>Initializes an empty result row for table deserialization.</summary>

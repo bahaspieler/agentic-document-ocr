@@ -11,7 +11,7 @@ export function AuthGate({ busy, error, onLogin }: AuthGateProps) {
     <section className="auth-card" aria-labelledby="auth-title">
       <div className="auth-mark"><LockKeyhole size={25} /></div>
       <span className="eyebrow">PROTECTED OCR WORKSPACE</span>
-      <h1 id="auth-title">Sign in to Hidden Layer</h1>
+      <h1 id="auth-title">Sign in to Agentic Document OCR</h1>
       <p>Auth0 protects the Web API, saved conversations, artifacts, and MCP tools.</p>
       {error && <div className="auth-error" role="alert">{error}</div>}
       <button type="button" onClick={onLogin} disabled={busy}>

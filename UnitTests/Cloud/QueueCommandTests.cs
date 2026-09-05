@@ -2,8 +2,8 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using MyCloudProject.Common;
-using MyExperiment;
+using OcrAgent.Worker.Contracts;
+using OcrAgent.Worker.Azure;
 
 namespace UnitTests.Cloud;
 
@@ -33,11 +33,11 @@ public sealed class QueueCommandTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["MyConfig:GroupId"] = "HiddenLayer"
+                    ["WorkerOptions:GroupId"] = "AgenticDocumentOcr"
                 })
                 .Build();
             var experiment = new Experiment(
-                configuration.GetSection("MyConfig"),
+                configuration.GetSection("WorkerOptions"),
                 new UnusedCommandStorage(),
                 NullLogger.Instance);
 

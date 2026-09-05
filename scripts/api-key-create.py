@@ -13,7 +13,7 @@ from pathlib import Path
 def parse_args() -> argparse.Namespace:
     """Read the key name and destination environment file."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("name", help="Key name, for example Professor or ClaudeDemo")
+    parser.add_argument("name", help="Key name, for example AutomationClient or ClaudeDemo")
     parser.add_argument("--env-file", default=".env")
     return parser.parse_args()
 

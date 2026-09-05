@@ -1,4 +1,4 @@
-namespace MyExperiment;
+namespace OcrAgent.Worker.Azure;
 
 /// <summary>Identifies a queue image in Azure Blob Storage and local temporary storage.</summary>
 /// <param name="Reference">Image reference used by OCR tools.</param>

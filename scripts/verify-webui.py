@@ -144,7 +144,7 @@ def main():
 
     with urllib.request.urlopen(f"{base}/", timeout=30) as response:
         html = response.read().decode()
-    assert "Hidden Layer OCR Studio" in html
+    assert "Agentic Document OCR Studio" in html
     print("[OK] React SPA")
 
     config = request(base, "/api/config", authenticated=False)

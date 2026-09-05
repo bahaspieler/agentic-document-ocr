@@ -1,4 +1,4 @@
-using MyExperiment;
+using OcrAgent.Worker.Azure;
 
 namespace UnitTests.Cloud;
 

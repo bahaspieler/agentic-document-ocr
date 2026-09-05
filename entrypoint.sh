@@ -19,7 +19,7 @@ case "$role" in
         exec dotnet /app/cli/OcrAgent.dll "$@"
         ;;
     worker)
-        exec dotnet /app/worker/MyCloudProject.dll "$@"
+        exec dotnet /app/worker/OcrAgent.Worker.dll "$@"
         ;;
     *)
         echo "Unknown role '$role'. Use mcp, cli, or worker." >&2

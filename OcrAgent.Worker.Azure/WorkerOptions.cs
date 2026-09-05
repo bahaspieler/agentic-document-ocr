@@ -1,7 +1,7 @@
-﻿namespace MyExperiment
+﻿namespace OcrAgent.Worker.Azure
 {
-    /// <summary>Azure queue, Blob, and Table settings bound from the MyConfig section.</summary>
-    public class MyConfig
+    /// <summary>Azure queue, Blob, and Table settings bound from the WorkerOptions section.</summary>
+    public class WorkerOptions
     {
         /// <summary>Connection string for the queue, Blob containers, and result table.</summary>
         public string StorageConnectionString { get; set; } = "";
@@ -31,7 +31,7 @@
 
         /// <summary>Root for temporary command, image, and output files.</summary>
         public string WorkRoot { get; set; } =
-            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hidden-layer-worker");
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "agentic-document-ocr-worker");
 
         /// <summary>How long a received queue message remains hidden while a job executes.</summary>
         public int MessageVisibilityTimeoutSeconds { get; set; } = 900;

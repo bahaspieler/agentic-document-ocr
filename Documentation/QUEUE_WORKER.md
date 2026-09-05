@@ -1,6 +1,6 @@
-# Course Queue Worker
+# Queue Worker
 
-The implementation keeps the course processing loop and extends its storage and experiment
+The implementation keeps the queue processing loop and extends its storage and experiment
 adapters with deterministic bulk dispatch, idempotency, and poison-message handling.
 
 ## Commands and source layout
@@ -33,11 +33,11 @@ training-files/images/<dataset-name>/<image-file>
 
 The dataset name in the command must uniquely match a folder directly below `images/`. Supported
 images are sorted by Blob name before dispatch. A request is rejected if the folder is empty or
-exceeds `MyConfig__MaximumBatchImages`, whose default is 2,000.
+exceeds `WorkerOptions__MaximumBatchImages`, whose default is 2,000.
 
 ## Processing
 
-For a single image, `MyExperiment` resolves the named source and runs one one-shot agent command.
+For a single image, `OcrAgent.Worker.Azure` resolves the named source and runs one one-shot agent command.
 
 For a bulk parent:
 
@@ -70,7 +70,7 @@ result-files/<group-id>/<item-id>/<artifact-name>
 
 For a legacy single-image result, `<item-id>` is its experiment/run key. Storage or unexpected
 processing errors leave a message uncommitted for retry. After
-`MyConfig__MaximumDequeueAttempts` failed deliveries (default 5), the worker copies the failed
+`WorkerOptions__MaximumDequeueAttempts` failed deliveries (default 5), the worker copies the failed
 message and error details to `<queue>-poison` and deletes it from the source queue. The deployed
 worker uses one replica, preventing competing consumers from processing the fan-out concurrently.
 
@@ -78,16 +78,16 @@ worker uses one replica, preventing competing consumers from processing the fan-
 
 | Variable | Purpose |
 |---|---|
-| `MyConfig__StorageConnectionString` | Course Queue/Blob/Table account |
-| `MyConfig__GroupId` | Table partition |
-| `MyConfig__TrainingContainer` | Source images |
-| `MyConfig__ResultContainer` | Produced files |
-| `MyConfig__ResultTable` | Command results |
-| `MyConfig__Queue` | Natural-language commands |
-| `MyConfig__WorkRoot` | Temporary worker files |
-| `MyConfig__MessageVisibilityTimeoutSeconds` | Processing lease for one received message |
-| `MyConfig__MaximumBatchImages` | Bulk-image cap (default 2,000) |
-| `MyConfig__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
+| `WorkerOptions__StorageConnectionString` | Worker Queue/Blob/Table account |
+| `WorkerOptions__GroupId` | Table partition |
+| `WorkerOptions__TrainingContainer` | Source images |
+| `WorkerOptions__ResultContainer` | Produced files |
+| `WorkerOptions__ResultTable` | Command results |
+| `WorkerOptions__Queue` | Natural-language commands |
+| `WorkerOptions__WorkRoot` | Temporary worker files |
+| `WorkerOptions__MessageVisibilityTimeoutSeconds` | Processing lease for one received message |
+| `WorkerOptions__MaximumBatchImages` | Bulk-image cap (default 2,000) |
+| `WorkerOptions__MaximumDequeueAttempts` | Failed deliveries before `<queue>-poison` (default 5) |
 | `OPENAI_API_KEY` | Required by `AgentService` |
 
 ## Run and verify
@@ -101,7 +101,7 @@ scripts/azure-queue-produce.sh \
   --message "Remove the background from RCPT001."
 ```
 
-`azure-queue-produce.sh` uses `COURSE_STORAGE_CONNECTION_STRING`, falling back to
+`azure-queue-produce.sh` uses `WORKER_STORAGE_CONNECTION_STRING`, falling back to
 `AZURE_STORAGE_CONNECTION_STRING`. It creates the selected container and queue if needed, verifies
 the uploaded Blob, and only then publishes one plain-text message per `--message` or non-empty
 `--message-file` line. It overwrites an existing Blob with the selected name, but does not delete

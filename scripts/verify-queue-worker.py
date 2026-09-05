@@ -52,11 +52,11 @@ def commands_for(reference: str) -> list[str]:
 
 def az(*args: str) -> object:
     env = os.environ.copy()
-    connection = env.get("COURSE_STORAGE_CONNECTION_STRING") or env.get(
+    connection = env.get("WORKER_STORAGE_CONNECTION_STRING") or env.get(
         "AZURE_STORAGE_CONNECTION_STRING"
     )
     if not connection:
-        raise SystemExit("Set COURSE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING.")
+        raise SystemExit("Set WORKER_STORAGE_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING.")
     env["AZURE_STORAGE_CONNECTION_STRING"] = connection
     completed = subprocess.run(
         ["az", *args, "--only-show-errors", "-o", "json"],
@@ -144,28 +144,28 @@ def main() -> None:
     parser.add_argument(
         "--training",
         default=os.getenv(
-            "MyConfig__TrainingContainer",
-            os.getenv("COURSE_TRAINING_CONTAINER", "training-files"),
+            "WorkerOptions__TrainingContainer",
+            os.getenv("WORKER_TRAINING_CONTAINER", "training-files"),
         ),
     )
     parser.add_argument(
         "--results",
         default=os.getenv(
-            "MyConfig__ResultContainer",
-            os.getenv("COURSE_RESULT_CONTAINER", "result-files"),
+            "WorkerOptions__ResultContainer",
+            os.getenv("WORKER_RESULT_CONTAINER", "result-files"),
         ),
     )
     parser.add_argument(
         "--queue",
-        default=os.getenv("MyConfig__Queue", os.getenv("COURSE_QUEUE_NAME", "trigger-queue")),
+        default=os.getenv("WorkerOptions__Queue", os.getenv("WORKER_QUEUE_NAME", "trigger-queue")),
     )
     parser.add_argument(
         "--table",
-        default=os.getenv("MyConfig__ResultTable", os.getenv("COURSE_RESULT_TABLE", "results")),
+        default=os.getenv("WorkerOptions__ResultTable", os.getenv("WORKER_RESULT_TABLE", "results")),
     )
     parser.add_argument(
         "--group",
-        default=os.getenv("MyConfig__GroupId", os.getenv("COURSE_GROUP_ID", "HiddenLayer")),
+        default=os.getenv("WorkerOptions__GroupId", os.getenv("WORKER_GROUP_ID", "AgenticDocumentOcr")),
     )
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--image", type=pathlib.Path, default=DEFAULT_IMAGE)

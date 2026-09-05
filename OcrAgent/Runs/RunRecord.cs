@@ -9,7 +9,7 @@ namespace OcrAgent.Runs;
 /// tool name and leaves <see cref="TraceJson"/> null; a workflow fills it with the workflow id and
 /// carries its step trace instead of writing a row per step.
 /// <para>
-/// The timing and identity fields deliberately use the names from the course template's
+/// The timing and identity fields deliberately use the names from the worker contract's
 /// <c>IExperimentResult</c>, so the queue-driven path can write this same shape later rather than a
 /// second table.
 /// </para>

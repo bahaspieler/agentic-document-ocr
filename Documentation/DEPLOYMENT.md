@@ -1,8 +1,8 @@
 # Deployment
 
-The serving instance and course queue worker run as separate Azure Container Apps pulled from one
+The serving instance and queue worker run as separate Azure Container Apps pulled from one
 image. The serving app has HTTPS ingress; the worker has no ingress and continuously polls the
-configured course queue.
+configured worker queue.
 
 Images enter through Blob Storage. A file named `DEPLOY01.jpg` in the configured container is the
 reference `DEPLOY01`. `RegisterImage` is a local convenience that needs a path the server can read,
@@ -10,17 +10,17 @@ and a deployed container has no shared filesystem with the client.
 
 ## Resources
 
-All of these live in `RG_Hidden_Layer`. The scripts never create or delete the group.
+All of these live in `rg-agentic-document-ocr`. The scripts never create or delete the group.
 
 | Resource | Default name | Purpose |
 |----------|----------------|---------|
-| Resource group | `RG_Hidden_Layer` | Team group; bound, never deleted |
-| Storage account | `sthiddenlayerocr` | Blob images and Table run records; never touched by teardown |
-| Container registry | `acrhiddenlayerocr` | Holds the `ocr-agent` image |
+| Resource group | `rg-agentic-document-ocr` | Team group; bound, never deleted |
+| Storage account | `stagenticdococr` | Blob images and Table run records; never touched by teardown |
+| Container registry | `acragenticdococr` | Holds the `ocr-agent` image |
 | Container Apps environment | `cae-ocr-agent` | Hosts the app |
 | Container app | `ca-ocr-agent` | Web UI, REST API, and MCP server over one HTTPS origin |
-| Worker container app | `ca-ocr-worker` | Course Queue → Blob → experiment → Blob/Table path |
-| Azure SQL server | `sql-hidden-layer-ocr` | Logical server for serving-application data |
+| Worker container app | `ca-ocr-worker` | Worker Queue → Blob → experiment → Blob/Table path |
+| Azure SQL server | `sql-agentic-document-ocr` | Logical server for serving-application data |
 | Azure SQL database | `ocr-agent` | Basic tier: conversations, users, receipts, line items, and correction revisions |
 
 Names are overridable in `.env` (`AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`,
@@ -30,7 +30,7 @@ as is the replica ceiling (`AZURE_MAX_REPLICAS`).
 The scripts resolve the storage account's region for new resources and fall back to the resource
 group's location only when the account cannot be resolved. Every workflow step reads an image and
 writes another, so a container in a second region pays a round trip on each one.
-`RG_Hidden_Layer` is registered in East US, `sthiddenlayerocr` is in Germany West Central, and the
+`rg-agentic-document-ocr` is registered in East US, `stagenticdococr` is in Germany West Central, and the
 deployed resources sit in Germany West Central with the data. A group's location is only the default
 for new resources and is not where the data is. `azure-deploy.sh` warns if it finds an existing
 environment somewhere other than the selected region; a Container Apps environment cannot be moved,
@@ -42,7 +42,7 @@ so the fix is a teardown and fresh deploy, and the app gets a new hostname.
 scripts/azure-sql.sh               # create/update SQL when durable Web data is required
 python3 scripts/auth0-setup.py --domain DOMAIN --app-url URL
 python3 scripts/auth0-token.py      # first-party device-flow user token
-python3 scripts/api-key-create.py Professor  # named static credential
+python3 scripts/api-key-create.py AutomationClient  # named static credential
 scripts/azure-deploy.sh            # create/update serving; builds linux/amd64 in ACR
 scripts/azure-deploy.sh --skip-build
 scripts/azure-worker-deploy.sh     # create/update the no-ingress worker
@@ -94,11 +94,11 @@ Promote the Auth0 database, Google, and GitHub connections to the tenant domain 
 can offer them. The script writes only public runtime identifiers to the gitignored `.env`. The raw
 Management API token must never be saved there, committed, logged, or included in screenshots.
 
-The earlier Microsoft Entra approach was abandoned because the DAENET tenant denied the project
+The earlier Microsoft Entra approach was abandoned because the deployment tenant denied the project
 identity permission to create app registrations. Entra is not part of the current design.
 
-`azure-worker-deploy.sh` reuses the image already selected by the serving app. It supplies the course
-`MyConfig__*` values, local OCR work storage, and the optional model key. It does not supply SQL or
+`azure-worker-deploy.sh` reuses the image already selected by the serving app. It supplies the worker
+`WorkerOptions__*` values, local OCR work storage, and the optional model key. It does not supply SQL or
 authentication settings. The worker is deployed with one replica so one consumer owns parent
 planning and deterministic child processing.
 
@@ -124,11 +124,11 @@ scripts/azure-queue-produce.sh \
   --message-file SampleFiles/queue/extract-receipt.txt
 ```
 
-Use `verify-queue-worker.py` instead when an end-to-end assertion is required. It creates the course
+Use `verify-queue-worker.py` instead when an end-to-end assertion is required. It creates the required
 entities if missing, uploads the image, publishes its two built-in commands, waits for both rows, and
 checks every output Blob.
 
-The replica range is min 1 / max `AZURE_MAX_REPLICAS`, which defaults to 3, so the submitted Web UI
+The replica range is min 1 / max `AZURE_MAX_REPLICAS`, which defaults to 3, so the serving Web UI
 stays live. MCP is stateless and REST conversations live in SQL, so Container Apps can spread requests
 without session affinity. Blob, Table, and SQL are shared by every replica.
 
@@ -155,14 +155,14 @@ credential path instead, generate a named key once, retain its displayed raw val
 export it only for the client process:
 
 ```bash
-python3 scripts/api-key-create.py Professor
+python3 scripts/api-key-create.py AutomationClient
 export OCR_AUTH_API_KEY="<raw-key-printed-once>"
 unset OCR_AUTH_ACCESS_TOKEN
 scripts/verify-deployment.sh
 python3 scripts/verify-webui.py https://<container-app-hostname>
 ```
 
-The generator stores only the SHA-256 hash as `OCR_Auth__ApiKeys__Professor`; requests carry the
+The generator stores only the SHA-256 hash as `OCR_Auth__ApiKeys__AutomationClient`; requests carry the
 raw value in `X-API-Key`. Raw API keys must never be committed or placed in `.env`.
 
 The Auth0 deployment was verified. The healthy active revision rejected anonymous access, returned
@@ -228,7 +228,7 @@ or one workflow. It persists `PlanJson`, derives a stable batch ID, and fans out
 child IDs. Children reuse the plan without per-image AI, skip a durable item result that already
 exists, and publish artifacts under `result-files/<group>/<item-id>/`.
 
-`MyConfig__MaximumBatchImages` defaults to 2,000. A message that repeatedly fails is moved after the
+`WorkerOptions__MaximumBatchImages` defaults to 2,000. A message that repeatedly fails is moved after the
 default five dequeue attempts to `<queue>-poison`. Inspect the parent and child Table rows, result
 Blob prefixes, source and poison queues, and worker logs when collecting evaluation evidence.
 
@@ -270,7 +270,7 @@ scripts/azure-stop.sh
 ```
 
 The worker has its own start/stop controls because stopping the serving app should not silently stop
-course queue processing.
+worker queue processing.
 
 Start it again with `scripts/azure-start.sh` shortly before you need it. Do not delete the
 resource group or the storage account to save money; those hold the graded artifacts and the run

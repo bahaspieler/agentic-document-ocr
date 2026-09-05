@@ -144,15 +144,15 @@ advanced settings.
 Claude Code supports the same remote endpoint:
 
 ```bash
-claude mcp add --transport http hidden-layer-ocr --scope user \
+claude mcp add --transport http agentic-document-ocr --scope user \
   https://ca-ocr-agent.blackglacier-c262b0d9.germanywestcentral.azurecontainerapps.io/mcp
-claude mcp login hidden-layer-ocr
+claude mcp login agentic-document-ocr
 ```
 
 For a non-OAuth Claude Code entry, configure a named API key as a static header:
 
 ```bash
-claude mcp add --transport http hidden-layer-ocr-key --scope user \
+claude mcp add --transport http agentic-document-ocr-key --scope user \
   https://ca-ocr-agent.blackglacier-c262b0d9.germanywestcentral.azurecontainerapps.io/mcp \
   --header "X-API-Key: <raw-key>"
 ```

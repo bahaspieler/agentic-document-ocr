@@ -14,9 +14,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-API_NAME = "Hidden Layer OCR API"
-SPA_NAME = "Hidden Layer OCR Web"
-DEVICE_NAME = "Hidden Layer OCR Device Login"
+API_NAME = "Agentic Document OCR API"
+SPA_NAME = "Agentic Document OCR Web"
+DEVICE_NAME = "Agentic Document OCR Device Login"
 SCOPE = "access:ocr"
 
 

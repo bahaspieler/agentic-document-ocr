@@ -1,13 +1,13 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using MyCloudProject.Common;
-using MyExperiment;
+using OcrAgent.Worker.Contracts;
+using OcrAgent.Worker.Azure;
 
-namespace MyCloudProject
+namespace OcrAgent.Worker
 {
     internal static class Program
     {
-        private const string ProjectName = "ML 25/26-01";
+        private const string ServiceName = "Agentic Document OCR Worker";
 
         private static async Task Main(string[] args)
         {
@@ -18,14 +18,14 @@ namespace MyCloudProject
                 cancellationSource.Cancel();
             };
 
-            var cfgRoot = Common.InitHelpers.InitConfiguration(args);
-            var cfgSec = cfgRoot.GetSection("MyConfig");
-            var workerConfig = new MyConfig();
+            var cfgRoot = InitHelpers.InitConfiguration(args);
+            var cfgSec = cfgRoot.GetSection("WorkerOptions");
+            var workerConfig = new WorkerOptions();
             cfgSec.Bind(workerConfig);
             using var logFactory = InitHelpers.InitLogging(cfgRoot);
             var logger = logFactory.CreateLogger("Train.Console");
 
-            logger.LogInformation("Started experiment {ProjectName}.", ProjectName);
+            logger.LogInformation("Started {ServiceName}.", ServiceName);
 
             IStorageProvider storageProvider = new AzureStorageProvider(cfgSec);
             IExperiment experiment = new Experiment(cfgSec, storageProvider, logger);
@@ -54,7 +54,7 @@ namespace MyCloudProject
                         }
                         catch (Exception ex)
                         {
-                            if (request is ExerimentRequestMessage queueRequest &&
+                            if (request is ExperimentRequestMessage queueRequest &&
                                 queueRequest.DequeueCount >=
                                 Math.Max(1, workerConfig.MaximumDequeueAttempts) &&
                                 storageProvider is IQueueCommandStorage queueStorage)
@@ -84,7 +84,7 @@ namespace MyCloudProject
                 // Ctrl+C requests an orderly worker shutdown.
             }
 
-            logger.LogInformation("Experiment {ProjectName} stopped.", ProjectName);
+            logger.LogInformation("{ServiceName} stopped.", ServiceName);
         }
     }
 }

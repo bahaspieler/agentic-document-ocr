@@ -20,23 +20,23 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY OcrAgent/OcrAgent.csproj OcrAgent/
 COPY OcrAgent.Mcp/OcrAgent.Mcp.csproj OcrAgent.Mcp/
-COPY MyCloudProject.Common/MyCloudProject.Common.csproj MyCloudProject.Common/
-COPY MyExperiment/MyExperiment.csproj MyExperiment/
-COPY MyCloudProject/MyCloudProject.csproj MyCloudProject/
+COPY OcrAgent.Worker.Contracts/OcrAgent.Worker.Contracts.csproj OcrAgent.Worker.Contracts/
+COPY OcrAgent.Worker.Azure/OcrAgent.Worker.Azure.csproj OcrAgent.Worker.Azure/
+COPY OcrAgent.Worker/OcrAgent.Worker.csproj OcrAgent.Worker/
 RUN dotnet restore OcrAgent.Mcp/OcrAgent.Mcp.csproj -r linux-x64
-RUN dotnet restore MyCloudProject/MyCloudProject.csproj -r linux-x64
+RUN dotnet restore OcrAgent.Worker/OcrAgent.Worker.csproj -r linux-x64
 
 COPY OcrAgent/ OcrAgent/
 COPY OcrAgent.Mcp/ OcrAgent.Mcp/
-COPY MyCloudProject.Common/ MyCloudProject.Common/
-COPY MyExperiment/ MyExperiment/
-COPY MyCloudProject/ MyCloudProject/
+COPY OcrAgent.Worker.Contracts/ OcrAgent.Worker.Contracts/
+COPY OcrAgent.Worker.Azure/ OcrAgent.Worker.Azure/
+COPY OcrAgent.Worker/ OcrAgent.Worker/
 
 # Naming the runtime identifier leaves out the Android, iOS, macOS, and Windows native binaries that
 # several dependencies carry. That is most of the image.
 RUN dotnet publish OcrAgent.Mcp/OcrAgent.Mcp.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/mcp \
  && dotnet publish OcrAgent/OcrAgent.csproj -c Release -r linux-x64 --self-contained false --no-restore -o /out/cli \
- && dotnet publish MyCloudProject/MyCloudProject.csproj -c Release -r linux-x64 --self-contained false --no-restore \
+ && dotnet publish OcrAgent.Worker/OcrAgent.Worker.csproj -c Release -r linux-x64 --self-contained false --no-restore \
       -p:UseAppHost=false -p:ErrorOnDuplicatePublishOutputFiles=false -o /out/worker
 
 

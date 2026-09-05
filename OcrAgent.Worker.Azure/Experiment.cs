@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using MyCloudProject.Common;
+using OcrAgent.Worker.Contracts;
 using OcrAgent.Agent;
 using OcrAgent.Execution;
 using OcrAgent.Hosting;
@@ -15,7 +15,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace MyExperiment
+namespace OcrAgent.Worker.Azure
 {
     /// <summary>Runs one natural-language queue command through the existing OCR agent.</summary>
     public class Experiment : IExperiment
@@ -24,11 +24,11 @@ namespace MyExperiment
 
         private readonly IQueueCommandStorage _storage;
         private readonly ILogger _logger;
-        private readonly MyConfig _config;
+        private readonly WorkerOptions _config;
         private readonly Func<string, Task<BulkActionPlan>>? _bulkPlanner;
 
         /// <summary>Creates the queue experiment adapter over the shared OCR engine.</summary>
-        /// <param name="configSection">The MyConfig worker settings.</param>
+        /// <param name="configSection">The WorkerOptions worker settings.</param>
         /// <param name="storageProvider">Storage provider used to resolve command images.</param>
         /// <param name="log">Worker logger.</param>
         public Experiment(
@@ -40,7 +40,7 @@ namespace MyExperiment
         }
 
         /// <summary>Creates the adapter with an injectable planner for deterministic host tests.</summary>
-        /// <param name="configSection">The MyConfig worker settings.</param>
+        /// <param name="configSection">The WorkerOptions worker settings.</param>
         /// <param name="storageProvider">Storage provider used to resolve command images.</param>
         /// <param name="log">Worker logger.</param>
         /// <param name="bulkPlanner">Optional one-time planner override.</param>
@@ -54,7 +54,7 @@ namespace MyExperiment
                 ?? throw new ArgumentException(
                     "The queue worker requires command-aware storage.", nameof(storageProvider));
             _logger = log;
-            _config = new MyConfig();
+            _config = new WorkerOptions();
             configSection.Bind(_config);
             _bulkPlanner = bulkPlanner;
         }

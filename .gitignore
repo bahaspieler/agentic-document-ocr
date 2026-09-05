@@ -1,7 +1,53 @@
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pfx
+*.publishsettings
+*.azurePubxml
+*.pubxml
+
+# .NET and IDE output
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# Frontend output
+**/node_modules/
+web/dist/
+web/coverage/
+*.tsbuildinfo
+
 # Local runtime state
 OcrAgent/local-storage/
+local-storage/
+.aspnet/
+*.db
+*.db-shm
+*.db-wal
 
-# Local review and Office-document working copies
+# OS and editor files
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+temp/
+
+# Local documentation working copies
 Documentation/*backup*.docx
 Documentation/*_ref_done.docx
 Documentation/project-review-issue.pdf

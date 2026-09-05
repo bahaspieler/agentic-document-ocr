@@ -5,10 +5,8 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Documentation/">
-    <File Path="Documentation/Experiment Specification - Baha Uddin Ahmed.md" />
-    <File Path="Documentation/Experiment Specification - MD Tazmim Hossain.md" />
-    <File Path="Documentation/Experiment Specification - M M Rauf Shahriyar.md" />
-    <File Path="Documentation/PROMPT.md" />
+    <File Path="Documentation/CLI.md" />
+    <File Path="Documentation/PROJECT_HISTORY.md" />
     <File Path="Documentation/QUEUE_WORKER.md" />
     <File Path="Documentation/SYSTEM_ARCHITECTURE.md" />
   </Folder>
@@ -25,9 +23,9 @@
     <File Path=".editorconfig" />
     <File Path="README.md" />
   </Folder>
-  <Project Path="MyCloudProject.Common/MyCloudProject.Common.csproj" />
-  <Project Path="MyCloudProject/MyCloudProject.csproj" />
-  <Project Path="MyExperiment/MyExperiment.csproj" />
+  <Project Path="OcrAgent.Worker.Contracts/OcrAgent.Worker.Contracts.csproj" />
+  <Project Path="OcrAgent.Worker/OcrAgent.Worker.csproj" />
+  <Project Path="OcrAgent.Worker.Azure/OcrAgent.Worker.Azure.csproj" />
   <Project Path="OcrAgent.Mcp.Tests/OcrAgent.Mcp.Tests.csproj" />
   <Project Path="OcrAgent.Mcp/OcrAgent.Mcp.csproj" />
   <Project Path="OcrAgent/OcrAgent.csproj" />
